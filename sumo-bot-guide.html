@@ -176,6 +176,34 @@ ol.plain li::marker{font-weight:700;color:var(--accent)}
 .askbox .say-it{display:block;margin-top:4px;font-style:italic}
 .askbox .say-it::before{content:"Try saying: ";font-style:normal;font-weight:700;color:var(--accent)}
 .askbox ul{margin:6px 0 0;padding-left:1.2em;display:grid;gap:2px}
+.helpers{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:var(--surface);border:2px solid var(--line);border-radius:14px;padding:10px 14px}
+.helpers .hl{font-weight:700}
+.switch{display:inline-flex;align-items:center;gap:10px;font-weight:700;cursor:pointer}
+.switch input{appearance:none;-webkit-appearance:none;width:52px;height:30px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;margin:0;flex:none;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+.switch input:checked{background:var(--good)}
+.switch input:checked::after{left:25px}
+.switch input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.helpers a{font-weight:700}
+.speak{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--accent);background:var(--surface);color:var(--accent);padding:6px 14px;border-radius:999px;font-weight:700;cursor:pointer;min-height:40px;flex:none}
+.speak svg{width:20px;height:20px;flex:none}
+.speak.speaking{background:var(--accent);color:var(--surface)}
+.cardtop{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.simple{font-size:1.25rem;font-weight:500;line-height:1.5;margin:0}
+.words{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.word{display:grid;gap:10px;align-content:start;background:var(--bg);border:2px solid var(--line);border-radius:14px;padding:14px}
+.wtop{display:grid;grid-template-columns:60px minmax(0,1fr) auto;gap:12px;align-items:center}
+.wicon{width:60px;height:60px;border-radius:12px;background:var(--stage);border:1px solid var(--line)}
+.word h3{font-size:1.3rem}
+.word .def{font-size:1.05rem}
+.word .ex{color:var(--muted);font-size:.95rem}
+.word .ex b{color:var(--ink)}
+.frame{display:grid;gap:6px;border-top:2px dashed var(--line);padding-top:10px}
+.frame label{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-weight:500}
+.frame input{flex:1 1 140px;min-width:0;font:inherit;border:0;border-bottom:3px solid var(--accent);background:transparent;color:var(--ink);padding:2px 4px}
+.frame input:focus{outline:none;background:var(--accent-soft)}
+.frame .fh{font-size:.85rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+@media (prefers-reduced-motion: reduce){.switch input,.switch input::after{transition:none}}
 details.teacher{border:2px dashed var(--line);border-radius:14px;padding:14px 16px;background:var(--surface)}
 details.teacher summary{cursor:pointer;font-weight:700}
 details.teacher ul{margin:10px 0 0;padding-left:1.2em;display:grid;gap:6px}
@@ -196,11 +224,16 @@ footer{font-size:.9rem;color:var(--muted)}
     <ul><li>"I need help figuring out which gears to use."</li><li>"I'm on Build step 3. I don't know where the big gear should go."</li></ul>
     <p class="hint">"It doesn't work" is hard to help with. "My robot drives backward" is easy to help with.</p>
   </div></div>
+  <div class="helpers" role="group" aria-label="Reading helpers">
+    <label class="switch"><input type="checkbox" id="simpleSwitch" role="switch"> Simpler steps</label>
+    <span class="hl" id="speakHint">Press Read to me to hear any step out loud.</span>
+    <a href="#words">Words to know →</a>
+  </div>
 </header>
 
 <!-- A: gear rule -->
 <section class="part" id="gears">
-  <div class="phead"><span class="tag">A</span><h2>The gear rule</h2></div>
+  <div class="phead"><span class="tag">A</span><h2>The gear rule</h2><button class="speak" id="speakGears" data-say="The gear rule. Small gear on the motor. Big gear on the wheel. The little gear has to spin around many times to turn the big gear once. That makes the wheel slow, but it pushes very hard. Slow and strong wins sumo."></button></div>
   <p class="motto"><span class="s">Small gear</span> on the motor.<br><span class="b">Big gear</span> on the wheel.</p>
   <div class="toggle" role="group" aria-label="Show the right way or the wrong way">
     <button class="right" id="rightBtn" aria-pressed="true">Right way: small on motor</button>
@@ -220,6 +253,12 @@ footer{font-size:.9rem;color:var(--muted)}
 </section>
 
 <!-- B: build -->
+<section class="part" id="words">
+  <div class="phead"><span class="tag">Aa</span><h2>Words to know</h2></div>
+  <p>These are the robot words used in this guide. Read each one, or press Read to me. Then finish the two sentences in your own words. You can type or talk (use the microphone key to talk).</p>
+  <div class="words" id="wordList"></div>
+</section>
+
 <section class="part" id="build">
   <div class="phead"><span class="tag">B</span><h2>Build it, one step at a time</h2></div>
   <p>Each step adds new parts. New parts <b style="color:var(--accent)">glow blue</b>. Pins for this step <b>blink yellow</b>, and you can see them even when they are hidden behind other parts.</p>
@@ -353,6 +392,9 @@ footer{font-size:.9rem;color:var(--muted)}
 <details class="teacher">
   <summary>For the teacher</summary>
   <ul>
+    <li><b>Read to me</b> uses the browser's built-in voice, so there's nothing to install. If it is silent, check the Chromebook volume. Chromebooks also have Select-to-speak in Accessibility settings.</li>
+    <li><b>Simpler steps</b> shows one short sentence per step. The device remembers the setting. The full directions are one switch away.</li>
+    <li><b>Words to know:</b> the sentences students type or dictate are saved only in that browser on that computer. Check them on the student's screen, or have them read their sentences to you.</li>
     <li>The build is a simple two-wheel-drive design written for this guide, not an official VEX model. Part sizes are close to the VEX IQ kit; let him use the closest sizes you have.</li>
     <li>The side walls are beams because the wheel shafts and motors need holes facing sideways. The top and the pusher are plates, joined to the beams with corner connectors, the way VEX builds are usually braced.</li>
     <li>Part colors in the 3D picture are picked so the parts are easy to tell apart. Your kit's colors may be different.</li>
@@ -375,6 +417,33 @@ footer{font-size:.9rem;color:var(--muted)}
   const NS='http://www.w3.org/2000/svg';
   const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* ---------- reading helpers ---------- */
+  const canSpeak=('speechSynthesis' in window)&&('SpeechSynthesisUtterance' in window);
+  const spkIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  const spkBtn='<button class="speak" type="button">'+spkIcon+'<span>Read to me</span></button>';
+  function plain(h){const d=document.createElement('div');d.innerHTML=h;return d.textContent
+    .replace(/\s<\s/g,' less than ').replace(/</g,' less than ')
+    .replace(/\bmm\b/g,'millimeters').replace(/\bBRT\b/g,'B R T').replace(/___/g,' blank ')
+    .replace(/→/g,' then ').replace(/\s+/g,' ').trim();}
+  function setSpk(btn,on){if(!btn)return;btn.classList.toggle('speaking',on);const l=btn.querySelector('span');if(l)l.textContent=on?'Stop':'Read to me';}
+  function stopSpeech(){if(!canSpeak)return;speechSynthesis.cancel();document.querySelectorAll('.speak.speaking').forEach(b=>setSpk(b,false));}
+  function speak(text,btn){
+    if(!canSpeak)return;
+    if(btn&&btn.classList.contains('speaking')){stopSpeech();return;}
+    stopSpeech();
+    const u=new SpeechSynthesisUtterance(plain(text)); u.rate=0.9; u.lang='en-US';
+    u.onend=u.onerror=()=>setSpk(btn,false);
+    setSpk(btn,true); speechSynthesis.speak(u);
+  }
+  function wireSpeak(root,textFn){const b=root.querySelector('.speak');if(!b)return;if(!canSpeak){b.hidden=true;return;}b.onclick=()=>speak(textFn(),b);}
+  let simple=false; try{simple=localStorage.getItem('sumoSimple')==='1';}catch(e){}
+  let lastB=-1,lastC=-1;
+  document.addEventListener('DOMContentLoaded',()=>{});
+  (function(){const g=document.getElementById('speakGears'); if(g){g.innerHTML=spkIcon+'<span>Read to me</span>'; if(canSpeak) g.onclick=()=>speak(g.dataset.say,g); else g.hidden=true;}
+    if(!canSpeak){const h=document.getElementById('speakHint'); if(h) h.hidden=true;}
+    const sw=document.getElementById('simpleSwitch'); sw.checked=simple;
+    sw.onchange=()=>{simple=sw.checked; try{localStorage.setItem('sumoSimple',simple?'1':'0');}catch(e){} stopSpeech(); paint(); cpaint();};
+  })();
   function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
   function gearPath(n,r){
     const d=Math.max(4,Math.min(9,r*0.22)), ro=r+d*0.6, ri=r-d*0.6, pts=[];
@@ -695,11 +764,14 @@ footer{font-size:.9rem;color:var(--muted)}
   }
 
   const bAsk=["I'm on Build step 1. I can't line the motor up with hole 5.", "I'm on Build step 2. The small gear won't go on the shaft.", "I'm on Build step 3. I don't know where the big gear should go.", "I'm on Build step 4. My front wheel won't spin.", "I'm on Build step 5. I don't know where the corner connectors go.", "I'm on Build step 6. I don't know how the Brain attaches.", "I'm on Build step 7. I don't know how high to put the sensor.", "I'm on Build step 8. My pusher bends back when I push it.", "I'm on Build step 9. I don't know which port is the left motor."];
+  const easyB=["Pin a motor to the inside of each long beam. The motor's shaft hole lines up with hole 5.", "Put a shaft in hole 5. Put the SMALL gear on it, outside the beam.", "Put a shaft in hole 3. Put the BIG gear on it, touching the small gear. Then add a wheel and a collar.", "Put a shaft in hole 10. Put a wheel and a collar on it.", "Join the two sides with 2 plates on top. Put a corner connector under each end of each plate.", "Pin the Brain on top of the plates, toward the back.", "Hang the light sensor at the front. Point it down at the floor.", "Pin a plate across the front, low to the floor, like a bulldozer blade.", "Plug in both motors and the sensor. Write down the port numbers."];
   const pinIcon='<svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="8" fill="var(--pin)" stroke="var(--pin-edge)" stroke-width="2"/><rect x="11.5" y="7" width="3" height="12" rx="1" fill="var(--pin-edge)"/></svg>';
   function paint(){
     const s=steps[cur];
     document.getElementById('card').innerHTML=
-      `<span class="k">Step ${cur+1} of ${steps.length}</span><h3>${s.t}</h3><ul>${s.d.map(x=>`<li>${x}</li>`).join('')}</ul><div class="pinsline">${pinIcon}<span>${s.p}</span></div><div class="check"><b>Check:</b> ${s.c}</div><div class="askbox"><span class="q" aria-hidden="true">?</span><div><p><b>Stuck on this step? Ask Mr. Brown.</b><span class="say-it">"${bAsk[cur].replace(/</g,'&lt;')}"</span></p></div></div>`;
+      `<div class="cardtop"><span class="k">Step ${cur+1} of ${steps.length}</span>${spkBtn}</div><h3>${s.t}</h3>${simple?`<p class="simple">${easyB[cur]}</p>`:`<ul>${s.d.map(x=>`<li>${x}</li>`).join('')}</ul>`}<div class="pinsline">${pinIcon}<span>${s.p}</span></div><div class="check"><b>Check:</b> ${s.c}</div><div class="askbox"><span class="q" aria-hidden="true">?</span><div><p><b>Stuck on this step? Ask Mr. Brown.</b><span class="say-it">"${bAsk[cur].replace(/</g,'&lt;')}"</span></p></div></div>`;
+    if(lastB!==cur){stopSpeech();lastB=cur;}
+    wireSpeak(document.getElementById('card'),()=>`Build step ${cur+1}. ${s.t}. ${simple?easyB[cur]:s.d.join(' ')} Pins: ${s.p} Check: ${s.c}`);
     document.getElementById('prev').disabled = cur===0;
     const nx=document.getElementById('next'); nx.disabled = cur===steps.length-1;
     nx.textContent = cur===steps.length-1 ? 'Last step' : 'Next step';
@@ -759,6 +831,7 @@ footer{font-size:.9rem;color:var(--muted)}
      d:['Watch the robot for one minute.','Something wrong? Find it in the list and try the fix.','Change one thing at a time. Download and test again.'],
      c:'Your robot stays inside the circle for one whole minute.'}
   ];
+  const easyC=["Turn on the Brain. Plug it into the computer. Open codeiq.vex.com in Chrome.", "Click File, then New Blocks Project. Save it with your name.", "Click the Devices icon. Pick IQ (2nd gen).", "Add a Drivetrain 2-Motor. Pick your two motor ports. Pick Brain Inertial.", "Wheel Size: 200 mm. Gear Ratio: 12 in Input, 36 in Output. Different gears? Ask Mr. Brown. Click Done.", "Add Optical. Pick the sensor's port. Click Done.", "Under when started, add 3 blocks: light power 100, drive velocity 100, turn velocity 50.", "Add forever. Put if / else inside. Make it say: if Optical1 brightness &lt; 50.", "In the if part: drive reverse 150 mm, then turn right 135 degrees. In the else part: drive forward.", "Read BRT on white and on the black tape. Type both numbers in. Put your number in the code.", "Connect the Brain. Click Download. Put the robot in the circle. Click Run.", "Watch your robot. If something is wrong, find it in the list and try the fix."];
   const cAsk=["I'm on Code step 1. The Brain won't turn on.", "I'm on Code step 2. I can't find New Blocks Project.", "I'm on Code step 3. I can't find the Devices icon.", "I'm on Code step 4. I don't know which port my left motor is in.", "I'm on Code step 5. I need help figuring out which gears I used.", "I'm on Code step 6. I don't see Optical in the list.", "I'm on Code step 7. I can't find the light power block.", "I'm on Code step 8. I don't know how to put brightness inside the < block.", "I'm on Code step 9. I don't know where drive forward goes.", "I'm on Code step 10. I can't find BRT on the Brain.", "I'm on Code step 11. The Brain won't connect.", "I'm on Code step 12. My robot drives backward and I don't know how to fix it."];
   let ccur=0, cdone={}; try{cdone=JSON.parse(localStorage.getItem('sumoCode1')||'{}');}catch(e){}
   const cpanels=[...document.querySelectorAll('#cvis .cpanel')];
@@ -776,7 +849,9 @@ footer{font-size:.9rem;color:var(--muted)}
       b.hidden = st>lvl;
       b.classList.toggle('glow', st===lvl && b.classList.contains('blk'));
     });
-    document.getElementById('ccard').innerHTML=`<span class="k">Step ${ccur+1} of ${csteps.length}</span><h3>${s.t}</h3><ul>${s.d.map(x=>`<li>${x}</li>`).join('')}</ul><div class="check"><b>Check:</b> ${s.c}</div><div class="askbox"><span class="q" aria-hidden="true">?</span><div><p><b>Stuck on this step? Ask Mr. Brown.</b><span class="say-it">"${cAsk[ccur].replace(/</g,'&lt;')}"</span></p></div></div>`;
+    document.getElementById('ccard').innerHTML=`<div class="cardtop"><span class="k">Step ${ccur+1} of ${csteps.length}</span>${spkBtn}</div><h3>${s.t}</h3>${simple?`<p class="simple">${easyC[ccur]}</p>`:`<ul>${s.d.map(x=>`<li>${x}</li>`).join('')}</ul>`}<div class="check"><b>Check:</b> ${s.c}</div><div class="askbox"><span class="q" aria-hidden="true">?</span><div><p><b>Stuck on this step? Ask Mr. Brown.</b><span class="say-it">"${cAsk[ccur].replace(/</g,'&lt;')}"</span></p></div></div>`;
+    if(lastC!==ccur){stopSpeech();lastC=ccur;}
+    wireSpeak(document.getElementById('ccard'),()=>`Code step ${ccur+1}. ${s.t}. ${simple?easyC[ccur]:s.d.join(' ')} Check: ${s.c}`);
     document.getElementById('cprev').disabled=ccur===0;
     const nx=document.getElementById('cnext'); nx.disabled=ccur===csteps.length-1; nx.textContent=ccur===csteps.length-1?'Last step':'Next step';
     document.getElementById('cdoneBox').checked=!!cdone[ccur];
@@ -799,6 +874,56 @@ footer{font-size:.9rem;color:var(--muted)}
   ['nWhite','nBlack'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{slotLive=true;calcNum();}));
   calcNum(); cpaint();
 
+
+  /* ---------- Words to know ---------- */
+  const W=[
+    {w:'Gear',d:'A wheel with teeth around the edge. Gears push on each other to turn.',e:'The small gear turns the big gear.',i:'gear'},
+    {w:'Underdrive',d:'A small gear turns a big gear. The wheel goes slower, but pushes harder.',e:'My robot uses underdrive so it is strong.',i:'under',a:'',on:'My robot uses underdrive to'},
+    {w:'Motor',d:'The part that spins. It uses power from the battery.',e:'The motor turns the small gear.',i:'motor'},
+    {w:'Shaft',d:'A square metal rod. It goes through holes so gears and wheels can spin.',e:'The big gear and the wheel are on the same shaft.',i:'shaft'},
+    {w:'Beam',d:'A long, thin part with one row of holes.',e:'The sides of my robot are beams.',i:'beam'},
+    {w:'Plate',d:'A flat, wide part with many rows of holes.',e:'Two plates hold the sides of my robot together.',i:'plate'},
+    {w:'Connector pin',d:'A small peg that snaps two parts together.',e:'I used 2 pins to hold the motor on.',i:'pin'},
+    {w:'Corner connector',d:'An L-shaped part. It joins two parts at a corner.',e:'Corner connectors join the plates to the beams.',i:'corner'},
+    {w:'Sensor',d:'A part that notices something and tells the robot.',e:'The light sensor sees the black line.',i:'sensor'},
+    {w:'Brain',d:'The robot\'s computer. It runs your program.',e:'The Brain tells the motors when to go.',i:'brain',a:'The',keep:1},
+    {w:'Port',d:'A numbered spot on the Brain where you plug in a cable.',e:'My left motor is plugged into port 1.',i:'port'}
+  ];
+  function iconSVG(k){
+    const v='viewBox="-30 -30 60 60" class="wicon" aria-hidden="true"';
+    const beam='var(--beam)',edge='var(--beam-edge)',st='var(--stage)';
+    switch(k){
+      case 'gear': return `<svg ${v}><path d="${gearPath(14,18)}" fill="var(--gearc)" stroke="${edge}" stroke-width="1"/><rect x="-4" y="-4" width="8" height="8" fill="${st}"/></svg>`;
+      case 'under': return `<svg ${v}><path d="${gearPath(8,6)}" transform="translate(-19 0)" fill="var(--accent)"/><path d="${gearPath(24,16)}" transform="translate(5 0)" fill="var(--good)"/><rect x="2" y="-3" width="6" height="6" fill="${st}"/></svg>`;
+      case 'motor': return `<svg ${v}><rect x="-24" y="-17" width="48" height="34" rx="7" fill="var(--motor)" stroke="var(--motor-edge)" stroke-width="2"/><rect x="-5" y="-5" width="10" height="10" fill="var(--ink)"/><rect x="11" y="-14" width="9" height="6" rx="1" fill="var(--screen)"/></svg>`;
+      case 'shaft': return `<svg ${v}><rect x="-26" y="-3.5" width="52" height="7" fill="var(--shaft,#6d727a)" transform="rotate(-30)" stroke="var(--ink)" stroke-width="1"/></svg>`;
+      case 'beam': return `<svg ${v}><rect x="-27" y="-7" width="54" height="14" rx="7" fill="${beam}" stroke="${edge}" stroke-width="1.5"/>${[-20,-10,0,10,20].map(x=>`<circle cx="${x}" cy="0" r="3.2" fill="${st}"/>`).join('')}</svg>`;
+      case 'plate': return `<svg ${v}><rect x="-22" y="-22" width="44" height="44" rx="4" fill="${beam}" stroke="${edge}" stroke-width="1.5"/>${[-13,0,13].map(x=>[-13,0,13].map(y=>`<circle cx="${x}" cy="${y}" r="3.4" fill="${st}"/>`).join('')).join('')}</svg>`;
+      case 'pin': return `<svg ${v}><rect x="-6" y="-4" width="12" height="28" rx="3" fill="var(--pin)"/><rect x="-11" y="-14" width="22" height="10" rx="3" fill="var(--pin)" stroke="var(--pin-edge)" stroke-width="1.5"/><rect x="-1.5" y="-14" width="3" height="10" fill="var(--pin-edge)"/></svg>`;
+      case 'corner': return `<svg ${v}><path d="M-20 -22 h12 v30 h30 v12 h-42 z" fill="var(--conn)" stroke="var(--conn-edge)" stroke-width="1.5"/><circle cx="-14" cy="-12" r="3" fill="${st}"/><circle cx="12" cy="14" r="3" fill="${st}"/></svg>`;
+      case 'sensor': return `<svg ${v}><path d="M-6 0 L-14 26 L14 26 L6 0 Z" fill="var(--edge)" opacity=".45"/><rect x="-16" y="-20" width="32" height="20" rx="5" fill="var(--motor)" stroke="var(--motor-edge)" stroke-width="2"/><circle cx="0" cy="-3" r="3.5" fill="var(--screen)"/></svg>`;
+      case 'brain': return `<svg ${v}><rect x="-26" y="-18" width="52" height="36" rx="7" fill="var(--brain)" stroke="var(--motor-edge)" stroke-width="2"/><rect x="-20" y="-12" width="22" height="16" rx="2" fill="var(--screen)"/><circle cx="12" cy="-6" r="3.5" fill="var(--hub)"/><circle cx="19" cy="-6" r="3.5" fill="var(--hub)"/><circle cx="15.5" cy="5" r="3.5" fill="var(--hub)"/></svg>`;
+      case 'port': return `<svg ${v}><rect x="-22" y="-16" width="44" height="32" rx="6" fill="var(--brain)" stroke="var(--motor-edge)" stroke-width="2"/><rect x="-11" y="-7" width="22" height="12" rx="2" fill="var(--screen)"/><text x="0" y="13" text-anchor="middle" font-size="9" font-weight="700" font-family="Lexend, sans-serif" fill="var(--ink)">1</text></svg>`;
+    }
+    return '';
+  }
+  let wsaved={}; try{wsaved=JSON.parse(localStorage.getItem('sumoWords')||'{}');}catch(e){}
+  const wl=document.getElementById('wordList');
+  W.forEach((o,i)=>{
+    const lw=o.keep?o.w:o.w.toLowerCase(), art=('a' in o)?o.a:(/^[aeiou]/i.test(o.w)?'An':'A'), s1=(art?art+' '+lw:o.w)+' is', s2=o.on?o.on:('On my robot, the '+lw);
+    const card=document.createElement('div'); card.className='word';
+    card.innerHTML=`<div class="wtop">${iconSVG(o.i)}<h3>${o.w}</h3>${spkBtn}</div>
+      <p class="def">${o.d}</p>
+      <p class="ex"><b>Example:</b> ${o.e}</p>
+      <div class="frame"><span class="fh">Your turn</span>
+        <label for="w${i}a">${s1} <input id="w${i}a" type="text" autocomplete="off"></label>
+        <label for="w${i}b">${s2} <input id="w${i}b" type="text" autocomplete="off"></label>
+      </div>`;
+    wl.appendChild(card);
+    wireSpeak(card,()=>`${o.w}. ${o.d} Example: ${o.e} Your turn. ${s1} blank. ${s2} blank.`);
+    ['a','b'].forEach(x=>{const inp=card.querySelector('#w'+i+x); inp.value=wsaved[i+x]||'';
+      inp.addEventListener('input',()=>{wsaved[i+x]=inp.value; try{localStorage.setItem('sumoWords',JSON.stringify(wsaved));}catch(e){}});});
+  });
   const rebuild=()=>{buildGears();buildRobot();};
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change',rebuild);
   new MutationObserver(rebuild).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
