@@ -277,7 +277,7 @@ footer{font-size:.9rem;color:var(--muted)}
       <li><b>7</b> corner connectors</li><li><b>23</b> connector pins</li>
       <li><b>2</b> motors</li><li><b>2</b> small gears (12 teeth)</li><li><b>2</b> big gears (36 teeth)</li>
       <li><b>4</b> wheels</li><li><b>4</b> shafts + <b>4</b> shaft collars</li>
-      <li><b>1</b> Brain + battery</li><li><b>1</b> Optical Sensor</li><li><b>3</b> cables</li>
+      <li><b>1</b> Brain + battery</li><li><b>1</b> Color Sensor</li><li><b>3</b> cables</li>
     </ul>
     <p class="hint">Use the closest size you have. A plate that is a little longer or shorter is fine.</p>
   </details>
@@ -326,19 +326,19 @@ footer{font-size:.9rem;color:var(--muted)}
           <div class="drow sub" data-k="gyro"><span class="dl">Gyro</span><span class="dv">Brain Inertial</span></div>
           <div class="drow sub" data-k="wheel"><span class="dl">Wheel Size</span><span class="dv">200 mm</span></div>
           <div class="drow sub" data-k="gear"><span class="dl">Gear Ratio</span><span class="dv">Input <b>12</b> (motor gear) &nbsp; Output <b>36</b> (wheel gear)</span></div>
-          <div class="drow" data-k="opt"><span class="dl">Optical</span><span class="dv">Port ___ &nbsp;(named Optical1)</span></div>
+          <div class="drow" data-k="opt"><span class="dl">Color</span><span class="dv">Port ___ &nbsp;(named Color1)</span></div>
         </div>
         <p class="hint">This is a simple drawing of the settings, not a screenshot.</p>
       </div>
       <div class="cpanel" data-panel="code">
         <div class="blocks" aria-label="Block program">
           <span class="blk ctrl" data-s="7">when started</span>
-          <span class="blk sense" data-s="7">set <span class="slot">Optical1</span> light power to <span class="slot">100</span> %</span>
+          <span class="blk sense" data-s="7">set <span class="slot">Color1</span> light <span class="slot">on</span></span>
           <span class="blk drive" data-s="7">set drive velocity to <span class="slot">100</span> %</span>
           <span class="blk drive" data-s="7">set turn velocity to <span class="slot">50</span> %</span>
           <span class="blk ctrl" data-s="8">forever</span>
           <div class="c-wrap" data-s="8">
-            <span class="blk ctrl" data-s="8">if <span class="blk op" data-s="8"><span class="blk sense inl" data-s="8"><span class="slot">Optical1</span> brightness in %</span> &lt; <span class="slot num" id="numSlot">50</span></span> then</span>
+            <span class="blk ctrl" data-s="8">if <span class="blk op" data-s="8"><span class="blk sense inl" data-s="8"><span class="slot">Color1</span> brightness in %</span> &lt; <span class="slot num" id="numSlot">50</span></span> then</span>
             <div class="c-wrap" data-s="9">
               <span class="blk drive" data-s="9">drive <span class="slot">reverse</span> for <span class="slot">150</span> <span class="slot">mm</span></span>
               <span class="blk drive" data-s="9">turn <span class="slot">right</span> for <span class="slot">135</span> degrees</span>
@@ -347,15 +347,6 @@ footer{font-size:.9rem;color:var(--muted)}
             <div class="c-wrap" data-s="9"><span class="blk drive" data-s="9">drive <span class="slot">forward</span></span></div>
           </div>
         </div>
-      </div>
-      <div class="cpanel" data-panel="number">
-        <h3>Find your number</h3>
-        <div class="numtool">
-          <label for="nWhite">BRT on <b>white</b></label><input id="nWhite" type="number" inputmode="numeric" min="0" max="100" value="60">
-          <label for="nBlack">BRT on <b>black tape</b></label><input id="nBlack" type="number" inputmode="numeric" min="0" max="100" value="10">
-          <span class="nlbl">Your number</span><output id="nOut" class="nout">35</output>
-        </div>
-        <p class="hint">The example numbers are made up. Type in what YOUR Brain shows. The computer finds the halfway number for you.</p>
       </div>
       <div class="cpanel" data-panel="connect">
         <h3>Toolbar, left to right (top of the screen)</h3>
@@ -371,11 +362,22 @@ footer{font-size:.9rem;color:var(--muted)}
         <dl class="fixes">
           <dt>Robot drives BACKWARD</dt><dd>The gears flip the wheel direction. Open Devices, click the drivetrain, and press the direction arrow to reverse it. Download again.</dd>
           <dt>Robot spins in a circle</dt><dd>The left and right ports are swapped. Fix the ports in Devices.</dd>
-          <dt>Drives right over the tape</dt><dd>Check your number. Lower the sensor closer to the floor. Try drive velocity 70 %.</dd>
+          <dt>Drives right over the tape</dt><dd>Check your number. Make sure Color1 light is on. Lower the sensor closer to the floor. Try drive velocity 70 %.</dd>
           <dt>Backs up on WHITE</dt><dd>Your number is too high, or the &lt; sign is backward. It must be "less than."</dd>
           <dt>Turns way too much or too little</dt><dd>Check the gear ratio. Input = teeth on the motor gear, Output = teeth on the wheel gear. Check the wheel size (200 mm). Ask Mr. Brown if you're not sure.</dd>
           <dt>Won't connect</dt><dd>Is the Brain on? Try the other Brain in the list. Try a different USB cable.</dd>
         </dl>
+      </div>
+    </div>
+    <div id="numHome" hidden>
+      <div class="cpanel" id="numPanel">
+        <h3>Your number</h3>
+        <div class="numtool">
+          <label for="nWhite">Brightness on <b>white</b></label><input id="nWhite" type="number" inputmode="numeric" min="0" max="100" value="60">
+          <label for="nBlack">Brightness on <b>black tape</b></label><input id="nBlack" type="number" inputmode="numeric" min="0" max="100" value="10">
+          <span class="nlbl">Your number</span><output id="nOut" class="nout">35</output>
+        </div>
+        <p class="hint">The example numbers are made up. Type in what YOUR Brain shows. The computer finds the halfway number for you.</p>
       </div>
     </div>
     <div class="dots" id="cdots" aria-label="Programming steps"></div>
@@ -403,6 +405,7 @@ footer{font-size:.9rem;color:var(--muted)}
     <li>Quick check for understanding: ask him to point to the motor gear and the wheel gear and say which one is small.</li>
     <li>The "Feel it" activity in Part A works best with loose gears before he builds.</li>
     <li>If he already has a partial robot, start him at the step that matches what he has and use the earlier steps as a checklist.</li>
+    <li>This guide uses the older VEX IQ Color Sensor (1st gen), not the Optical Sensor. The Color Sensor reads brightness from 0 to 100 %, the same idea as before. Block names (Color1 brightness in %, set Color1 light) are written from memory of VEXcode IQ, so check them against your copy of the software and tell me if any wording differs.</li>
     <li>Part C step 5 sets the gear ratio (Input 12, Output 36). With one pair of gears the wheel turns the opposite way from the motor, so if the robot drives backward, reverse the drivetrain direction in Devices (step 12 covers this).</li>
     <li>You may want to do the Devices setup (steps 3 to 6) with him the first time, then have him check it against the picture.</li>
   </ul>
@@ -545,18 +548,18 @@ footer{font-size:.9rem;color:var(--muted)}
      p:'4 pins come up from under the plates into the Brain.',
      c:'Lift the robot. It feels balanced, not heavy on one end.',
      view:'iso', labels:[['Brain',[-2,5.0,0]],['battery',[-5.8,4.8,0]]]},
-    {t:'Light sensor at the front',
-     d:['Put a corner connector under the middle of the front plate.','Pin a short beam (2 holes) to it, hanging straight down.','Pin the Optical Sensor to the bottom of the short beam, pointing DOWN at the floor.'],
+    {t:'Color Sensor at the front',
+     d:['Put a corner connector under the middle of the front plate.','Pin a short beam (2 holes) to it, hanging straight down.','Pin the Color Sensor to the bottom of the short beam, pointing DOWN at the floor.'],
      p:'3 pins: connector to plate, connector to short beam, sensor to short beam.',
      c:'Leave a small gap between the sensor and the floor, about as thick as a pencil. It must not drag.',
-     view:'frontlow', labels:[['Optical Sensor',[5.0,0.15,0.5]],['short beam',[4.4,3.6,0.5]]]},
+     view:'frontlow', labels:[['Color Sensor',[5.0,0.15,0.5]],['short beam',[4.4,3.6,0.5]]]},
     {t:'Front pusher',
      d:['Stand a plate up at the very front, like a bulldozer blade.','Keep the bottom edge low, close to the floor.','Put a corner connector at the front end of each side beam (<b>hole 12</b>).'],
      p:'2 pins in each corner connector: one into the side beam, one into the pusher plate. 4 pins total.',
      c:'Push the front with your hand. The pusher is strong and does not fold back.',
      view:'iso', labels:[['pusher',[6.3,3.8,0]]]},
     {t:'Plug in the cables',
-     d:['Plug each motor into a port on the Brain.','Plug the Optical Sensor into another port.','Write down the port numbers. You need them for the code.'],
+     d:['Plug each motor into a port on the Brain.','Plug the Color Sensor into another port.','Write down the port numbers. You need them for the code.'],
      p:'No pins.',
      c:'Left motor port: ___ . Right motor port: ___ . Sensor port: ___ .',
      view:'backiso', labels:[['motor cable',[-1.8,4.4,3.7]],['sensor cable',[3.4,4.4,1.3]]]}
@@ -764,7 +767,7 @@ footer{font-size:.9rem;color:var(--muted)}
   }
 
   const bAsk=["I'm on Build step 1. I can't line the motor up with hole 5.", "I'm on Build step 2. The small gear won't go on the shaft.", "I'm on Build step 3. I don't know where the big gear should go.", "I'm on Build step 4. My front wheel won't spin.", "I'm on Build step 5. I don't know where the corner connectors go.", "I'm on Build step 6. I don't know how the Brain attaches.", "I'm on Build step 7. I don't know how high to put the sensor.", "I'm on Build step 8. My pusher bends back when I push it.", "I'm on Build step 9. I don't know which port is the left motor."];
-  const easyB=["Pin a motor to the inside of each long beam. The motor's shaft hole lines up with hole 5.", "Put a shaft in hole 5. Put the SMALL gear on it, outside the beam.", "Put a shaft in hole 3. Put the BIG gear on it, touching the small gear. Then add a wheel and a collar.", "Put a shaft in hole 10. Put a wheel and a collar on it.", "Join the two sides with 2 plates on top. Put a corner connector under each end of each plate.", "Pin the Brain on top of the plates, toward the back.", "Hang the light sensor at the front. Point it down at the floor.", "Pin a plate across the front, low to the floor, like a bulldozer blade.", "Plug in both motors and the sensor. Write down the port numbers."];
+  const easyB=["Pin a motor to the inside of each long beam. The motor's shaft hole lines up with hole 5.", "Put a shaft in hole 5. Put the SMALL gear on it, outside the beam.", "Put a shaft in hole 3. Put the BIG gear on it, touching the small gear. Then add a wheel and a collar.", "Put a shaft in hole 10. Put a wheel and a collar on it.", "Join the two sides with 2 plates on top. Put a corner connector under each end of each plate.", "Pin the Brain on top of the plates, toward the back.", "Hang the Color Sensor at the front. Point it down at the floor.", "Pin a plate across the front, low to the floor, like a bulldozer blade.", "Plug in both motors and the sensor. Write down the port numbers."];
   const pinIcon='<svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="8" fill="var(--pin)" stroke="var(--pin-edge)" stroke-width="2"/><rect x="11.5" y="7" width="3" height="12" rx="1" fill="var(--pin-edge)"/></svg>';
   function paint(){
     const s=steps[cur];
@@ -809,20 +812,20 @@ footer{font-size:.9rem;color:var(--muted)}
     {t:'Tell it about your wheels and gears', panel:'devices', k:['wheel','gear'],
      d:['<b>Wheel Size:</b> pick <b>200 mm</b>.','<b>Gear Ratio:</b> type <b>12</b> in Input (the small gear on the motor) and <b>36</b> in Output (the big gear on the wheel).','<b>Used different gears?</b> Count the teeth, or look for the number printed on the gear. Put the <b>motor gear</b> number in Input and the <b>wheel gear</b> number in Output. Not sure? Ask Mr. Brown which gears you are using.','Click <b>Done</b>.'],
      c:'This makes "drive 150 mm" and "turn 135 degrees" come out the right size.'},
-    {t:'Add the light sensor', panel:'devices', k:['opt'],
-     d:['Click <b>Add a device</b> again.','Click <b>Optical</b>.','Pick the port the sensor is plugged into. Click <b>Done</b>.'],
-     c:'You see the drivetrain and Optical1 in the Devices list. Close the Devices window.'},
+    {t:'Add the Color Sensor', panel:'devices', k:['opt'],
+     d:['Click <b>Add a device</b> again.','Click <b>Color</b> (the older Color Sensor).','Pick the port the sensor is plugged into. Click <b>Done</b>.'],
+     c:'You see the drivetrain and Color1 in the Devices list. Close the Devices window.'},
     {t:'Code part 1: get ready blocks', panel:'code', s:7,
-     d:['Under <b>when started</b>, add these blocks, in this order:','<b>set Optical1 light power to 100 %</b> (Sensing). This turns on the sensor\'s light so it reads the floor the same way every time.','<b>set drive velocity to 100 %</b> (Drivetrain).','<b>set turn velocity to 50 %</b> (Drivetrain).'],
+     d:['Under <b>when started</b>, add these blocks, in this order:','<b>set Color1 light on</b> (Sensing). This turns on the sensor\'s light so it reads the floor the same way every time.','<b>set drive velocity to 100 %</b> (Drivetrain).','<b>set turn velocity to 50 %</b> (Drivetrain).'],
      c:'You have 4 blocks stacked together.'},
     {t:'Code part 2: the forever loop and the question', panel:'code', s:8,
-     d:['Add a <b>forever</b> block (Control).','Put an <b>if / else</b> block (Control) inside forever.','Drag the green <b>&lt;</b> block (Operators) into the if slot.','Drag <b>Optical1 brightness in %</b> (Sensing) into the LEFT side of &lt;.','Type <b>50</b> in the right side for now. You will change it in step 10.'],
-     c:'It reads: "if Optical1 brightness is less than 50."'},
+     d:['Add a <b>forever</b> block (Control).','Put an <b>if / else</b> block (Control) inside forever.','Drag the green <b>&lt;</b> block (Operators) into the if slot.','Drag <b>Color1 brightness in %</b> (Sensing) into the LEFT side of &lt;.','Type <b>50</b> in the right side for now. You will change it in step 10.'],
+     c:'It reads: "if Color1 brightness is less than 50."'},
     {t:'Code part 3: what to do', panel:'code', s:9,
      d:['Inside the <b>if</b> part: <b>drive reverse for 150 mm</b>, then <b>turn right for 135 degrees</b>.','Inside the <b>else</b> part: <b>drive forward</b>.','Click <b>File</b>, then <b>Save</b>.'],
      c:'Read it out loud: "If it is dark, back up and turn. Else, drive forward. Forever."'},
-    {t:'Find your number', panel:'number',
-     d:['On the Brain, open the <b>Devices</b> menu and pick the <b>Optical</b> sensor.','Hold the robot on the WHITE board. Read the <b>BRT</b> number.','Move the sensor over the BLACK tape. Read BRT again.','Type both numbers below the picture. Put your number into the &lt; block instead of 50.'],
+    {t:'Find your number', panel:'code', s:9, num:true,
+     d:['On the Brain, open the <b>Devices</b> menu and pick the <b>Color</b> sensor.','Hold the robot on the WHITE board. Read the <b>brightness</b> number.','Move the sensor over the BLACK tape. Read brightness again.','Type both numbers in the box below. The box finds the halfway number for you.','Put that number into the &lt; block instead of 50.'],
      c:'Black tape gives a SMALL number. White gives a BIG number.'},
     {t:'Connect and run', panel:'connect',
      d:['Click the <b>Brain icon</b> at the top. Click <b>Connect</b>. Click <b>Continue</b>.','In the list, pick the Brain with the <b>lowest number</b>. Click <b>Connect</b>.','When the Brain icon is green, click <b>Download</b>.','Put the robot in the middle of the circle. Click <b>Run</b>.'],
@@ -831,12 +834,13 @@ footer{font-size:.9rem;color:var(--muted)}
      d:['Watch the robot for one minute.','Something wrong? Find it in the list and try the fix.','Change one thing at a time. Download and test again.'],
      c:'Your robot stays inside the circle for one whole minute.'}
   ];
-  const easyC=["Turn on the Brain. Plug it into the computer. Open codeiq.vex.com in Chrome.", "Click File, then New Blocks Project. Save it with your name.", "Click the Devices icon. Pick IQ (2nd gen).", "Add a Drivetrain 2-Motor. Pick your two motor ports. Pick Brain Inertial.", "Wheel Size: 200 mm. Gear Ratio: 12 in Input, 36 in Output. Different gears? Ask Mr. Brown. Click Done.", "Add Optical. Pick the sensor's port. Click Done.", "Under when started, add 3 blocks: light power 100, drive velocity 100, turn velocity 50.", "Add forever. Put if / else inside. Make it say: if Optical1 brightness &lt; 50.", "In the if part: drive reverse 150 mm, then turn right 135 degrees. In the else part: drive forward.", "Read BRT on white and on the black tape. Type both numbers in. Put your number in the code.", "Connect the Brain. Click Download. Put the robot in the circle. Click Run.", "Watch your robot. If something is wrong, find it in the list and try the fix."];
-  const cAsk=["I'm on Code step 1. The Brain won't turn on.", "I'm on Code step 2. I can't find New Blocks Project.", "I'm on Code step 3. I can't find the Devices icon.", "I'm on Code step 4. I don't know which port my left motor is in.", "I'm on Code step 5. I need help figuring out which gears I used.", "I'm on Code step 6. I don't see Optical in the list.", "I'm on Code step 7. I can't find the light power block.", "I'm on Code step 8. I don't know how to put brightness inside the < block.", "I'm on Code step 9. I don't know where drive forward goes.", "I'm on Code step 10. I can't find BRT on the Brain.", "I'm on Code step 11. The Brain won't connect.", "I'm on Code step 12. My robot drives backward and I don't know how to fix it."];
+  const easyC=["Turn on the Brain. Plug it into the computer. Open codeiq.vex.com in Chrome.", "Click File, then New Blocks Project. Save it with your name.", "Click the Devices icon. Pick IQ (2nd gen).", "Add a Drivetrain 2-Motor. Pick your two motor ports. Pick Brain Inertial.", "Wheel Size: 200 mm. Gear Ratio: 12 in Input, 36 in Output. Different gears? Ask Mr. Brown. Click Done.", "Add Color. Pick the sensor's port. Click Done.", "Under when started, add 3 blocks: Color1 light on, drive velocity 100, turn velocity 50.", "Add forever. Put if / else inside. Make it say: if Color1 brightness &lt; 50.", "In the if part: drive reverse 150 mm, then turn right 135 degrees. In the else part: drive forward.", "Read the brightness on white and on the black tape. Type both numbers in. Put your number in the code.", "Connect the Brain. Click Download. Put the robot in the circle. Click Run.", "Watch your robot. If something is wrong, find it in the list and try the fix."];
+  const cAsk=["I'm on Code step 1. The Brain won't turn on.", "I'm on Code step 2. I can't find New Blocks Project.", "I'm on Code step 3. I can't find the Devices icon.", "I'm on Code step 4. I don't know which port my left motor is in.", "I'm on Code step 5. I need help figuring out which gears I used.", "I'm on Code step 6. I don't see Color in the list.", "I'm on Code step 7. I can't find the Color1 light block.", "I'm on Code step 8. I don't know how to put brightness inside the < block.", "I'm on Code step 9. I don't know where drive forward goes.", "I'm on Code step 10. I can't find the brightness number on the Brain.", "I'm on Code step 11. The Brain won't connect.", "I'm on Code step 12. My robot drives backward and I don't know how to fix it."];
   let ccur=0, cdone={}; try{cdone=JSON.parse(localStorage.getItem('sumoCode1')||'{}');}catch(e){}
   const cpanels=[...document.querySelectorAll('#cvis .cpanel')];
   function cpaint(){
     const s=csteps[ccur];
+    document.getElementById('numHome').appendChild(document.getElementById('numPanel'));
     cpanels.forEach(p=>p.hidden=p.dataset.panel!==s.panel);
     document.querySelectorAll('#cvis .drow').forEach(r=>{
       const order=['gen','dt','ports','gyro','wheel','gear','opt'];
@@ -850,6 +854,8 @@ footer{font-size:.9rem;color:var(--muted)}
       b.classList.toggle('glow', st===lvl && b.classList.contains('blk'));
     });
     document.getElementById('ccard').innerHTML=`<div class="cardtop"><span class="k">Step ${ccur+1} of ${csteps.length}</span>${spkBtn}</div><h3>${s.t}</h3>${simple?`<p class="simple">${easyC[ccur]}</p>`:`<ul>${s.d.map(x=>`<li>${x}</li>`).join('')}</ul>`}<div class="check"><b>Check:</b> ${s.c}</div><div class="askbox"><span class="q" aria-hidden="true">?</span><div><p><b>Stuck on this step? Ask Mr. Brown.</b><span class="say-it">"${cAsk[ccur].replace(/</g,'&lt;')}"</span></p></div></div>`;
+    const np=document.getElementById('numPanel');
+    if(s.num){const ck=document.getElementById('ccard').querySelector('.check'); ck.parentNode.insertBefore(np,ck);} else document.getElementById('numHome').appendChild(np);
     if(lastC!==ccur){stopSpeech();lastC=ccur;}
     wireSpeak(document.getElementById('ccard'),()=>`Code step ${ccur+1}. ${s.t}. ${simple?easyC[ccur]:s.d.join(' ')} Check: ${s.c}`);
     document.getElementById('cprev').disabled=ccur===0;
@@ -885,7 +891,7 @@ footer{font-size:.9rem;color:var(--muted)}
     {w:'Plate',d:'A flat, wide part with many rows of holes.',e:'Two plates hold the sides of my robot together.',i:'plate'},
     {w:'Connector pin',d:'A small peg that snaps two parts together.',e:'I used 2 pins to hold the motor on.',i:'pin'},
     {w:'Corner connector',d:'An L-shaped part. It joins two parts at a corner.',e:'Corner connectors join the plates to the beams.',i:'corner'},
-    {w:'Sensor',d:'A part that notices something and tells the robot.',e:'The light sensor sees the black line.',i:'sensor'},
+    {w:'Sensor',d:'A part that notices something and tells the robot.',e:'The Color Sensor sees the black line.',i:'sensor'},
     {w:'Brain',d:'The robot\'s computer. It runs your program.',e:'The Brain tells the motors when to go.',i:'brain',a:'The',keep:1},
     {w:'Port',d:'A numbered spot on the Brain where you plug in a cable.',e:'My left motor is plugged into port 1.',i:'port'}
   ];
