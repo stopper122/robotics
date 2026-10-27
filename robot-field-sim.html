@@ -90,6 +90,21 @@ h2.sec { font: 600 12px var(--body); text-transform: uppercase; letter-spacing: 
 fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0; }
 legend { font-weight: 600; padding: 0 6px; }
 textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 8px; box-sizing: border-box; resize: vertical; }
+.pad { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.padtop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.padstatus { flex: 1 1 160px; font-size: 12.5px; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #b9c0cc; flex: none; }
+.dot.ok { background: var(--go); } .dot.wait { background: #f0a400; }
+.padbody { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #4a5466; border-radius: 28px; padding: 10px 14px; }
+.pside { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pbtns { display: flex; gap: 6px; }
+.pbtn { font: 600 12px var(--body); min-width: 40px; padding: 6px 4px; border-radius: 6px; border: 0; background: #2b3446; color: #fff; cursor: pointer; touch-action: none; }
+.pbtn.on { background: var(--accent); }
+.stick { width: 96px; height: 96px; border-radius: 50%; background: #2b3446; box-shadow: inset 0 3px 8px rgba(0,0,0,.4); display: grid; place-items: center; touch-action: none; cursor: grab; }
+.knob { width: 44px; height: 44px; border-radius: 50%; background: #1c2230; border: 3px solid #6c7486; pointer-events: none; }
+.paxes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; color: #fff; font-family: var(--mono); font-size: 12px; }
+.paxes span { color: #b9c0cc; margin-right: 4px; }
+.paxes b { display: inline-block; min-width: 3.2ch; text-align: right; font-weight: 500; }
 .blocklyToolboxDiv { font-family: var(--body) !important; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -128,6 +143,7 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
       <h2 class="sec">Robot</h2>
       <div class="readouts" id="readouts"></div>
       <div class="leds" id="leds"></div>
+      <div class="pad" id="pad" hidden aria-label="Controller"></div>
       <h2 class="sec">Print console</h2>
       <div class="console" id="console" aria-live="polite"></div>
     </aside>
@@ -194,7 +210,7 @@ function loadSettings(saved) {
   const s = Object.assign(d, saved); s.ports = Object.assign(defaultSettings().ports, saved.ports || {}); return s;
 }
 let S = loadSettings(LS.get("rfs.settings", null));
-const KNOWN_TYPES = ["drivetrain", "motor", "gyro", "distance", "color", "touchled", "bumper"];
+const KNOWN_TYPES = ["drivetrain", "motor", "gyro", "distance", "color", "touchled", "bumper", "controller"];
 let DEVICES = LS.get("rfs.devices", []).filter(d => KNOWN_TYPES.includes(d.type));
 
 const DEVICE_TYPES = {
@@ -205,10 +221,12 @@ const DEVICE_TYPES = {
   color: { label: "Color sensor", sub: "Color and brightness", base: "Color" },
   touchled: { label: "Touch LED", sub: "Light you can press", base: "TouchLED" },
   bumper: { label: "Bumper switch", sub: "Pressed or not", base: "Bumper" },
+  controller: { label: "Controller", sub: "IQ Controller", base: "Controller" },
 };
 const devOf = t => DEVICES.filter(d => d.type === t);
 const drivetrain = () => DEVICES.find(d => d.type === "drivetrain");
 const devByName = (t, n) => devOf(t).find(d => d.name === n) || null;
+const controllerDev = () => DEVICES.find(d => d.type === "controller");
 
 /* =====================================================================
    Blocks (drivetrain/control names match VEXcode VR so .vrblocks files open here)
@@ -346,6 +364,17 @@ defDev("iq_color_brightness", "color", C.sensing, ["@", "brightness in %"], "Num
 defDev("iq_color_hue", "color", C.sensing, ["@", "hue in degrees"], "Number");
 // Bumper
 defDev("pg_sensing_bumper_pressed", "bumper", C.sensing, ["@", "pressed?"], "Boolean");
+// Controller (VEX IQ controller: axes A-D, buttons E/F/L/R up and down)
+const AXES = [["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"]];
+const BUTTONS = [["E Up", "EUp"], ["E Down", "EDown"], ["F Up", "FUp"], ["F Down", "FDown"], ["L Up", "LUp"], ["L Down", "LDown"], ["R Up", "RUp"], ["R Down", "RDown"]];
+Blockly.defineBlocksWithJsonArray([
+  { type: "iq_controller_axis", message0: "Controller axis %1 position", args0: [dd("AXIS", AXES)], output: "Number", colour: C.sensing },
+  { type: "iq_controller_pressed", message0: "Controller %1 pressed?", args0: [dd("BUTTON", BUTTONS)], output: "Boolean", colour: C.sensing },
+  { type: "iq_controller_when_button", message0: "when Controller button %1 %2", args0: [dd("BUTTON", BUTTONS), dd("ACTION", [["pressed", "pressed"], ["released", "released"]])], nextStatement: null, colour: C.events },
+  { type: "iq_controller_when_axis", message0: "when Controller axis %1 is changed", args0: [dd("AXIS", AXES)], nextStatement: null, colour: C.events },
+  stmt({ type: "iq_controller_actions", message0: "%1 Controller configured actions", args0: [dd("STATE", [["disable", "disable"], ["enable", "enable"]])], colour: C.control }),
+]);
+const HAT_TYPES = ["pg_events_when_started", "iq_controller_when_button", "iq_controller_when_axis"];
 
 /* Toolbox: categories unlock as devices are added */
 const sh = (type, fields) => ({ shadow: { type, fields } });
@@ -372,11 +401,13 @@ function buildToolbox() {
     blk("pg_looks_move_pen"), blk("pg_looks_set_pen_color")];
   if (has("touchled")) looks.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_set_color"), blk("iq_touchled_set_brightness", { BRIGHTNESS: N(100) }));
   cats.push({ kind: "category", name: "Looks", colour: C.looks, contents: looks });
-  cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started")] });
+  const ctl = !!controllerDev();
+  cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started")].concat(ctl ? [
+    { kind: "label", text: "Controller" }, blk("iq_controller_when_button"), blk("iq_controller_when_axis")] : []) });
   cats.push({ kind: "category", name: "Control", colour: C.control, contents: [
     blk("pg_control_wait", { TIME: N(1) }), blk("pg_control_repeat", { TIMES: N(10) }), blk("pg_control_forever"),
     blk("pg_control_if"), blk("pg_control_ifelse"), blk("pg_control_wait_until"), blk("pg_control_repeat_until"),
-    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ] });
+    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ].concat(ctl ? [blk("iq_controller_actions")] : []) });
   const sensing = [];
   if (dt) sensing.push({ kind: "label", text: "Drivetrain" }, blk("pg_sensing_drivetrain_is_done"), blk("pg_sensing_drivetrain_is_moving"),
     blk("pg_sensing_drivetrain_heading"), blk("pg_sensing_drivetrain_rotation"), blk("pg_sensing_drivetrain_velocity"));
@@ -387,6 +418,7 @@ function buildToolbox() {
     blk("iq_gyro_set_rotation", { ROTATION: N(0) }), blk("iq_gyro_heading"), blk("iq_gyro_rotation"), blk("iq_gyro_rate"));
   if (has("distance")) sensing.push({ kind: "label", text: "Distance" }, blk("pg_sensing_distance_found"), blk("pg_sensing_distance_from"));
   if (has("color")) sensing.push({ kind: "label", text: "Color" }, blk("iq_color_detects"), blk("iq_color_name"), blk("iq_color_found"), blk("iq_color_brightness"), blk("iq_color_hue"));
+  if (ctl) sensing.push({ kind: "label", text: "Controller" }, blk("iq_controller_axis"), blk("iq_controller_pressed"));
   sensing.push({ kind: "label", text: "Brain" }, blk("pg_sensing_timer"), blk("pg_sensing_reset_timer"));
   if (S.allowPosition) sensing.push({ kind: "label", text: "Field position" }, blk("pg_sensing_position"));
   cats.push({ kind: "category", name: "Sensing", colour: C.sensing, contents: sensing });
@@ -751,6 +783,8 @@ function val(block) {
       return r.hue;
     }
     case "pg_sensing_bumper_pressed": { const dev = devFor(block, "bumper", "bumper"); return !!dev && bumperPressed(dev); }
+    case "iq_controller_axis": if (!controllerDev()) { warnOnce("noctl", "There is no Controller in Devices."); return 0; } return CTRL.axes[f("AXIS")] || 0;
+    case "iq_controller_pressed": if (!controllerDev()) { warnOnce("noctl", "There is no Controller in Devices."); return false; } return !!CTRL.btn[f("BUTTON")];
   }
   log(`Block "${t}" is not supported yet; it counts as 0.`, "warn");
   return 0;
@@ -838,10 +872,11 @@ function* exec(b) {
     case "pg_control_break": throw new Break();
     case "pg_control_stop_project": throw new Stop();
     case "pg_sensing_reset_timer": W.timer0 = W.t; return;
+    case "iq_controller_actions": RUN.actionsOn = f("STATE") === "enable"; if (!RUN.actionsOn) releaseActions(); return;
     case "variables_set": { const m = b.workspace.getVariableById(f("VAR")); RUN.vars[m ? m.name : f("VAR")] = v("VALUE"); return; }
     case "math_change": { const m = b.workspace.getVariableById(f("VAR")); const k = m ? m.name : f("VAR"); RUN.vars[k] = (+RUN.vars[k] || 0) + +v("DELTA"); return; }
   }
-  if (!b.type.startsWith("pg_events_")) log(`Block "${b.type}" is not supported yet; skipped.`, "warn");
+  if (!HAT_TYPES.includes(b.type)) log(`Block "${b.type}" is not supported yet; skipped.`, "warn");
 }
 function* runStack(b) {
   while (b) {
@@ -856,11 +891,17 @@ function* runStack(b) {
 function startProgram() {
   stopProgram(false);
   newWorld(); clearLog(); paintLeds();
-  const tops = ws.getTopBlocks(true).filter(b => b.type === "pg_events_when_started" && b.isEnabled());
-  if (!tops.length) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
-  const loose = ws.getTopBlocks(true).filter(b => b.type !== "pg_events_when_started" && !b.isShadow());
-  if (loose.length) log(`${loose.length} loose stack${loose.length > 1 ? "s are" : " is"} not attached to "when started" and won't run.`, "warn");
-  RUN = { vars: {}, current: new Set(), scripts: tops.map(t => runStack(t.getNextBlock())), last: 0, acc: 0 };
+  const all = ws.getTopBlocks(true).filter(b => b.isEnabled());
+  const tops = all.filter(b => b.type === "pg_events_when_started");
+  const hats = controllerDev() ? all.filter(b => b.type === "iq_controller_when_button" || b.type === "iq_controller_when_axis") : [];
+  const cd = controllerDev(), hasActions = !!cd && (cd.drive && cd.drive !== "none" && !!drivetrain() || Object.values(cd.buttons || {}).some(Boolean));
+  if (!tops.length && !hats.length && !hasActions) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
+  const loose = all.filter(b => !HAT_TYPES.includes(b.type) && !b.isShadow());
+  if (loose.length) log(`${loose.length} loose stack${loose.length > 1 ? "s are" : " is"} not attached to a "when" block and won't run.`, "warn");
+  if (all.some(b => b.type.startsWith("iq_controller_when")) && !cd) log("Controller event blocks need a Controller in Devices.", "warn");
+  RUN = { vars: {}, current: new Set(), scripts: tops.map(t => runStack(t.getNextBlock())), last: 0, acc: 0,
+    hats, hatRuns: new Map(), actionsOn: true, persistent: hats.length > 0 || hasActions, prevCtrl: null };
+  if (RUN.persistent) log("The program keeps running so the controller works. Press Stop when you're done.");
   setRunning(true);
   requestAnimationFrame(loop);
 }
@@ -874,6 +915,7 @@ function stopProgram(redraw = true) {
   if (redraw) draw();
 }
 function tickScripts() {
+  controllerTick();
   const alive = [];
   for (const s of RUN.scripts) {
     let done = false;
@@ -886,7 +928,7 @@ function tickScripts() {
     if (!done) alive.push(s);
   }
   RUN.scripts = alive;
-  return alive.length > 0 || W.mode !== "idle" || motorsBusy();
+  return alive.length > 0 || W.mode !== "idle" || motorsBusy() || RUN.persistent;
 }
 function loop(ts) {
   if (!RUN) return;
@@ -1055,7 +1097,7 @@ function draw() {
    ===================================================================== */
 const devBody = document.getElementById("devBody");
 let editing = null;
-function portsOf(d) { return d.type === "drivetrain" ? [d.left, d.right] : [d.port]; }
+function portsOf(d) { return d.type === "drivetrain" ? [d.left, d.right] : d.type === "controller" ? [] : [d.port]; }
 function portOptions(sel) {
   const used = new Set(DEVICES.filter(d => d !== editing?.orig).flatMap(portsOf));
   let h = "";
@@ -1069,6 +1111,7 @@ const ICONS = {
   distance: '<svg class="ic" viewBox="0 0 34 34"><rect x="4" y="11" width="10" height="12" rx="2" fill="#5CB1D6"/><circle cx="9" cy="14.5" r="2" fill="#fff"/><circle cx="9" cy="19.5" r="2" fill="#fff"/><path d="M18 12q4 5 0 10M23 9q6 8 0 16" stroke="#d23a2f" stroke-width="2.2" fill="none"/></svg>',
   color: '<svg class="ic" viewBox="0 0 34 34"><rect x="7" y="7" width="20" height="20" rx="4" fill="#5CB1D6"/><circle cx="17" cy="17" r="5" fill="#fff"/><circle cx="17" cy="17" r="2.5" fill="#e0237a"/></svg>',
   touchled: '<svg class="ic" viewBox="0 0 34 34"><rect x="6" y="6" width="22" height="22" rx="5" fill="#9966FF"/><circle cx="17" cy="17" r="7" fill="#ffe11a"/></svg>',
+  controller: '<svg class="ic" viewBox="0 0 34 34"><rect x="3" y="9" width="28" height="17" rx="8" fill="#4a5466"/><circle cx="11" cy="17" r="4" fill="#1c2230"/><circle cx="23" cy="17" r="4" fill="#1c2230"/><rect x="7" y="6" width="6" height="4" rx="1" fill="#1f6fd1"/><rect x="21" y="6" width="6" height="4" rx="1" fill="#1f6fd1"/></svg>',
   bumper: '<svg class="ic" viewBox="0 0 34 34"><rect x="6" y="14" width="22" height="12" rx="2" fill="#5CB1D6"/><rect x="12" y="8" width="10" height="6" rx="1" fill="#d23a2f"/></svg>',
 };
 function renderDevices() {
@@ -1083,7 +1126,8 @@ function renderDevices() {
   h += `<div class="devgrid">`;
   DEVICES.forEach((d, i) => {
     const where = ["distance", "color", "bumper"].includes(d.type) ? ` · ${(MOUNTS.find(m => m[0] === (d.mount || "front")) || MOUNTS[0])[1].toLowerCase()}${+d.offset ? ` ${d.offset > 0 ? "+" : ""}${d.offset} mm` : ""}` : "";
-    const info = d.type === "drivetrain" ? `Left ${d.left} · Right ${d.right}${d.gyro ? " · gyro" : ""}` : `Port ${d.port}${d.reverse ? " · reversed" : ""}${d.type === "color" ? (d.facing === "down" ? " · faces down" : "") : ""}${where}`;
+    const info = d.type === "controller" ? (DRIVE_MODES.find(m => m[0] === (d.drive || "none")) || DRIVE_MODES[0])[1] :
+      d.type === "drivetrain" ? `Left ${d.left} · Right ${d.right}${d.gyro ? " · gyro" : ""}` : `Port ${d.port}${d.reverse ? " · reversed" : ""}${d.type === "color" ? (d.facing === "down" ? " · faces down" : "") : ""}${where}`;
     h += `<button class="dev" type="button" data-edit="${i}">${ICONS[d.type]}<span class="t">${esc(d.name)}</span><span class="s">${info}</span></button>`;
   });
   h += `<button class="dev add" type="button" id="addDev">+ Add a device</button></div>`;
@@ -1095,6 +1139,7 @@ function renderPicker() {
   let h = `<p class="hint">Pick a device to add.</p><div class="devgrid">`;
   for (const [t, m] of Object.entries(DEVICE_TYPES)) {
     if (t === "drivetrain" && drivetrain()) continue;
+    if (t === "controller" && controllerDev()) continue;
     h += `<button class="dev" type="button" data-new="${t}">${ICONS[t]}<span class="t">${m.label}</span><span class="s">${m.sub}</span></button>`;
   }
   h += `</div><div><button class="btn" type="button" id="pickBack">Back</button></div>`;
@@ -1104,7 +1149,8 @@ function renderPicker() {
     const t = el.dataset.new;
     const used = new Set(DEVICES.flatMap(portsOf)), free = () => { for (let i = 1; i <= KIT.ports; i++) if (!used.has(i)) { used.add(i); return i; } return 1; };
     let d;
-    if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: free(), right: free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "" };
+    if (t === "controller") d = { type: t, name: "Controller", drive: drivetrain() ? "left_arcade" : "none", buttons: { E: "", F: "", L: "", R: "" } };
+    else if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: free(), right: free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "" };
     else {
       const real = S.ports[t], p = real && !used.has(real) ? (used.add(real), real) : free();   // start on the real robot's port when it's free
       d = { type: t, name: DEVICE_TYPES[t].base + p, port: p }; if (t === "motor") d.reverse = false; if (t === "color") d.facing = "down";
@@ -1114,8 +1160,13 @@ function renderPicker() {
 }
 function renderEditor() {
   const { d } = editing;
-  let f = `<label>Name<input type="text" id="fName" value="${esc(d.name)}" ${d.type === "drivetrain" ? "readonly" : ""}></label>`;
-  if (d.type === "drivetrain") {
+  let f = `<label>Name<input type="text" id="fName" value="${esc(d.name)}" ${d.type === "drivetrain" || d.type === "controller" ? "readonly" : ""}></label>`;
+  if (d.type === "controller") {
+    const motors = devOf("motor");
+    f += `<label>Drive with the sticks<select id="fDrive">${DRIVE_MODES.map(([v, n]) => `<option value="${v}" ${(d.drive || "none") === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
+    for (const k of ["L", "R", "E", "F"]) f += `<label>Buttons ${k} Up / ${k} Down spin<select id="fBtn${k}"><option value="">nothing</option>${motors.map(m => `<option value="${esc(m.name)}" ${(d.buttons || {})[k] === m.name ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></label>`;
+    f += `<p class="hint full">These are "configured actions", like in VEXcode IQ: they work whenever the program runs. Pick "None" and "nothing" if you want to program the controller yourself with Controller blocks. ${drivetrain() ? "" : "Add a Drivetrain to drive with the sticks. "}${motors.length ? "" : "Add a Motor to control it with buttons."}</p>`;
+  } else if (d.type === "drivetrain") {
     const wopts = KIT.wheels.map(([n, v]) => `<option value="${v}" ${Math.abs(v - d.wheelTravel) < .01 ? "selected" : ""}>${n} (${v} mm travel)</option>`).join("");
     const gyros = devOf("gyro");
     const gopts = `<option value="">No gyro</option>` + gyros.map(g => `<option value="${esc(g.name)}" ${d.gyro === g.name ? "selected" : ""}>${esc(g.name)}</option>`).join("");
@@ -1148,12 +1199,16 @@ function renderEditor() {
     const gone = editing.orig;
     DEVICES = DEVICES.filter(x => x !== gone);
     if (gone.type === "gyro") DEVICES.forEach(x => { if (x.type === "drivetrain" && x.gyro === gone.name) x.gyro = ""; });
+    if (gone.type === "motor") DEVICES.forEach(x => { if (x.type === "controller") for (const k in x.buttons || {}) if (x.buttons[k] === gone.name) x.buttons[k] = ""; });
     editing = null; devicesChanged();
   };
   document.getElementById("fOk").onclick = () => {
     const g = id => document.getElementById(id);
     const nd = { ...d, name: g("fName").value.trim().replace(/[^A-Za-z0-9_]/g, "") || d.name };
-    if (d.type === "drivetrain") {
+    if (d.type === "controller") {
+      nd.drive = g("fDrive").value; nd.buttons = {};
+      for (const k of ["L", "R", "E", "F"]) nd.buttons[k] = g("fBtn" + k).value;
+    } else if (d.type === "drivetrain") {
       Object.assign(nd, { left: +g("fLeft").value, right: +g("fRight").value, wheelTravel: +g("fWheel").value, gear: +g("fGear").value || 1,
         track: +g("fTrack").value || KIT.track, wheelbase: +g("fBase").value || 0, gyro: g("fGyro").value });
       if (nd.left === nd.right) { g("fErr").textContent = "Left and right motors need different ports."; return; }
@@ -1167,6 +1222,7 @@ function renderEditor() {
     }
     if (DEVICES.some(x => x !== editing.orig && x.name === nd.name)) { g("fErr").textContent = "Another device already has that name."; return; }
     if (editing.orig) {
+      if (d.type === "motor" && editing.orig.name !== nd.name) DEVICES.forEach(x => { if (x.type === "controller") for (const k in x.buttons || {}) if (x.buttons[k] === editing.orig.name) x.buttons[k] = nd.name; });
       if (d.type === "gyro" && editing.orig.name !== nd.name) DEVICES.forEach(x => { if (x.type === "drivetrain" && x.gyro === editing.orig.name) x.gyro = nd.name; });
       DEVICES[DEVICES.indexOf(editing.orig)] = nd;
     } else DEVICES.push(nd);
@@ -1177,7 +1233,7 @@ function devicesChanged() {
   LS.set("rfs.devices", DEVICES);
   ws.updateToolbox(buildToolbox());
   if (!RUN) newWorld(); else W.warned = new Set();
-  buildLeds(); renderDevices(); draw();
+  buildLeds(); buildPad(); renderDevices(); draw();
 }
 
 /* =====================================================================
@@ -1351,7 +1407,251 @@ document.addEventListener("keydown", e => {
   if (EDIT.on && (e.key === "Delete" || e.key === "Backspace") && EDIT.sel >= 0 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); deleteSelectedWall(); }
 });
 
-buildLeds();
+
+/* =====================================================================
+   Controller: on-screen pad, keyboard, USB game controller, and the real
+   VEX IQ controller relayed by the Brain over USB (Web Serial).
+   Axes A-D read -100..100 like VEXcode: A = left stick up/down, B = left stick
+   left/right, C = right stick left/right, D = right stick up/down.
+   ===================================================================== */
+const DRIVE_MODES = [["none", "None (I'll program it)"], ["tank", "Tank drive (A and D)"], ["left_arcade", "Left arcade (A and B)"],
+  ["right_arcade", "Right arcade (D and C)"], ["split_arcade", "Split arcade (A and C)"]];
+const BTN_KEYS = BUTTONS.map(b => b[1]);
+const zeroAxes = () => ({ A: 0, B: 0, C: 0, D: 0 });
+const zeroBtns = () => Object.fromEntries(BTN_KEYS.map(k => [k, false]));
+const CTRL = { axes: zeroAxes(), btn: zeroBtns(), source: "" };
+const SCREEN = { axes: zeroAxes(), btn: zeroBtns() };
+const SER = { axes: zeroAxes(), btn: zeroBtns(), t: 0, ports: [], lines: 0, opened: 0 };
+const KEYS = new Set();
+const KEYMAP = { KeyW: ["A", 100], KeyS: ["A", -100], KeyA: ["B", -100], KeyD: ["B", 100],
+  ArrowUp: ["D", 100], ArrowDown: ["D", -100], ArrowLeft: ["C", -100], ArrowRight: ["C", 100] };
+const KEYBTN = { Digit1: "EUp", Digit2: "EDown", Digit3: "FUp", Digit4: "FDown", Digit5: "LUp", Digit6: "LDown", Digit7: "RUp", Digit8: "RDown" };
+const PAD_BTN = { EUp: 3, EDown: 0, FUp: 2, FDown: 1, LUp: 4, LDown: 6, RUp: 5, RDown: 7 };   // standard gamepad button numbers (Y A X B LB LT RB RT)
+
+function readCtrl() {
+  const axes = zeroAxes(), btn = zeroBtns(), srcs = new Set();
+  const take = (a, v, src) => { v = Math.round(Math.max(-100, Math.min(100, v))); if (Math.abs(v) > Math.abs(axes[a])) axes[a] = v; if (v) srcs.add(src); };
+  const press = (k, on, src) => { if (on) { btn[k] = true; srcs.add(src); } };
+  for (const a in SCREEN.axes) take(a, SCREEN.axes[a], "screen");
+  for (const k of BTN_KEYS) press(k, SCREEN.btn[k], "screen");
+  for (const c of KEYS) { if (KEYMAP[c]) take(KEYMAP[c][0], KEYMAP[c][1], "keys"); if (KEYBTN[c]) press(KEYBTN[c], true, "keys"); }
+  if (performance.now() - SER.t < 300) {
+    for (const a in SER.axes) take(a, SER.axes[a], "brain");
+    for (const k of BTN_KEYS) press(k, SER.btn[k], "brain");
+  }
+  const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+  for (const gp of pads) {
+    const ax = i => { const v = gp.axes[i] || 0; return Math.abs(v) < 0.08 ? 0 : v * 100; };
+    take("A", -ax(1), "gamepad"); take("B", ax(0), "gamepad"); take("C", ax(2), "gamepad"); take("D", -ax(3), "gamepad");
+    for (const k of BTN_KEYS) { const b = gp.buttons[PAD_BTN[k]]; press(k, !!b && (b.pressed || b.value > 0.5), "gamepad"); }
+  }
+  CTRL.axes = axes; CTRL.btn = btn; CTRL.source = [...srcs].join(", ");
+}
+
+/* runs once per physics tick while a program runs */
+function controllerTick() {
+  readCtrl();
+  if (!RUN || !controllerDev()) return;
+  const cur = { axes: { ...CTRL.axes }, btn: { ...CTRL.btn } }, prev = RUN.prevCtrl;
+  RUN.prevCtrl = cur;
+  if (prev) for (const h of RUN.hats) {
+    let fire;
+    if (h.type === "iq_controller_when_button") {
+      const k = h.getFieldValue("BUTTON"), want = h.getFieldValue("ACTION") === "pressed";
+      fire = cur.btn[k] === want && prev.btn[k] !== want;
+    } else { const a = h.getFieldValue("AXIS"); fire = cur.axes[a] !== prev.axes[a]; }
+    if (!fire) continue;
+    const running = RUN.hatRuns.get(h.id);
+    if (running && RUN.scripts.includes(running)) continue;   // still busy from last time
+    const g = runStack(h.getNextBlock()); RUN.hatRuns.set(h.id, g); RUN.scripts.push(g);
+  }
+  if (RUN.actionsOn) applyActions();
+}
+function applyActions() {
+  const cd = controllerDev(), dt = drivetrain(), a = CTRL.axes;
+  if (dt && cd.drive && cd.drive !== "none") {
+    let L, R;
+    if (cd.drive === "tank") { L = a.A; R = a.D; }
+    else {
+      const [fwd, turn] = cd.drive === "left_arcade" ? [a.A, a.B] : cd.drive === "right_arcade" ? [a.D, a.C] : [a.A, a.C];
+      L = fwd + turn; R = fwd - turn;
+    }
+    const dz = v => Math.abs(v) < 5 ? 0 : Math.max(-100, Math.min(100, v));
+    L = dz(L); R = dz(R);
+    if (L || R) { W.mode = "spin"; W.cmd = { l: Math.sign(L), r: Math.sign(R), lp: () => Math.abs(L), rp: () => Math.abs(R), ctrl: true }; }
+    else if (W.cmd && W.cmd.ctrl) { W.mode = "idle"; W.cmd = null; }
+  }
+  for (const k of ["L", "R", "E", "F"]) {
+    const name = (cd.buttons || {})[k], st = name && W.motors[name];
+    if (!st) continue;
+    const up = CTRL.btn[k + "Up"], down = CTRL.btn[k + "Down"];
+    if (up || down) { st.mode = "spin"; st.dir = up ? 1 : -1; st.ctrl = true; }
+    else if (st.ctrl) { st.mode = "idle"; st.ctrl = false; }
+  }
+}
+function releaseActions() {
+  if (W.cmd && W.cmd.ctrl) { W.mode = "idle"; W.cmd = null; }
+  Object.values(W.motors).forEach(st => { if (st.ctrl) { st.mode = "idle"; st.ctrl = false; } });
+}
+
+/* ---- keyboard ---- */
+const typingTarget = el => !!el && (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable);
+document.addEventListener("keydown", e => {
+  if (!controllerDev() || typingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.querySelector(".modal:not([hidden])")) return;
+  if (KEYMAP[e.code] || KEYBTN[e.code]) { KEYS.add(e.code); e.preventDefault(); }
+});
+document.addEventListener("keyup", e => KEYS.delete(e.code));
+window.addEventListener("blur", () => KEYS.clear());
+
+/* ---- real controller through the Brain (Web Serial) ---- */
+const BRAIN_PROGRAM = `# Robot Field Sim controller link
+# In VEXcode IQ: start a new Python project, replace everything with this,
+# then download it to the Brain. Keep the Brain plugged in with USB.
+from vex import *
+
+brain = Brain()
+controller = Controller()
+
+def b(button):
+    return "1" if button.pressing() else "0"
+
+while True:
+    buttons = (b(controller.buttonEUp) + b(controller.buttonEDown) +
+               b(controller.buttonFUp) + b(controller.buttonFDown) +
+               b(controller.buttonLUp) + b(controller.buttonLDown) +
+               b(controller.buttonRUp) + b(controller.buttonRDown))
+    print("C,%d,%d,%d,%d,%s" % (controller.axisA.position(), controller.axisB.position(),
+                                controller.axisC.position(), controller.axisD.position(), buttons))
+    wait(40, MSEC)
+`;
+const LINE_RE = /C,(-?\d+),(-?\d+),(-?\d+),(-?\d+),([01]{8})/;
+function parseBrainLine(line) {
+  SER.lines++;
+  const m = LINE_RE.exec(line);
+  if (!m) return false;
+  SER.axes = { A: +m[1], B: +m[2], C: +m[3], D: +m[4] };
+  BTN_KEYS.forEach((k, i) => SER.btn[k] = m[5][i] === "1");
+  SER.t = performance.now();
+  return true;
+}
+let padNote = "";
+async function connectBrain() {
+  if (!navigator.serial) {
+    padNote = "This browser can't talk to the Brain. Open the simulator from the class website in Chrome or Edge on a computer.";
+    return;
+  }
+  let port;
+  try { port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x2888 }] }); }
+  catch (e) {
+    if (e.name !== "NotFoundError") padNote = e.name === "SecurityError"
+      ? "USB isn't allowed on this copy of the page. Open the simulator from the class website (stopper122.github.io/robotics) in Chrome or Edge."
+      : "Couldn't connect: " + e.message;
+    return;
+  }
+  try { await port.open({ baudRate: 115200 }); }
+  catch (e) { padNote = "Couldn't open that port. Close VEXcode (it may be using the Brain) and try again."; return; }
+  SER.ports.push(port); SER.opened = performance.now(); padNote = "";
+  const dec = new TextDecoder();
+  let buf = "";
+  try {
+    while (port.readable) {
+      const reader = port.readable.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split(/\r?\n/); buf = parts.pop();
+          if (buf.length > 400) buf = "";
+          parts.forEach(parseBrainLine);
+        }
+      } finally { reader.releaseLock(); }
+    }
+  } catch (e) { /* unplugged */ }
+  SER.ports = SER.ports.filter(p => p !== port);
+  try { await port.close(); } catch (e) {}
+  padNote = "The Brain was disconnected.";
+}
+function brainStatus() {
+  const now = performance.now();
+  if (now - SER.t < 300) return ["ok", "Real controller connected through the Brain"];
+  if (SER.ports.length) {
+    if (now - SER.opened < 2500) return ["wait", "Brain connected. Waiting for controller data..."];
+    if (SER.lines) return ["wait", "The Brain is sending, but not controller data. Run the Brain program (see How?)."];
+    return ["wait", "Brain connected, but no data. Run the Brain program, or click Connect again and pick the other VEX port."];
+  }
+  return ["off", padNote || "Using the on-screen controller and keyboard"];
+}
+
+/* ---- on-screen controller ---- */
+const padBox = document.getElementById("pad");
+let padRaf = 0;
+function buildPad() {
+  const cd = controllerDev();
+  padBox.hidden = !cd;
+  if (!cd) { cancelAnimationFrame(padRaf); padRaf = 0; return; }
+  const b = (k, label) => `<button type="button" class="pbtn" data-btn="${k}" aria-label="${label}">${label}</button>`;
+  padBox.innerHTML = `
+    <div class="padtop"><span class="dot" id="padDot"></span><span id="padStatus" class="padstatus"></span>
+      <button class="btn" type="button" id="padConnect">Connect real controller</button>
+      <button class="btn" type="button" id="padHow">How?</button></div>
+    <div class="padbody">
+      <div class="pside">
+        <div class="pbtns">${b("LUp", "L▲")}${b("LDown", "L▼")}</div>
+        <div class="stick" data-stick="L" aria-label="Left stick (axes A and B)"><div class="knob"></div></div>
+        <div class="pbtns">${b("EUp", "E▲")}${b("EDown", "E▼")}</div>
+      </div>
+      <div class="paxes" id="padAxes"></div>
+      <div class="pside">
+        <div class="pbtns">${b("RUp", "R▲")}${b("RDown", "R▼")}</div>
+        <div class="stick" data-stick="R" aria-label="Right stick (axes C and D)"><div class="knob"></div></div>
+        <div class="pbtns">${b("FUp", "F▲")}${b("FDown", "F▼")}</div>
+      </div>
+    </div>
+    <p class="hint">Drag the sticks or use the keyboard: W A S D = left stick, arrow keys = right stick, 1 to 8 = E▲ E▼ F▲ F▼ L▲ L▼ R▲ R▼. An Xbox-style USB controller works too.</p>`;
+  padBox.querySelectorAll("[data-btn]").forEach(el => {
+    const set = on => { SCREEN.btn[el.dataset.btn] = on; };
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); set(true); });
+    el.addEventListener("pointerup", () => set(false));
+    el.addEventListener("pointercancel", () => set(false));
+  });
+  padBox.querySelectorAll("[data-stick]").forEach(el => {
+    const [ay, ax] = el.dataset.stick === "L" ? ["A", "B"] : ["D", "C"];
+    const move = e => {
+      const r = el.getBoundingClientRect(), rad = r.width / 2;
+      let dx = (e.clientX - r.left - rad) / (rad * 0.7), dy = (e.clientY - r.top - rad) / (rad * 0.7);
+      const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+      SCREEN.axes[ax] = Math.round(dx * 100); SCREEN.axes[ay] = Math.round(-dy * 100);
+    };
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.dataset.drag = "1"; move(e); });
+    el.addEventListener("pointermove", e => { if (el.dataset.drag) move(e); });
+    const end = () => { delete el.dataset.drag; SCREEN.axes[ax] = 0; SCREEN.axes[ay] = 0; };
+    el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+  });
+  document.getElementById("padConnect").onclick = () => { connectBrain(); };
+  document.getElementById("padHow").onclick = () => textDialog("Use the real controller",
+    "1) Copy this program into a new VEXcode IQ Python project and download it to the Brain. 2) Close VEXcode, keep the Brain plugged in with USB, and turn on the paired controller. 3) Run the program on the Brain. 4) Click \"Connect real controller\" and pick the VEX port. If nothing moves, click it again and pick the other VEX port. Works in Chrome or Edge from the class website.",
+    BRAIN_PROGRAM, null);
+  if (!padRaf) padRaf = requestAnimationFrame(padLoop);
+}
+function padLoop() {
+  padRaf = 0;
+  if (padBox.hidden) return;
+  if (!RUN) readCtrl();
+  const knob = (stick, x, y) => { const el = padBox.querySelector(`[data-stick="${stick}"] .knob`); if (el) el.style.transform = `translate(${x * 0.3}px, ${-y * 0.3}px)`; };
+  knob("L", CTRL.axes.B, CTRL.axes.A); knob("R", CTRL.axes.C, CTRL.axes.D);
+  padBox.querySelectorAll("[data-btn]").forEach(el => el.classList.toggle("on", !!CTRL.btn[el.dataset.btn]));
+  const ax = document.getElementById("padAxes");
+  const html = ["A", "B", "C", "D"].map(a => `<div><span>${a}</span><b>${CTRL.axes[a]}</b></div>`).join("");
+  if (ax && ax.innerHTML !== html) ax.innerHTML = html;
+  const [cls, text] = brainStatus(), st = document.getElementById("padStatus"), dot = document.getElementById("padDot");
+  if (st && st.textContent !== text) st.textContent = text;
+  if (dot) dot.className = "dot " + cls;
+  padRaf = requestAnimationFrame(padLoop);
+}
+
+buildLeds(); buildPad();
 if (!DEVICES.length) log("Start by opening Devices and adding a Drivetrain or Motors.");
 draw();
 </script>
