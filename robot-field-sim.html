@@ -478,6 +478,28 @@ function stadium(cx, cy, half, r, step) {   // a running-track shaped loop, as p
   pts.push(pts[0]);
   return pts;
 }
+function trickyTrack() {   // straight start, S-curves, a sharp corner, then a zigzag to the finish
+  const pts = [[-750, -880], [-750, -450]];
+  for (let y = -440; y <= 350; y += 10) pts.push([-750 + 170 * Math.sin(Math.PI * (y + 450) / 400), y]);
+  pts.push([-750, 700], [150, 700], [450, 400], [150, 100], [450, -200], [450, -650]);
+  return pts;
+}
+function corridorWalls(path, half) {   // walls on both sides of a path made of straight pieces
+  const side = sgn => path.map((P, i) => {
+    const A = path[Math.max(0, i - 1)], B = path[Math.min(path.length - 1, i + 1)];
+    const n = (p, q) => { const dx = q[0] - p[0], dy = q[1] - p[1], l = Math.hypot(dx, dy); return [-dy / l, dx / l]; };
+    const n1 = i > 0 ? n(A, P) : n(P, B), n2 = i < path.length - 1 ? n(P, B) : n(A, P);
+    const k = 1 + n1[0] * n2[0] + n1[1] * n2[1];
+    return [P[0] + sgn * half * (n1[0] + n2[0]) / k, P[1] + sgn * half * (n1[1] + n2[1]) / k];
+  });
+  const walls = [];
+  for (const pts of [side(1), side(-1)]) for (let i = 1; i < pts.length; i++) walls.push({ x1: pts[i - 1][0], y1: pts[i - 1][1], x2: pts[i][0], y2: pts[i][1] });
+  const a = side(1).pop(), b = side(-1).pop();
+  walls.push({ x1: a[0], y1: a[1], x2: b[0], y2: b[1] });   // dead end after the finish
+  return walls;
+}
+const MAZE_PATH = [[-700, -1000], [-700, 0], [0, 0], [0, 700], [700, 700], [700, -500]];
+const tile = (x, y, color, size = 160) => ({ rect: [x - size / 2, y - size / 2, size, size], color });
 const LEVELS = [
   { id: "open", name: "Open field", task: "" },
   { id: "touch", name: "1. Go till touch", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
@@ -493,9 +515,15 @@ const LEVELS = [
     floor: [{ rect: [-150, -550, 300, 300], color: "red" }, { rect: [-150, -150, 300, 300], color: "green" },
             { rect: [-150, 250, 300, 300], color: "blue" }, { rect: [-150, 630, 300, 300], color: "yellow" }],
     task: "Drive over the color tiles. Print each color the sensor sees, or stop on the color you choose.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "line", name: "6. Line tracing", start: [-200, -400, 90], walls: [],
+  { id: "line", name: "6. Line tracing (oval)", start: [-200, -400, 90], walls: [],
     floor: [{ line: stadium(0, 0, 450, 400, 3), width: 25, color: "black" }],
     task: "Follow the black line all the way around. Tip: read the Color sensor's brightness. Dark means you are on the line, bright means you are off it.", needs: "Drivetrain, Color sensor pointing down" },
+  { id: "line2", name: "7. Line tracing (tricky)", start: [-750, -860, 0], walls: [],
+    floor: [{ line: trickyTrack(), width: 25, color: "black" }, { rect: [380, -760, 140, 110], color: "green" }],
+    task: "Follow the line through the S-curves, the sharp corner, and the zigzag, and stop on the green finish tile. Tip: go slower and turn harder than on the oval.", needs: "Drivetrain, Color sensor pointing down" },
+  { id: "maze", name: "8. Color maze", start: [-700, -850, 0], walls: corridorWalls(MAZE_PATH, 200),
+    floor: [tile(-700, 0, "blue"), tile(0, 0, "green"), tile(0, 700, "blue"), tile(700, 700, "blue"), tile(700, -300, "yellow", 300)],
+    task: "Drive through the maze using the color tiles: green = turn left, blue = turn right, yellow = finish, so stop. Tip: when you see a tile, drive forward about 190 mm to reach the middle of the turn, turn 90 degrees, then drive off the tile before checking again.", needs: "Drivetrain, Color sensor pointing down" },
 ];
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
