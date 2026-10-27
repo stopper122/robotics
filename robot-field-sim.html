@@ -105,6 +105,12 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .paxes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; color: #fff; font-family: var(--mono); font-size: 12px; }
 .paxes span { color: #b9c0cc; margin-right: 4px; }
 .paxes b { display: inline-block; min-width: 3.2ch; text-align: right; font-weight: 500; }
+.lvl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #c9d1de; }
+.lvl select { font: 600 13px var(--body); background: #2b3446; color: #fff; border: 1px solid #3b465c; border-radius: 6px; padding: 6px 8px; }
+.task { background: #eaf2fd; border: 1px solid #c4dbf7; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.task .needs { color: var(--muted); font-size: 12px; }
+.led.bump button { border-radius: 6px; background: #d23a2f; border-color: #a52a21; }
+.led.bump button.down { background: #8f2219; }
 .blocklyToolboxDiv { font-family: var(--body) !important; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -118,6 +124,7 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
     <button class="btn" id="btnSave" type="button">Save</button>
     <button class="btn" id="btnNew" type="button">New</button>
     <input type="file" id="fileIn" accept=".vrblocks,.iqblocks,.json,.txt" hidden>
+    <label class="lvl" for="level">Level <select id="level"></select></label>
     <span class="sp"></span>
     <button class="btn" id="btnTeacher" type="button">Teacher settings</button>
   </div>
@@ -133,6 +140,7 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
         </label>
         <label for="showPath"><input type="checkbox" id="showPath" checked> Path</label>
       </div>
+      <div class="task" id="task" hidden></div>
       <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas></div>
       <div class="controls">
         <button class="btn" id="btnWalls" type="button">Edit walls</button>
@@ -450,6 +458,71 @@ try { loadXml(LS.get("rfs.workspace", STARTER)); } catch (e) { loadXml(STARTER);
 ws.addChangeListener(e => { if (!e.isUiEvent) LS.set("rfs.workspace", Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws))); });
 
 /* =====================================================================
+   Levels: ready-made fields for the usual first lessons
+   ===================================================================== */
+function stadium(cx, cy, half, r, step) {   // a running-track shaped loop, as points
+  const pts = [];
+  for (let a = -90; a <= 90; a += step) pts.push([cx + half + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)]);
+  for (let a = 90; a <= 270; a += step) pts.push([cx - half + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)]);
+  pts.push(pts[0]);
+  return pts;
+}
+const LEVELS = [
+  { id: "open", name: "Open field", task: "" },
+  { id: "touch", name: "1. Go till touch", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
+    task: "Drive forward until the Bumper touches the wall, then stop.", needs: "Drivetrain, Bumper on the front" },
+  { id: "waittouch", name: "2. Wait for touch", start: [0, -400, 0], walls: [],
+    task: "Wait until the Bumper is pressed, then drive forward 500 mm. Hold the Bumper button under the field to press it.", needs: "Drivetrain, Bumper" },
+  { id: "distance", name: "3. Go till distance", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
+    guides: [{ y: 380, x1: -500, x2: 500, label: "200 mm from the wall" }],
+    task: "Drive toward the wall and stop 200 mm away from it (the dashed line).", needs: "Drivetrain, Distance sensor on the front" },
+  { id: "stayaway", name: "4. Stay away", start: [0, -300, 0], walls: [{ x1: -400, y1: 300, x2: 400, y2: 300 }],
+    task: "Keep the robot 300 mm from the wall: back up when it is too close, drive forward when it is too far. While the program runs, drag the wall closer and farther.", needs: "Drivetrain, Distance sensor on the front" },
+  { id: "color", name: "5. Color detection", start: [0, -800, 0], walls: [],
+    floor: [{ rect: [-150, -550, 300, 300], color: "red" }, { rect: [-150, -150, 300, 300], color: "green" },
+            { rect: [-150, 250, 300, 300], color: "blue" }, { rect: [-150, 630, 300, 300], color: "yellow" }],
+    task: "Drive over the color tiles. Print each color the sensor sees, or stop on the color you choose.", needs: "Drivetrain, Color sensor pointing down" },
+  { id: "line", name: "6. Line tracing", start: [-200, -400, 90], walls: [],
+    floor: [{ line: stadium(0, 0, 450, 400, 3), width: 25, color: "black" }],
+    task: "Follow the black line all the way around. Tip: read the Color sensor's brightness. Dark means you are on the line, bright means you are off it.", needs: "Drivetrain, Color sensor pointing down" },
+];
+let LEVEL = LS.get("rfs.level", "open");
+if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
+const lvl = () => LEVELS.find(l => l.id === LEVEL);
+const copyWalls = ws => (ws || []).map(w => ({ ...w }));
+function startPose() {
+  const l = lvl();
+  return l.start ? { x: l.start[0], y: l.start[1], h: l.start[2] } : { x: S.startX, y: S.startY, h: S.startH };
+}
+// floor paint the Color sensor can see when it points down
+const FLOOR_COLORS = { white: { hex: "#f7f8fa", b: 92, hue: 0 }, black: { hex: "#16181d", b: 4, hue: 0, name: "none" },
+  red: { hex: "#e02020", b: 32, hue: 0 }, green: { hex: "#18a050", b: 38, hue: 120 }, blue: { hex: "#1f6fd1", b: 28, hue: 225 },
+  yellow: { hex: "#ffd21a", b: 78, hue: 55 } };
+function segDist(px, py, [x1, y1], [x2, y2]) {
+  const dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / L));
+  return Math.hypot(px - x1 - t * dx, py - y1 - t * dy);
+}
+function floorAt(x, y) {
+  const fl = lvl().floor || [];
+  for (let i = fl.length - 1; i >= 0; i--) {
+    const f = fl[i];
+    if (f.rect) { const [rx, ry, rw, rh] = f.rect; if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh) return f.color; }
+    else if (f.line) { for (let k = 1; k < f.line.length; k++) if (segDist(x, y, f.line[k - 1], f.line[k]) <= f.width / 2) return f.color; }
+  }
+  return "white";
+}
+function floorReading(x, y) {
+  // the sensor sees a small spot (about 16 mm across), so brightness fades smoothly at a line's edge
+  const counts = {}; let bright = 0, n = 0;
+  for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+    if (i * i + j * j > 5) continue;
+    const c = floorAt(x + i * 4, y + j * 4); counts[c] = (counts[c] || 0) + 1; bright += FLOOR_COLORS[c].b; n++;
+  }
+  const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0], fc = FLOOR_COLORS[top];
+  return { found: true, name: fc.name || top, bright: Math.round(bright / n), hue: fc.hue };
+}
+
+/* =====================================================================
    World + robot physics
    ===================================================================== */
 const DT = 1 / 60;
@@ -457,19 +530,21 @@ let W;            // world state
 let VIEW = { Wd: 1, Ht: 1, sc: 1, dpr: 1 };
 const EDIT = { on: false, sel: -1, draft: null, drag: null };
 function newWorld() {
+  const P = startPose();
   W = {
     t: 0, timer0: 0,
-    x: S.startX, y: S.startY, rot: S.startH, rate: 0,   // true pose; rot is cumulative, clockwise degrees
+    x: P.x, y: P.y, rot: P.h, rate: 0,   // true pose; rot is cumulative, clockwise degrees
     encL: 0, encR: 0,                                    // drivetrain motor encoders (degrees)
-    estRot: S.startH, headingOffset: 0, rotationOffset: 0,
+    estRot: P.h, headingOffset: 0, rotationOffset: 0,
     mode: "idle", cmd: null, pen: false, penColor: "black",
-    path: [[S.startX, S.startY]], trails: [], lastTrail: null,
+    path: [[P.x, P.y]], trails: [], lastTrail: null,
     drivePct: 50, turnPct: 50, timeout: 0, velocityNow: 0,
     blocked: false, warned: new Set(),
     motors: {},          // per student motor: {enc, mode, dir, target, vel, timeout, deadline}
     arm: 0, claw: 0,     // real arm/claw motor shaft positions (degrees)
     gyros: {},           // per gyro device: {hOff, rOff, calUntil}
     leds: {},            // per touch LED: {color, bright, pressed}
+    bumps: {},           // bumpers pressed by hand with the button under the field
   };
   for (const m of devOf("motor")) W.motors[m.name] = { enc: 0, mode: "idle", dir: 1, target: 0, vel: 50, timeout: 0, deadline: 0 };
   for (const g of devOf("gyro")) W.gyros[g.name] = { hOff: 0, rOff: 0, calUntil: 0 };
@@ -498,9 +573,9 @@ function gyroDevice() {
 }
 
 /* ---- Walls students place on the field (thick line segments) ---- */
-let WALLS = LS.get("rfs.walls", []);       // [{x1,y1,x2,y2}] in mm
+let WALLS = LEVEL === "open" ? LS.get("rfs.walls", []) : copyWalls(lvl().walls);   // [{x1,y1,x2,y2}] in mm
 const WALL_T = 40;                          // wall thickness, mm
-function saveWalls() { LS.set("rfs.walls", WALLS); }
+function saveWalls() { if (LEVEL === "open") LS.set("rfs.walls", WALLS); }   // level walls reset when the level is picked again
 function wallPoly(w) {
   const dx = w.x2 - w.x1, dy = w.y2 - w.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len * WALL_T / 2, ny = dx / len * WALL_T / 2;
   const ex = dx / len * WALL_T / 2, ey = dy / len * WALL_T / 2;   // extend the ends by half the thickness
@@ -560,6 +635,7 @@ function mountWorld(dev) {
 }
 function sensorRange(dev) { const p = mountWorld(dev); return castRay(p.x, p.y, p.ang); }
 function bumperPressed(dev) {
+  if (W.bumps[dev.name]) return true;
   // a 50 mm wide pad that sticks 4 mm out from where the bumper is mounted
   const p = mountWorld(dev), a = p.ang * DEG, fx = Math.sin(a), fy = Math.cos(a), rx = Math.cos(a), ry = -Math.sin(a);
   const pad = [[-25, 0], [25, 0], [25, 4], [-25, 4]].map(([r, f]) => [p.x + rx * r + fx * f, p.y + ry * r + fy * f]);
@@ -694,7 +770,7 @@ function rd_rotation() { return (gyroDevice() ? W.rot : W.estRot) + W.rotationOf
 function rd_heading() { const r = (gyroDevice() ? W.rot : W.estRot) + W.headingOffset; return ((r % 360) + 360) % 360; }
 function colorReading(dev) {
   // Gen 1 color sensor. Facing down it sees the white field tiles; facing out it sees walls up close (gray, no color).
-  if (dev.facing === "down") return { found: true, name: "white", bright: 92, hue: 0 };
+  if (dev.facing === "down") { const p = mountWorld(dev); return floorReading(p.x, p.y); }
   const d = sensorRange(dev);
   if (d <= 60) return { found: true, name: "none", bright: Math.round(70 - d * 0.6), hue: 0 };
   return { found: false, name: "none", bright: 3, hue: 0 };
@@ -969,7 +1045,7 @@ function readouts() {
   devOf("motor").forEach(m => { const st = W.motors[m.name]; items.push([m.name, st ? st.enc.toFixed(0) + "°" : "–"]); });
   devOf("gyro").forEach(g => { const st = W.gyros[g.name]; items.push([g.name, !plugged(g, "gyro") ? NOSENSOR : st && W.t < st.calUntil ? "calibrating" : ((((W.rot + (st ? st.hOff : 0)) % 360) + 360) % 360).toFixed(1) + "°"]); });
   devOf("distance").forEach(d => { const fd = sensorRange(d); items.push([d.name, !plugged(d, "distance") ? NOSENSOR : fd >= 24 && fd <= S.distanceMax ? fd.toFixed(0) + " mm" : "no object"]); });
-  devOf("color").forEach(d => items.push([d.name, !plugged(d, "color") ? NOSENSOR : colorReading(d).name]));
+  devOf("color").forEach(d => { const r = plugged(d, "color") && colorReading(d); items.push([d.name, !r ? NOSENSOR : `${r.name} · ${r.bright}%`]); });
   devOf("bumper").forEach(d => items.push([d.name, !plugged(d, "bumper") ? NOSENSOR : bumperPressed(d) ? "pressed" : "released"]));
   if (S.ports.arm && devOf("motor").some(m => m.port === S.ports.arm || !S.checkPorts)) items.push(["Arm", W.arm.toFixed(0) + "°"]);
   if (S.ports.claw && devOf("motor").some(m => m.port === S.ports.claw || !S.checkPorts)) items.push(["Claw", W.claw.toFixed(0) + "°"]);
@@ -979,7 +1055,16 @@ function readouts() {
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ledBox = document.getElementById("leds");
 function buildLeds() {
-  ledBox.innerHTML = devOf("touchled").map(l => `<div class="led"><button type="button" data-led="${esc(l.name)}" aria-label="Press ${esc(l.name)}"></button><div><div>${esc(l.name)}</div><div class="hint">Press and hold to push it</div></div></div>`).join("");
+  ledBox.innerHTML = devOf("touchled").map(l => `<div class="led"><button type="button" data-led="${esc(l.name)}" aria-label="Press ${esc(l.name)}"></button><div><div>${esc(l.name)}</div><div class="hint">Press and hold to push it</div></div></div>`).join("") +
+    devOf("bumper").map(d => `<div class="led bump"><button type="button" data-bump="${esc(d.name)}" aria-label="Press ${esc(d.name)}"></button><div><div>${esc(d.name)}</div><div class="hint">Hold to press the bumper by hand</div></div></div>`).join("");
+  ledBox.querySelectorAll("[data-bump]").forEach(btn => {
+    const set = on => { W.bumps[btn.dataset.bump] = on; btn.classList.toggle("down", on); if (!RUN) draw(); };
+    btn.addEventListener("pointerdown", e => { e.preventDefault(); btn.setPointerCapture(e.pointerId); set(true); });
+    btn.addEventListener("pointerup", () => set(false));
+    btn.addEventListener("pointercancel", () => set(false));
+    btn.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); set(true); } });
+    btn.addEventListener("keyup", () => set(false));
+  });
   ledBox.querySelectorAll("[data-led]").forEach(btn => {
     const set = on => { const st = W.leds[btn.dataset.led]; if (st) st.pressed = on; btn.classList.toggle("down", on); };
     btn.addEventListener("pointerdown", e => { e.preventDefault(); btn.setPointerCapture(e.pointerId); set(true); });
@@ -1032,6 +1117,20 @@ function draw() {
   for (let gy = Math.ceil(-hy / step) * step; gy <= hy; gy += step) ctx.fillText(gy, X(-hx) - pad * 0.15, Y(gy));
   ctx.strokeStyle = S.walls ? "#3a4252" : "rgba(58,66,82,.35)"; ctx.lineWidth = S.walls ? Math.max(3, Wd * 0.008) : 2;
   ctx.setLineDash(S.walls ? [] : [8, 6]); ctx.strokeRect(X(-hx), Y(hy), S.fieldW * sc, S.fieldH * sc); ctx.setLineDash([]);
+  // floor paint (color tiles, lines) and level guides
+  for (const f of lvl().floor || []) {
+    const col = FLOOR_COLORS[f.color].hex;
+    if (f.rect) { const [rx, ry, rw, rh] = f.rect; ctx.fillStyle = col; ctx.fillRect(X(rx), Y(ry + rh), rw * sc, rh * sc); }
+    else if (f.line) {
+      ctx.strokeStyle = col; ctx.lineWidth = f.width * sc; ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath(); f.line.forEach(([px, py], i) => i ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py))); ctx.stroke();
+    }
+  }
+  for (const g of lvl().guides || []) {
+    ctx.strokeStyle = "#1f6fd1"; ctx.lineWidth = 2; ctx.setLineDash([10, 7]);
+    ctx.beginPath(); ctx.moveTo(X(g.x1), Y(g.y)); ctx.lineTo(X(g.x2), Y(g.y)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#1f6fd1"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(g.label, X(g.x1), Y(g.y) - 4); ctx.textBaseline = "middle";
+  }
   // student walls
   WALLS.forEach((w, i) => {
     const poly = wallPoly(w);
@@ -1044,7 +1143,8 @@ function draw() {
     const len = Math.hypot(EDIT.draft.x2 - EDIT.draft.x1, EDIT.draft.y2 - EDIT.draft.y1);
     ctx.fillStyle = "#1c2230"; ctx.textAlign = "left"; ctx.fillText(len.toFixed(0) + " mm", X(EDIT.draft.x2) + 8, Y(EDIT.draft.y2) - 8);
   }
-  ctx.save(); ctx.translate(X(S.startX), Y(S.startY)); ctx.rotate(S.startH * DEG);
+  const SP0 = startPose();
+  ctx.save(); ctx.translate(X(SP0.x), Y(SP0.y)); ctx.rotate(SP0.h * DEG);
   ctx.strokeStyle = "#9aa3b2"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
   ctx.strokeRect(-S.robotW / 2 * sc, -S.robotL / 2 * sc, S.robotW * sc, S.robotL * sc); ctx.restore(); ctx.setLineDash([]);
   if (document.getElementById("showPath").checked && W.path.length > 1) {
@@ -1293,7 +1393,7 @@ function applySettings(ns) {
    Save / open / misc wiring
    ===================================================================== */
 function projectJSON() {
-  return JSON.stringify({ mode: "Blocks", platform: "RobotFieldSim", robotKit: "IQ Gen 1", robotConfig: DEVICES, fieldWalls: WALLS,
+  return JSON.stringify({ mode: "Blocks", platform: "RobotFieldSim", robotKit: "IQ Gen 1", robotConfig: DEVICES, level: LEVEL, fieldWalls: WALLS,
     workspace: Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws)) });
 }
 function openProject(text) {
@@ -1302,7 +1402,8 @@ function openProject(text) {
   loadXml(data.workspace);
   if (Array.isArray(data.robotConfig) && data.robotConfig.length && data.robotConfig[0].type) DEVICES = data.robotConfig.filter(d => KNOWN_TYPES.includes(d.type));
   else if (data.playground) log(`Opened a VEXcode VR project. VR robots have no device setup, so add a Drivetrain${/distance/.test(data.workspace) ? " and sensors" : ""} in Devices.`, "warn");
-  if (Array.isArray(data.fieldWalls)) { WALLS = data.fieldWalls.filter(w => [w.x1, w.y1, w.x2, w.y2].every(Number.isFinite)); saveWalls(); }
+  if (data.level && LEVELS.some(l => l.id === data.level)) setLevel(data.level, true);
+  if (LEVEL === "open" && Array.isArray(data.fieldWalls)) { WALLS = data.fieldWalls.filter(w => [w.x1, w.y1, w.x2, w.y2].every(Number.isFinite)); saveWalls(); }
   stopProgram(false); devicesChanged();
 }
 const modal = id => document.getElementById(id);
@@ -1369,8 +1470,15 @@ function toField(e) {
   return [snap((px - VIEW.Wd / 2) / VIEW.sc), snap((VIEW.Ht / 2 - py) / VIEW.sc)];
 }
 function wallAt(x, y) { for (let i = WALLS.length - 1; i >= 0; i--) if (pointInPoly(x, y, wallPoly(WALLS[i]))) return i; return -1; }
+const LIVE = { drag: null };   // moving a wall outside edit mode, even while the program runs
 cv.addEventListener("pointerdown", e => {
-  if (!EDIT.on) return;
+  if (!EDIT.on) {
+    const [x, y] = toField(e), hit = wallAt(x, y);
+    if (hit < 0) return;
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    LIVE.drag = { i: hit, x, y, orig: { ...WALLS[hit] } }; cv.style.cursor = "grabbing";
+    return;
+  }
   e.preventDefault(); cv.setPointerCapture(e.pointerId);
   const [x, y] = toField(e), hit = wallAt(x, y);
   if (hit >= 0) { EDIT.sel = hit; EDIT.drag = { x, y, orig: { ...WALLS[hit] } }; }
@@ -1378,7 +1486,15 @@ cv.addEventListener("pointerdown", e => {
   updateWallButtons(); draw();
 });
 cv.addEventListener("pointermove", e => {
-  if (!EDIT.on) return;
+  if (!EDIT.on) {
+    const [x, y] = toField(e);
+    if (!LIVE.drag) { cv.style.cursor = wallAt(x, y) >= 0 ? "grab" : ""; return; }
+    const o = LIVE.drag.orig, dx = x - LIVE.drag.x, dy = y - LIVE.drag.y;
+    const nw = { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy };
+    if (!polysOverlap(corners(W.x, W.y, W.rot), wallPoly(nw))) WALLS[LIVE.drag.i] = nw;   // a wall can't be pushed into the robot
+    if (!RUN) draw();
+    return;
+  }
   const [x, y] = toField(e);
   if (EDIT.draft) {
     // hold Shift for any angle; otherwise keep walls straight up/down or across
@@ -1391,7 +1507,7 @@ cv.addEventListener("pointermove", e => {
   }
 });
 cv.addEventListener("pointerup", () => {
-  if (!EDIT.on) return;
+  if (!EDIT.on) { if (LIVE.drag) { LIVE.drag = null; cv.style.cursor = "grab"; saveWalls(); } return; }
   if (EDIT.draft) {
     const w = EDIT.draft, len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
     if (len >= 50) {
@@ -1654,6 +1770,24 @@ function padLoop() {
   if (dot) dot.className = "dot " + cls;
   padRaf = requestAnimationFrame(padLoop);
 }
+
+/* ---- level picker ---- */
+const lvlSel = document.getElementById("level");
+lvlSel.innerHTML = LEVELS.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+function renderTask() {
+  const l = lvl(), box = document.getElementById("task");
+  lvlSel.value = LEVEL;
+  box.hidden = !l.task;
+  if (l.task) box.innerHTML = `<b>${esc(l.name)}</b><span>${esc(l.task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}`;
+}
+function setLevel(id, quiet) {
+  stopProgram(false); if (EDIT.on) setEdit(false);
+  LEVEL = id; LS.set("rfs.level", id);
+  WALLS = id === "open" ? LS.get("rfs.walls", []) : copyWalls(lvl().walls);
+  newWorld(); if (!quiet) clearLog(); paintLeds(); renderTask(); updateWallButtons(); draw();
+}
+lvlSel.onchange = () => setLevel(lvlSel.value);
+renderTask();
 
 buildLeds(); buildPad();
 if (!DEVICES.length) log("Start by opening Devices and adding a Drivetrain or Motors.");
