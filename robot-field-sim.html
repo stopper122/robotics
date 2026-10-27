@@ -111,6 +111,12 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .task .needs { color: var(--muted); font-size: 12px; }
 .led.bump button { border-radius: 6px; background: #d23a2f; border-color: #a52a21; }
 .led.bump button.down { background: #8f2219; }
+#field3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 6px; }
+.views { display: flex; gap: 0; }
+.views .btn { border-radius: 0; margin-left: -1px; }
+.views .btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.views .btn:last-child { border-radius: 0 6px 6px 0; }
+.views .btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); position: relative; }
 .blocklyToolboxDiv { font-family: var(--body) !important; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -141,7 +147,12 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
         <label for="showPath"><input type="checkbox" id="showPath" checked> Path</label>
       </div>
       <div class="task" id="task" hidden></div>
-      <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas></div>
+      <div class="views" role="group" aria-label="Camera view">
+        <button class="btn" type="button" data-view="top" aria-pressed="true">Top</button>
+        <button class="btn" type="button" data-view="chase" aria-pressed="false">Behind robot</button>
+        <button class="btn" type="button" data-view="field3d" aria-pressed="false">3D field</button>
+      </div>
+      <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas><canvas id="field3d" hidden aria-label="3D field view"></canvas></div>
       <div class="controls">
         <button class="btn" id="btnWalls" type="button">Edit walls</button>
         <button class="btn" id="btnDelWall" type="button" hidden>Delete wall</button>
@@ -1191,6 +1202,7 @@ function draw() {
   }
   ctx.restore();
   readouts();
+  if (V3 && V3.mode !== "top") render3d();
 }
 
 /* =====================================================================
@@ -1456,6 +1468,7 @@ document.getElementById("xCopy").onclick = () => {
    ===================================================================== */
 const btnWalls = document.getElementById("btnWalls"), btnDelWall = document.getElementById("btnDelWall"), wallTip = document.getElementById("wallTip");
 function setEdit(on) {
+  if (on && V3.mode !== "top") setView("top");
   if (on && RUN) stopProgram(false);
   EDIT.on = on; EDIT.sel = -1; EDIT.draft = null; EDIT.drag = null;
   btnWalls.textContent = on ? "Done editing walls" : "Edit walls";
@@ -1770,6 +1783,166 @@ function padLoop() {
   if (dot) dot.className = "dot " + cls;
   padRaf = requestAnimationFrame(padLoop);
 }
+
+
+/* =====================================================================
+   3D views (three.js, loaded the first time a 3D view is picked).
+   Sim x -> 3D x, sim y -> 3D -z, height -> 3D y. Units are mm.
+   ===================================================================== */
+var V3 = { mode: "top", ready: false, loading: false, failed: false, sig: { floor: "", walls: "" }, cam: null };
+const cv3 = document.getElementById("field3d");
+function setView(mode) {
+  if (mode !== "top" && EDIT.on) setEdit(false);
+  V3.mode = mode;
+  document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === mode)));
+  cv3.hidden = mode === "top";
+  if (mode !== "top" && !V3.ready) { load3d(); return; }
+  V3.cam = null; draw();
+}
+function load3d() {
+  if (V3.loading) return;
+  if (window.THREE) { init3d(); return; }
+  V3.loading = true;
+  const s = document.createElement("script");
+  s.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+  s.onload = () => { V3.loading = false; init3d(); };
+  s.onerror = () => { V3.loading = false; log("The 3D view couldn't load. Check the internet connection and try again.", "warn"); setView("top"); };
+  document.head.appendChild(s);
+}
+function init3d() {
+  try {
+    const T = THREE;
+    V3.renderer = new T.WebGLRenderer({ canvas: cv3, antialias: true });
+    V3.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    V3.scene = new T.Scene();
+    V3.scene.background = new T.Color("#bcd3ea");
+    V3.camera = new T.PerspectiveCamera(55, 1, 5, 30000);
+    V3.scene.add(new T.HemisphereLight(0xffffff, 0x8a8f98, 0.85));
+    const sun = new T.DirectionalLight(0xffffff, 0.6); sun.position.set(800, 2500, 1200); V3.scene.add(sun);
+    // floor: a canvas texture so tiles, lines and pen trails look the same as the top view
+    V3.floorCanvas = document.createElement("canvas"); V3.floorCanvas.width = V3.floorCanvas.height = 2048;
+    V3.floorTex = new T.CanvasTexture(V3.floorCanvas);
+    V3.floorTex.anisotropy = V3.renderer.capabilities.getMaxAnisotropy();
+    V3.floor = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshLambertMaterial({ map: V3.floorTex }));
+    V3.floor.rotation.x = -Math.PI / 2; V3.scene.add(V3.floor);
+    V3.ground = new T.Mesh(new T.PlaneGeometry(40000, 40000), new T.MeshLambertMaterial({ color: 0x8a8f98 }));
+    V3.ground.rotation.x = -Math.PI / 2; V3.ground.position.y = -2; V3.scene.add(V3.ground);
+    V3.walls = new T.Group(); V3.scene.add(V3.walls);
+    V3.robot = new T.Group(); V3.scene.add(V3.robot);
+    V3.beams = new T.Group(); V3.scene.add(V3.beams);
+    V3.ready = true;
+    V3.cam = null; draw();
+  } catch (e) {
+    V3.failed = true;
+    log("This computer can't show 3D graphics (WebGL is off), so the top view is used.", "warn");
+    setView("top");
+  }
+}
+const v3 = (x, y, h) => new THREE.Vector3(x, h || 0, -y);
+function paintFloor() {
+  const g = V3.floorCanvas.getContext("2d"), N = V3.floorCanvas.width, hx = S.fieldW / 2, hy = S.fieldH / 2;
+  const sc = N / Math.max(S.fieldW, S.fieldH), X = x => (x + hx) * sc, Y = y => (hy - y) * sc;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, N, N);
+  g.fillStyle = "#f7f8fa"; g.fillRect(0, 0, S.fieldW * sc, S.fieldH * sc);
+  g.strokeStyle = "#d9dde4"; g.lineWidth = 3;
+  for (let gx = Math.ceil(-hx / S.grid) * S.grid; gx <= hx; gx += S.grid) { g.beginPath(); g.moveTo(X(gx), 0); g.lineTo(X(gx), S.fieldH * sc); g.stroke(); }
+  for (let gy = Math.ceil(-hy / S.grid) * S.grid; gy <= hy; gy += S.grid) { g.beginPath(); g.moveTo(0, Y(gy)); g.lineTo(S.fieldW * sc, Y(gy)); g.stroke(); }
+  for (const f of lvl().floor || []) {
+    const col = FLOOR_COLORS[f.color].hex;
+    if (f.rect) { const [rx, ry, rw, rh] = f.rect; g.fillStyle = col; g.fillRect(X(rx), Y(ry + rh), rw * sc, rh * sc); }
+    else if (f.line) { g.strokeStyle = col; g.lineWidth = f.width * sc; g.lineJoin = g.lineCap = "round"; g.beginPath(); f.line.forEach(([px, py], i) => i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py))); g.stroke(); }
+  }
+  for (const gd of lvl().guides || []) { g.strokeStyle = "#1f6fd1"; g.lineWidth = 6; g.setLineDash([24, 16]); g.beginPath(); g.moveTo(X(gd.x1), Y(gd.y)); g.lineTo(X(gd.x2), Y(gd.y)); g.stroke(); g.setLineDash([]); }
+  g.lineCap = g.lineJoin = "round";
+  for (const tr of W.trails) { g.strokeStyle = PEN[tr.color] || "#111"; g.lineWidth = 12; g.beginPath(); tr.pts.forEach(([px, py], i) => i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py))); g.stroke(); }
+  V3.floorTex.needsUpdate = true;
+  // the texture is square; show only the field part of it
+  const u = S.fieldW * sc / N, v = S.fieldH * sc / N;
+  V3.floorTex.repeat.set(u, v); V3.floorTex.offset.set(0, 1 - v);
+  V3.floor.scale.set(S.fieldW, S.fieldH, 1);
+}
+function box(w, h, d, color) { return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color })); }
+function buildWalls3d() {
+  const T = THREE, grp = V3.walls;
+  while (grp.children.length) { const c = grp.children.pop(); c.geometry.dispose(); c.material.dispose(); }
+  const H = 150;
+  for (const w of WALLS) {
+    const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) + WALL_T, m = box(len, H, WALL_T, 0x3a4252);
+    m.position.copy(v3((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2, H / 2));
+    m.rotation.y = Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
+    grp.add(m);
+  }
+  if (S.walls) {
+    const hx = S.fieldW / 2, hy = S.fieldH / 2, t = 30, h = 120, col = 0x2b3446;
+    [[0, hy + t / 2, S.fieldW + 2 * t, t], [0, -hy - t / 2, S.fieldW + 2 * t, t], [hx + t / 2, 0, t, S.fieldH], [-hx - t / 2, 0, t, S.fieldH]].forEach(([x, y, a, b]) => {
+      const m = box(a, h, b, col); m.position.copy(v3(x, y, h / 2)); grp.add(m);
+    });
+  }
+}
+function buildRobot3d() {
+  const grp = V3.robot;
+  while (grp.children.length) { const c = grp.children.pop(); c.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  const L = S.robotL, Wd = S.robotW, wh = Math.min(60, Wd * 0.18);
+  const body = box(Wd - 2 * wh, 90, L, 0x4a5466); body.position.y = 75; grp.add(body);
+  const front = box(Wd - 2 * wh, 92, L * 0.22, 0xf08a00); front.position.set(0, 76, -L / 2 + L * 0.11); grp.add(front);
+  const brain = box((Wd - 2 * wh) * 0.7, 20, L * 0.45, 0x20252e); brain.position.set(0, 130, L * 0.08); grp.add(brain);
+  const wheelGeo = new THREE.CylinderGeometry(32, 32, wh * 0.8, 24);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const wm = new THREE.Mesh(wheelGeo.clone(), new THREE.MeshLambertMaterial({ color: 0x20252e }));
+    wm.rotation.z = Math.PI / 2; wm.position.set(sx * (Wd / 2 - wh * 0.45), 32, sz * L * 0.3); grp.add(wm);
+  }
+  wheelGeo.dispose();
+  const SENS_COL = { distance: 0xd23a2f, color: 0xe0237a, bumper: 0x1d9b55 };
+  for (const d of DEVICES) {
+    if (!SENS_COL[d.type]) continue;
+    const m = mountLocal(d), s = box(40, 30, 24, SENS_COL[d.type]);
+    s.position.set(m.r, d.type === "color" && d.facing === "down" ? 30 : 60, -m.f);
+    s.rotation.y = -m.ang * DEG;
+    grp.add(s);
+  }
+  if (S.ports.claw && devOf("motor").length) {
+    const open = Math.max(0, Math.min(1, W.claw / 90)), gap = Wd * (0.08 + 0.18 * open);
+    for (const sx of [-1, 1]) { const f = box(10, 40, L * 0.18, 0x6c7486); f.position.set(sx * (gap + 5), 40, -L / 2 - L * 0.07); grp.add(f); }
+  }
+}
+function render3d() {
+  if (V3.mode === "top" || !V3.ready) return;
+  const T = THREE, wrap = cv3.parentElement, w = wrap.clientWidth, h = wrap.clientHeight;
+  if (V3.w !== w || V3.h !== h) { V3.w = w; V3.h = h; V3.renderer.setSize(w, h, false); V3.camera.aspect = w / h; V3.camera.updateProjectionMatrix(); }
+  // rebuild only what changed
+  const fsig = [LEVEL, S.fieldW, S.fieldH, S.grid, W.trails.length, W.trails.reduce((n, t) => n + t.pts.length, 0) >> 3].join();
+  if (fsig !== V3.sig.floor) { V3.sig.floor = fsig; paintFloor(); }
+  const wsig = JSON.stringify([WALLS, S.walls, S.fieldW, S.fieldH]);
+  if (wsig !== V3.sig.walls) { V3.sig.walls = wsig; buildWalls3d(); }
+  const rsig = JSON.stringify([DEVICES, S.robotL, S.robotW, Math.round(W.claw / 10)]);
+  if (rsig !== V3.sig.robot) { V3.sig.robot = rsig; buildRobot3d(); }
+  V3.robot.position.copy(v3(W.x, W.y, 0));
+  V3.robot.rotation.y = -W.rot * DEG;
+  // distance sensor beams
+  while (V3.beams.children.length) { const c = V3.beams.children.pop(); c.geometry.dispose(); c.material.dispose(); }
+  devOf("distance").forEach(d => {
+    if (!plugged(d, "distance")) return;
+    const m = mountWorld(d), a = m.ang * DEG, dd = Math.min(sensorRange(d), S.distanceMax);
+    const geo = new T.BufferGeometry().setFromPoints([v3(m.x, m.y, 60), v3(m.x + Math.sin(a) * dd, m.y + Math.cos(a) * dd, 60)]);
+    V3.beams.add(new T.Line(geo, new T.LineBasicMaterial({ color: 0xe02020, transparent: true, opacity: 0.6 })));
+  });
+  // camera
+  const span = Math.max(S.fieldW, S.fieldH);
+  let pos, look;
+  if (V3.mode === "chase") {
+    const a = W.rot * DEG, fx = Math.sin(a), fy = Math.cos(a);
+    pos = v3(W.x - fx * 650, W.y - fy * 650, 420);
+    look = v3(W.x + fx * 500, W.y + fy * 500, 40);
+  } else {
+    pos = new T.Vector3(0, span * 0.95, span * 0.95);
+    look = new T.Vector3(0, 0, -span * 0.08);
+  }
+  if (!V3.cam || !RUN) V3.cam = { pos: pos.clone(), look: look.clone() };
+  else { V3.cam.pos.lerp(pos, 0.15); V3.cam.look.lerp(look, 0.2); }
+  V3.camera.position.copy(V3.cam.pos); V3.camera.lookAt(V3.cam.look);
+  V3.renderer.render(V3.scene, V3.camera);
+}
+document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
 
 /* ---- level picker ---- */
 const lvlSel = document.getElementById("level");
