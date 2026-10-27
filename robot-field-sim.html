@@ -209,7 +209,11 @@ const KIT = {
 const PORT_ROLES = [   // the real robot's ports (teacher sets these)
   ["left", "Left drive motor"], ["right", "Right drive motor"], ["arm", "Arm motor"], ["claw", "Claw motor"],
   ["gyro", "Gyro sensor"], ["distance", "Distance sensor"], ["color", "Color sensor"], ["touchled", "Touch LED"], ["bumper", "Bumper switch"],
+  ["bumper2", "Bumper switch 2"], ["bumper3", "Bumper switch 3"], ["touchled2", "Touch LED 2"],
 ];
+// a sensor type can sit on its main port or on its numbered extra ports (bumper, bumper2, bumper3)
+const roleKeys = role => [role, role + "2", role + "3"].filter(k => k in S.ports);
+const onRolePort = (port, role) => roleKeys(role).some(k => S.ports[k] && S.ports[k] === port);
 function defaultSettings() {
   return {
     version: 2, fieldW: 2000, fieldH: 2000, walls: true, grid: 250,
@@ -217,7 +221,7 @@ function defaultSettings() {
     robotL: 230, robotW: 200,
     wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
     rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true,
-    ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8 },
+    ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8, bumper2: 9, bumper3: 11, touchled2: 12 },
     distanceMax: 1000,
   };
 }
@@ -524,6 +528,14 @@ const LEVELS = [
   { id: "maze", name: "8. Color maze", start: [-700, -850, 0], walls: corridorWalls(MAZE_PATH, 200),
     floor: [tile(-700, 0, "blue"), tile(0, 0, "green"), tile(0, 700, "blue"), tile(700, 700, "blue"), tile(700, -300, "yellow", 300)],
     task: "Drive through the maze using the color tiles: green = turn left, blue = turn right, yellow = finish, so stop. Tip: when you see a tile, drive forward about 190 mm to reach the middle of the turn, turn 90 degrees, then drive off the tile before checking again.", needs: "Drivetrain, Color sensor pointing down" },
+  { id: "rc1", name: "9. Remote control", start: [0, -200, 0], walls: [],
+    task: "Use two Bumpers as a remote. Hold the left one: turn left. Hold the right one: turn right. Hold both: drive forward. Hold nothing: stop. Tip: put it in a forever loop and check both together first. Hold the Z and X keys (or the buttons below) to press them.", needs: "Drivetrain, 2 Bumpers" },
+  { id: "rc2", name: "10. Remote control 2", start: [0, -200, 0], walls: [],
+    task: "Add a third Bumper for backwards. Hold it with the left one: back up turning left. With the right one: back up turning right. Alone: drive straight backwards. Everything from Remote control 1 still works. Keys: Z, X, C.", needs: "Drivetrain, 3 Bumpers" },
+  { id: "crc1", name: "11. Color remote control", start: [0, -200, 0], walls: [],
+    task: "Remote control 1, but with two single Motors and a Touch LED for each motor. When a motor drives forward its LED is green. When it is stopped its LED is red. The LEDs show on the back of the robot and below the field.", needs: "LeftMotor and RightMotor (or a Drivetrain), 2 Bumpers, 2 Touch LEDs" },
+  { id: "crc2", name: "12. Color remote control 2", start: [0, -200, 0], walls: [],
+    task: "Remote control 2 with the LEDs: green = that motor goes forward, red = stopped, yellow = backwards. Keys: Z, X, C.", needs: "LeftMotor and RightMotor (or a Drivetrain), 3 Bumpers, 2 Touch LEDs" },
 ];
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
@@ -597,7 +609,7 @@ function warnOnce(key, msg) { if (!W.warned.has(key)) { W.warned.add(key); log(m
 
 function portOk(dev, role) {
   if (!S.checkPorts) return true;
-  if (dev.port === S.ports[role]) return true;
+  if (onRolePort(dev.port, role)) return true;
   const label = (PORT_ROLES.find(r => r[0] === role) || [role, role])[1].toLowerCase();
   warnOnce("port" + dev.name, `${dev.name} is set to port ${dev.port}, but this robot has no ${label} on port ${dev.port}, so it reads nothing.` +
     (S.showPortMap ? ` Check the robot's port map in Devices.` : ""));
@@ -1007,6 +1019,7 @@ function* runStack(b) {
 function startProgram() {
   stopProgram(false);
   newWorld(); clearLog(); paintLeds();
+  ledBox.querySelectorAll("[data-bump].down").forEach(b => { W.bumps[b.dataset.bump] = true; });   // still held from before Start
   const all = ws.getTopBlocks(true).filter(b => b.isEnabled());
   const tops = all.filter(b => b.type === "pg_events_when_started");
   const hats = controllerDev() ? all.filter(b => b.type === "iq_controller_when_button" || b.type === "iq_controller_when_axis") : [];
@@ -1075,7 +1088,7 @@ const cons = document.getElementById("console");
 function log(msg, cls) { const d = document.createElement("div"); if (cls) d.className = cls; d.textContent = msg; cons.appendChild(d); cons.scrollTop = cons.scrollHeight; }
 function clearLog() { cons.textContent = ""; }
 const ro = document.getElementById("readouts");
-const plugged = (d, role) => !S.checkPorts || d.port === S.ports[role];
+const plugged = (d, role) => !S.checkPorts || onRolePort(d.port, role);
 const NOSENSOR = "wrong port";
 function readouts() {
   const items = [["X", W.x.toFixed(0) + " mm"], ["Y", W.y.toFixed(0) + " mm"], ["Heading", (drivetrain() ? rd_heading() : heading()).toFixed(1) + "°"],
@@ -1093,11 +1106,25 @@ function readouts() {
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ledBox = document.getElementById("leds");
+const BUMP_KEYS = ["KeyZ", "KeyX", "KeyC", "KeyV"];
+const bumpKey = i => BUMP_KEYS[i] ? BUMP_KEYS[i].slice(3) : "";
+function setBump(name, on) {
+  W.bumps[name] = on;
+  const btn = ledBox.querySelector(`[data-bump="${CSS.escape(name)}"]`); if (btn) btn.classList.toggle("down", on);
+  if (!RUN) draw();
+}
+document.addEventListener("keydown", e => {
+  const i = BUMP_KEYS.indexOf(e.code), d = devOf("bumper")[i];
+  if (!d || typingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".modal:not([hidden])")) return;
+  e.preventDefault(); if (!e.repeat) setBump(d.name, true);
+});
+document.addEventListener("keyup", e => { const d = devOf("bumper")[BUMP_KEYS.indexOf(e.code)]; if (d) setBump(d.name, false); });
+window.addEventListener("blur", () => devOf("bumper").forEach(d => { if (W.bumps[d.name]) setBump(d.name, false); }));
 function buildLeds() {
   ledBox.innerHTML = devOf("touchled").map(l => `<div class="led"><button type="button" data-led="${esc(l.name)}" aria-label="Press ${esc(l.name)}"></button><div><div>${esc(l.name)}</div><div class="hint">Press and hold to push it</div></div></div>`).join("") +
-    devOf("bumper").map(d => `<div class="led bump"><button type="button" data-bump="${esc(d.name)}" aria-label="Press ${esc(d.name)}"></button><div><div>${esc(d.name)}</div><div class="hint">Hold to press the bumper by hand</div></div></div>`).join("");
+    devOf("bumper").map((d, i) => `<div class="led bump"><button type="button" data-bump="${esc(d.name)}" aria-label="Press ${esc(d.name)}"></button><div><div>${esc(d.name)}</div><div class="hint">Hold to press it by hand${bumpKey(i) ? ` (or hold the ${bumpKey(i)} key)` : ""}</div></div></div>`).join("");
   ledBox.querySelectorAll("[data-bump]").forEach(btn => {
-    const set = on => { W.bumps[btn.dataset.bump] = on; btn.classList.toggle("down", on); if (!RUN) draw(); };
+    const set = on => setBump(btn.dataset.bump, on);
     btn.addEventListener("pointerdown", e => { e.preventDefault(); btn.setPointerCapture(e.pointerId); set(true); });
     btn.addEventListener("pointerup", () => set(false));
     btn.addEventListener("pointercancel", () => set(false));
@@ -1228,6 +1255,16 @@ function draw() {
     ctx.fillStyle = "#fff"; ctx.fillRect(-sz * 0.2, -sz * 0.45, sz * 0.4, sz * 0.15);
     ctx.restore();
   }
+  // Touch LEDs across the back of the robot, lit with their color
+  const leds = devOf("touchled");
+  leds.forEach((l, i) => {
+    const st = W.leds[l.name], on = st && plugged(l, "touchled") && st.color !== "none";
+    const sz = Math.max(7, 30 * sc), x = (i - (leds.length - 1) / 2) * sz * 1.4;
+    ctx.fillStyle = "#9966FF"; ctx.fillRect(x - sz / 2, rl * 0.3 - sz / 2, sz, sz);
+    ctx.globalAlpha = on ? 0.35 + 0.65 * st.bright / 100 : 1;
+    ctx.fillStyle = on ? LED_HEX[st.color] : "#e6e8ee"; ctx.beginPath(); ctx.arc(x, rl * 0.3, sz * 0.34, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+  });
   ctx.restore();
   readouts();
   if (V3 && V3.mode !== "top") render3d();
@@ -1296,7 +1333,7 @@ function renderPicker() {
     else {
       // start on the real robot's port when it's free (motors: drive, arm, then claw ports)
       const p = t === "motor" ? (["left", "right", "arm", "claw"].map(k => S.ports[k]).find(r => r && !used.has(r) && used.add(r)) || free())
-        : realFree(S.ports[t]) || free();
+        : roleKeys(t).map(k => realFree(S.ports[k])).find(Boolean) || free();
       d = { type: t, name: DEVICE_TYPES[t].base + p, port: p }; if (t === "motor") d.reverse = false; if (t === "color") d.facing = "down";
       if (["distance", "color", "bumper"].includes(t)) { d.mount = "front"; d.offset = 0; } }
     editing = { orig: null, d }; renderDevices();
