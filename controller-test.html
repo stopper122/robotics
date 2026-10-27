@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VEX IQ Controller Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Lexend:wght@400;500;700&display=swap">
+<style>
+/* Same look as the other pages on this site. One column: connect, record each step, copy the log. */
+:root{
+  --bg:#f5f7fb; --surface:#ffffff; --ink:#15192a; --muted:#545c74; --line:#d9deea;
+  --accent:#2457d6; --accent-soft:#e3eafc; --good:#1b8a4b; --bad:#c2352b; --code:#0f1424; --code-ink:#cfe8d6;
+  --display:"Bricolage Grotesque","Arial Rounded MT Bold",system-ui,sans-serif;
+  --body:"Lexend","Verdana",system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#10131d; --surface:#181c2a; --ink:#eef1f8; --muted:#a6aec4; --line:#2d3346;
+  --accent:#7ea2ff; --accent-soft:#1f2a4a; --good:#4cc27f; --bad:#ff7a6e; color-scheme:dark }}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:1.0625rem;line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding-inline:16px;padding-block:32px 64px;display:grid;gap:24px}
+h1,h2{font-family:var(--display);line-height:1.15;margin:0;text-wrap:balance}
+h1{font-size:clamp(2rem,6vw,2.6rem);font-weight:800}
+h2{font-size:1.3rem;font-weight:800}
+p{margin:0;max-width:68ch}
+.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.panel{background:var(--surface);border:2px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:700 .95rem var(--body);border-radius:10px;padding:9px 14px;border:2px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.status{display:grid;gap:6px;font-size:.95rem}
+.st{display:flex;gap:8px;align-items:baseline}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--line);flex:none;transform:translateY(1px)}
+.dot.ok{background:var(--good)} .dot.no{background:var(--bad)}
+.step{display:grid;gap:6px;background:var(--accent-soft);border:3px solid var(--accent);border-radius:14px;padding:14px}
+.step .now{font-family:var(--display);font-weight:800;font-size:1.5rem}
+.step .count{color:var(--muted);font-size:.9rem}
+.live{background:var(--code);color:var(--code-ink);font:13px/1.5 var(--mono);border-radius:10px;padding:10px 12px;min-height:84px;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.small{font-size:.9rem;color:var(--muted)}
+ol{margin:0;padding-left:22px;display:grid;gap:4px}
+textarea{width:100%;min-height:160px;font:12px var(--mono);border:2px solid var(--line);border-radius:10px;padding:8px;background:var(--surface);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <span class="eyebrow">Engineering &amp; Robotics · Teacher tool</span>
+    <h1>VEX IQ Controller Test</h1>
+    <p>This page checks whether the computer can read the VEX IQ controller's sticks and buttons over USB. It records what the controller sends while you move each stick and press each button. You then copy the log and send it to Claude, who works out how to use it in the Robot Field Simulator.</p>
+  </header>
+
+  <section class="panel">
+    <h2>1. Connect</h2>
+    <ol>
+      <li>Use <b>Chrome</b> or <b>Edge</b> on a computer (not a phone).</li>
+      <li>Plug the IQ controller into the computer with its USB cable and turn it on. If it is paired with a Brain, turn the Brain on too.</li>
+      <li>Close VEXcode and any other tab that is connected to the controller, so this page can use it.</li>
+      <li>Click each button below. A box will pop up: pick the VEX device and click <b>Connect</b>. If more than one VEX item is listed, connect one, then click the button again for the next one.</li>
+    </ol>
+    <div class="row">
+      <button type="button" id="bSerial">Connect: USB serial</button>
+      <button type="button" id="bHid" class="ghost">Connect: HID device</button>
+    </div>
+    <div class="status" id="status"></div>
+    <p class="small">A regular game controller is also checked automatically. If the IQ controller shows up there, press any button on it once so the browser notices it.</p>
+  </section>
+
+  <section class="panel">
+    <h2>2. Record each move</h2>
+    <p class="small">Press <b>Start recording</b>, then do what the box says and keep holding it until the box changes (about 3 seconds each). Let go between steps.</p>
+    <div class="step" aria-live="polite">
+      <div class="small">Do this now:</div>
+      <div class="now" id="stepNow">Press Start recording</div>
+      <div class="count" id="stepCount"></div>
+    </div>
+    <div class="row">
+      <button type="button" id="bStart">Start recording</button>
+      <button type="button" id="bStop" class="ghost" disabled>Stop</button>
+      <button type="button" id="bQuery" class="ghost" disabled title="Sends one 'what version are you?' message. Harmless.">Send a hello message</button>
+    </div>
+    <div class="small">Latest data from the controller:</div>
+    <div class="live" id="live">Nothing yet.</div>
+  </section>
+
+  <section class="panel">
+    <h2>3. Copy the log and send it to Claude</h2>
+    <div class="row">
+      <button type="button" id="bCopy" disabled>Copy log</button>
+      <span class="small" id="copyMsg"></span>
+    </div>
+    <textarea id="logOut" readonly aria-label="Recorded log"></textarea>
+  </section>
+</div>
+
+<script>
+"use strict";
+const STEPS = [
+  "Don't touch anything",
+  "Left stick: push UP and hold", "Left stick: push DOWN and hold", "Left stick: push LEFT and hold", "Left stick: push RIGHT and hold",
+  "Don't touch anything",
+  "Right stick: push UP and hold", "Right stick: push DOWN and hold", "Right stick: push LEFT and hold", "Right stick: push RIGHT and hold",
+  "Don't touch anything",
+  "Hold button E Up", "Hold button E Down", "Hold button F Up", "Hold button F Down",
+  "Hold button L Up", "Hold button L Down", "Hold button R Up", "Hold button R Down",
+  "Don't touch anything",
+];
+const STEP_MS = 3500;
+const t0 = performance.now();
+const LOG = [];          // {t, src, label, data, n}
+let label = "before recording", recording = false, stepIdx = -1, stepTimer = null;
+const sources = [];      // connected devices, for the report
+const $ = id => document.getElementById(id);
+const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, "0")).join(" ");
+
+function setStatus() {
+  const lines = [];
+  lines.push([!!navigator.serial, "USB serial " + (navigator.serial ? "is available in this browser" : "is NOT available (use Chrome or Edge on a computer)")]);
+  lines.push([!!navigator.hid, "HID " + (navigator.hid ? "is available in this browser" : "is NOT available")]);
+  const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+  lines.push([pads.length > 0, pads.length ? "Game controller seen: " + pads.map(p => p.id).join(", ") : "No game controller seen yet"]);
+  sources.forEach(s => lines.push([true, "Connected: " + s]));
+  $("status").innerHTML = lines.map(([ok, text]) => `<div class="st"><span class="dot ${ok ? "ok" : "no"}"></span><span>${text.replace(/</g, "&lt;")}</span></div>`).join("");
+}
+
+function record(src, data) {
+  const t = Math.round(performance.now() - t0);
+  const last = LOG[LOG.length - 1];
+  if (last && last.src === src && last.data === data && last.label === label) { last.n++; last.tEnd = t; }
+  else LOG.push({ t, tEnd: t, src, label, data, n: 1 });
+  if (LOG.length > 20000) LOG.splice(0, LOG.length - 20000);
+  const live = $("live");
+  live.textContent = `[${src}] ${data}\n` + live.textContent.split("\n").slice(0, 12).join("\n");
+  $("bCopy").disabled = false;
+  renderLog();
+}
+let renderPending = false;
+function renderLog() {
+  if (renderPending) return; renderPending = true;
+  requestAnimationFrame(() => { renderPending = false; $("logOut").value = logText(); });
+}
+function logText() {
+  const head = [
+    "VEX IQ controller test log",
+    "Browser: " + navigator.userAgent,
+    "Devices: " + (sources.join(" | ") || "none"),
+    "Format: time_ms [source] (step) data  xN = same data repeated N times",
+    "",
+  ];
+  let lastLabel = null;
+  const body = [];
+  for (const e of LOG) {
+    if (e.label !== lastLabel) { body.push(`--- ${e.label} ---`); lastLabel = e.label; }
+    body.push(`${e.t} [${e.src}] ${e.data}${e.n > 1 ? `  x${e.n}` : ""}`);
+  }
+  return head.concat(body).join("\n");
+}
+
+/* ---- USB serial ---- */
+let writer = null;
+$("bSerial").onclick = async () => {
+  if (!navigator.serial) { alertBox("This browser can't use USB serial. Open the page in Chrome or Edge."); return; }
+  try {
+    const port = await navigator.serial.requestPort({});
+    const info = port.getInfo();
+    const name = `serial ${info.usbVendorId ? "vid=0x" + info.usbVendorId.toString(16) : "?"} ${info.usbProductId ? "pid=0x" + info.usbProductId.toString(16) : ""}`.trim();
+    await port.open({ baudRate: 115200 });
+    sources.push(name); setStatus();
+    if (port.writable && !writer) { writer = port.writable.getWriter(); $("bQuery").disabled = false; }
+    const src = "S" + sources.length;
+    (async () => {
+      while (port.readable) {
+        const reader = port.readable.getReader();
+        try {
+          for (;;) { const { value, done } = await reader.read(); if (done) break; if (value && value.length) record(src, hex(value)); }
+        } catch (e) { record(src, "read error: " + e.message); }
+        finally { reader.releaseLock(); }
+      }
+    })();
+  } catch (e) { if (e.name !== "NotFoundError") alertBox("Could not connect: " + e.message); }
+};
+$("bQuery").onclick = async () => {
+  // V5-style "system version" request. The controller may ignore it; that's fine.
+  if (!writer) return;
+  try { await writer.write(new Uint8Array([0xC9, 0x36, 0xB8, 0x47, 0x21])); record("sent", "c9 36 b8 47 21 (hello)"); }
+  catch (e) { record("sent", "write error: " + e.message); }
+};
+
+/* ---- HID ---- */
+$("bHid").onclick = async () => {
+  if (!navigator.hid) { alertBox("This browser can't use HID devices. Open the page in Chrome or Edge."); return; }
+  try {
+    const devices = await navigator.hid.requestDevice({ filters: [] });
+    for (const d of devices) {
+      if (!d.opened) await d.open();
+      const cols = d.collections.map(c => `usagePage=0x${c.usagePage.toString(16)} usage=0x${c.usage.toString(16)} in=${(c.inputReports || []).length}`).join("; ");
+      sources.push(`hid "${d.productName}" vid=0x${d.vendorId.toString(16)} pid=0x${d.productId.toString(16)} [${cols}]`);
+      const src = "H" + sources.length;
+      d.addEventListener("inputreport", ev => record(src, `report ${ev.reportId}: ` + hex(new Uint8Array(ev.data.buffer))));
+    }
+    setStatus();
+  } catch (e) { alertBox("Could not connect: " + e.message); }
+};
+
+/* ---- Regular game controllers ---- */
+let lastPad = {};
+function pollPads() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const p of pads) {
+    if (!p) continue;
+    const s = "axes " + p.axes.map(a => a.toFixed(2)).join(",") + " | buttons " + p.buttons.map((b, i) => b.pressed ? i : null).filter(v => v !== null).join(",");
+    if (lastPad[p.index] !== s) { lastPad[p.index] = s; record("G" + p.index, s); }
+  }
+  requestAnimationFrame(pollPads);
+}
+window.addEventListener("gamepadconnected", e => { sources.push(`gamepad "${e.gamepad.id}"`); setStatus(); });
+requestAnimationFrame(pollPads);
+
+/* ---- Recording steps ---- */
+function showStep() {
+  if (stepIdx >= STEPS.length) { stop(); $("stepNow").textContent = "All done! Copy the log below."; $("stepCount").textContent = ""; return; }
+  label = `step ${stepIdx + 1}: ${STEPS[stepIdx]}`;
+  $("stepNow").textContent = STEPS[stepIdx];
+  $("stepCount").textContent = `Step ${stepIdx + 1} of ${STEPS.length}`;
+  record("mark", "begin " + label);
+  stepTimer = setTimeout(() => { stepIdx++; showStep(); }, STEP_MS);
+}
+function stop() {
+  recording = false; clearTimeout(stepTimer); label = "after recording";
+  $("bStart").disabled = false; $("bStop").disabled = true;
+}
+$("bStart").onclick = () => {
+  if (!sources.length) { alertBox("Connect the controller first (step 1). If nothing connects, record anyway so we know that."); }
+  recording = true; stepIdx = 0; $("bStart").disabled = true; $("bStop").disabled = false; showStep();
+};
+$("bStop").onclick = () => { stop(); $("stepNow").textContent = "Stopped. Press Start recording to do it again."; $("stepCount").textContent = ""; };
+
+/* ---- Copy ---- */
+$("bCopy").onclick = async () => {
+  const text = logText(); $("logOut").value = text;
+  try { await navigator.clipboard.writeText(text); $("copyMsg").textContent = "Copied. Paste it into your message to Claude."; }
+  catch (e) { $("logOut").select(); $("copyMsg").textContent = "Select-all is on; press Ctrl+C to copy."; }
+};
+
+function alertBox(msg) { $("copyMsg").textContent = ""; const s = $("status"); s.insertAdjacentHTML("beforeend", `<div class="st"><span class="dot no"></span><span>${msg.replace(/</g, "&lt;")}</span></div>`); }
+setStatus();
+</script>
+</body>
+</html>
