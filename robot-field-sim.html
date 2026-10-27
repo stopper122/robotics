@@ -1,0 +1,1359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robot Field Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+/* Layout: app shell. Top bar, block editor on the left, field + readouts on the right. Single light theme on purpose: it matches the light block workspace students already know. */
+:root {
+  color-scheme: light;
+  --bg: #e9ecf1; --panel: #ffffff; --ink: #1c2230; --muted: #5f6878; --line: #d5dae3;
+  --accent: #1f6fd1; --accent-ink: #ffffff; --go: #1d9b55; --stop: #d23a2f; --chip: #f1f3f7;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; }
+.app { height: 100%; display: flex; flex-direction: column; }
+.bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #1c2230; color: #fff;
+  padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar h1 { font-family: var(--display); font-size: 22px; margin: 0 12px 0 0; letter-spacing: .02em; white-space: nowrap; }
+.bar h1 b { color: #5aa2ff; }
+.bar .sp { flex: 1; }
+.btn { font: 600 13px var(--body); border-radius: 6px; padding: 7px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar .btn { background: #2b3446; color: #fff; border-color: #3b465c; }
+.bar .btn:hover { background: #36415a; }
+.btn.go { background: var(--go); color: #fff; border-color: var(--go); }
+.btn.stop { background: var(--stop); color: #fff; border-color: var(--stop); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 460px); }
+#blockly { min-height: 0; min-width: 0; position: relative; }
+.side { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow: auto; min-width: 0; }
+.fieldwrap { position: relative; width: 100%; aspect-ratio: 1; max-width: 100%; }
+#field { width: 100%; height: 100%; display: block; border-radius: 6px; background: #8a8f98; touch-action: none; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.controls label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.readouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+.ro { background: var(--chip); border-radius: 6px; padding: 6px 8px; }
+.ro .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.ro .v { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+.leds { display: flex; gap: 10px; flex-wrap: wrap; }
+.led { display: flex; align-items: center; gap: 8px; background: var(--chip); border-radius: 6px; padding: 6px 10px 6px 6px; font-size: 13px; }
+.led button { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #c9ced8; background: #f4f5f7; cursor: pointer; box-shadow: inset 0 -3px 0 rgba(0,0,0,.12); }
+.led button:active, .led button.down { transform: scale(.94); box-shadow: inset 0 2px 3px rgba(0,0,0,.25); }
+.led .hint { font-size: 11px; }
+.console { background: #11161f; color: #d6f5d6; font-family: var(--mono); font-size: 12.5px; border-radius: 6px; padding: 8px 10px; min-height: 90px; max-height: 180px; overflow: auto; white-space: pre-wrap; }
+.console .warn { color: #ffcf66; }
+.console .err { color: #ff8a80; }
+h2.sec { font: 600 12px var(--body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 4px 0 0; }
+@media (max-width: 860px) {
+  .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: 55vh auto; overflow: auto; }
+  .side { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+}
+/* dialogs */
+[hidden] { display: none !important; }
+.modal { position: fixed; inset: 0; background: rgba(15, 20, 30, .55); display: flex; align-items: center; justify-content: center; z-index: 50;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.dlg { background: var(--panel); border-radius: 12px; width: min(720px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; }
+.dlg header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.dlg header h2 { font-family: var(--display); font-size: 24px; margin: 0; flex: 1; }
+.dlg .body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.dlg footer { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); }
+.devgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.dev { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--chip); cursor: pointer; text-align: left; font: inherit; color: inherit; display: flex; flex-direction: column; gap: 4px; min-height: 92px; }
+.dev:hover, .dev:focus-visible { border-color: var(--accent); }
+.dev .t { font-weight: 600; }
+.dev .s { font-size: 12px; color: var(--muted); }
+.dev .ic { width: 34px; height: 34px; }
+.dev.add { border-style: dashed; background: transparent; align-items: center; justify-content: center; color: var(--accent); font-weight: 600; }
+.portmap { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pm-title { font-weight: 600; font-size: 13px; }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.pm { display: flex; gap: 8px; align-items: center; background: var(--chip); border-radius: 6px; padding: 5px 8px; font-size: 12.5px; }
+.pm b { font-family: var(--mono); background: #1c2230; color: #fff; border-radius: 4px; min-width: 22px; text-align: center; padding: 1px 4px; }
+.pm.empty { color: var(--muted); background: transparent; border: 1px dashed var(--line); }
+.form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 16px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.form label.chk { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+.form input[type=text], .form input[type=number], .form select { font: 14px var(--body); padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); min-width: 0; }
+.form .full { grid-column: 1 / -1; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; max-width: 70ch; }
+.err-text { color: var(--stop); font-size: 13px; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0; }
+legend { font-weight: 600; padding: 0 6px; }
+textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 8px; box-sizing: border-box; resize: vertical; }
+.blocklyToolboxDiv { font-family: var(--body) !important; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <h1>Robot <b>Field</b> Sim</h1>
+    <button class="btn" id="btnDevices" type="button">Devices</button>
+    <button class="btn" id="btnOpen" type="button">Open</button>
+    <button class="btn" id="btnSave" type="button">Save</button>
+    <button class="btn" id="btnNew" type="button">New</button>
+    <input type="file" id="fileIn" accept=".vrblocks,.iqblocks,.json,.txt" hidden>
+    <span class="sp"></span>
+    <button class="btn" id="btnTeacher" type="button">Teacher settings</button>
+  </div>
+  <div class="main">
+    <div id="blockly"></div>
+    <aside class="side">
+      <div class="controls">
+        <button class="btn go" id="btnRun" type="button">▶ Start</button>
+        <button class="btn stop" id="btnStop" type="button">■ Stop</button>
+        <button class="btn" id="btnReset" type="button">↺ Reset</button>
+        <label for="speed">Speed
+          <select id="speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+        </label>
+        <label for="showPath"><input type="checkbox" id="showPath" checked> Path</label>
+      </div>
+      <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas></div>
+      <div class="controls">
+        <button class="btn" id="btnWalls" type="button">Edit walls</button>
+        <button class="btn" id="btnDelWall" type="button" hidden>Delete wall</button>
+        <button class="btn" id="btnClearWalls" type="button" hidden>Remove all walls</button>
+      </div>
+      <p class="hint" id="wallTip" hidden>Drag on the field to draw a wall (hold Shift for an angled wall). Click a wall to select it, drag to move it, or press Delete to remove it.</p>
+      <h2 class="sec">Robot</h2>
+      <div class="readouts" id="readouts"></div>
+      <div class="leds" id="leds"></div>
+      <h2 class="sec">Print console</h2>
+      <div class="console" id="console" aria-live="polite"></div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="mDevices" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="devTitle">
+    <header><h2 id="devTitle">Devices</h2><button class="btn" type="button" data-close>Done</button></header>
+    <div class="body" id="devBody"></div>
+  </div>
+</div>
+<div class="modal" id="mTeacher" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="tTitle">
+    <header><h2 id="tTitle">Teacher settings</h2><button class="btn" type="button" data-close>Cancel</button></header>
+    <div class="body" id="tBody"></div>
+    <footer>
+      <button class="btn" type="button" id="tDefaults">Restore defaults</button>
+      <button class="btn" type="button" id="tExport">Copy settings code</button>
+      <button class="btn" type="button" id="tImport">Paste settings code</button>
+      <button class="btn primary" type="button" id="tSave">Save settings</button>
+    </footer>
+  </div>
+</div>
+<div class="modal" id="mText" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="xTitle">
+    <header><h2 id="xTitle">Save project</h2><button class="btn" type="button" data-close>Close</button></header>
+    <div class="body"><p class="hint" id="xHint"></p><textarea id="xText" aria-label="Project text"></textarea><div class="err-text" id="xErr"></div></div>
+    <footer><button class="btn" type="button" id="xAction" hidden>Load</button><button class="btn primary" type="button" id="xCopy">Copy</button></footer>
+  </div>
+</div>
+
+<script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   Settings (teacher) and device configuration (student)
+   Robot kit: VEX IQ, first generation (Gen 1) devices only.
+   ===================================================================== */
+const KIT = {
+  name: "VEX IQ (Gen 1)", ports: 12, motorRPM: 120, wheelTravel: 200, track: 176, wheelbase: 156,
+  wheels: [["160 mm wheel", 160], ["200 mm wheel", 200], ["250 mm wheel", 250]],
+};
+const PORT_ROLES = [   // the real robot's ports (teacher sets these)
+  ["left", "Left drive motor"], ["right", "Right drive motor"], ["arm", "Arm motor"], ["claw", "Claw motor"],
+  ["gyro", "Gyro sensor"], ["distance", "Distance sensor"], ["color", "Color sensor"], ["touchled", "Touch LED"], ["bumper", "Bumper switch"],
+];
+function defaultSettings() {
+  return {
+    version: 2, fieldW: 2000, fieldH: 2000, walls: true, grid: 250,
+    startX: 0, startY: 0, startH: 0,
+    robotL: 230, robotW: 200,
+    wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
+    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true,
+    ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8 },
+    distanceMax: 1000,
+  };
+}
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+             set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+function loadSettings(saved) {
+  const d = defaultSettings();
+  if (!saved || saved.version !== 2) return d;           // older saves used other kits; start fresh
+  const s = Object.assign(d, saved); s.ports = Object.assign(defaultSettings().ports, saved.ports || {}); return s;
+}
+let S = loadSettings(LS.get("rfs.settings", null));
+const KNOWN_TYPES = ["drivetrain", "motor", "gyro", "distance", "color", "touchled", "bumper"];
+let DEVICES = LS.get("rfs.devices", []).filter(d => KNOWN_TYPES.includes(d.type));
+
+const DEVICE_TYPES = {
+  drivetrain: { label: "Drivetrain 2-motor", sub: "Two drive motors", base: "Drivetrain" },
+  motor: { label: "Motor", sub: "One Smart Motor", base: "Motor" },
+  gyro: { label: "Gyro sensor", sub: "Heading and rotation", base: "Gyro" },
+  distance: { label: "Distance sensor", sub: "Gen 1 ultrasonic", base: "Distance" },
+  color: { label: "Color sensor", sub: "Color and brightness", base: "Color" },
+  touchled: { label: "Touch LED", sub: "Light you can press", base: "TouchLED" },
+  bumper: { label: "Bumper switch", sub: "Pressed or not", base: "Bumper" },
+};
+const devOf = t => DEVICES.filter(d => d.type === t);
+const drivetrain = () => DEVICES.find(d => d.type === "drivetrain");
+const devByName = (t, n) => devOf(t).find(d => d.name === n) || null;
+
+/* =====================================================================
+   Blocks (drivetrain/control names match VEXcode VR so .vrblocks files open here)
+   ===================================================================== */
+const C = { events: "#FFBF00", drive: "#4C97FF", motion: "#4C97FF", looks: "#9966FF", control: "#FFAB19", sensing: "#5CB1D6", ops: "#59C059" };
+const num = (name) => ({ type: "input_value", name, check: "Number" });
+const dd = (name, opts) => ({ type: "field_dropdown", name, options: opts });
+const stmt = (o) => Object.assign({ previousStatement: null, nextStatement: null, inputsInline: true }, o);
+const DIRS = [["forward", "fwd"], ["reverse", "rev"]];
+const TURNS = [["right", "right"], ["left", "left"]];
+const DIST_UNITS = [["mm", "mm"], ["inches", "in"]];
+const ROT_UNITS = [["degrees", "degrees"], ["turns", "turns"]];
+// IQ Gen 1 color sensor color names
+const IQ_COLORS = [["red", "red"], ["green", "green"], ["blue", "blue"], ["white", "white"], ["yellow", "yellow"], ["orange", "orange"],
+  ["purple", "purple"], ["red violet", "red_violet"], ["violet", "violet"], ["blue violet", "blue_violet"], ["blue green", "blue_green"],
+  ["yellow green", "yellow_green"], ["yellow orange", "yellow_orange"], ["red orange", "red_orange"]];
+const LED_COLORS = [["none", "none"], ["red", "red"], ["green", "green"], ["blue", "blue"], ["white", "white"], ["yellow", "yellow"], ["orange", "orange"],
+  ["purple", "purple"], ["red violet", "red_violet"], ["violet", "violet"], ["blue violet", "blue_violet"], ["blue green", "blue_green"],
+  ["yellow green", "yellow_green"], ["yellow orange", "yellow_orange"], ["red orange", "red_orange"]];
+const LED_HEX = { none: "#f4f5f7", red: "#ff2a2a", green: "#20c05a", blue: "#2a6bff", white: "#ffffff", yellow: "#ffe11a", orange: "#ff8a1a",
+  purple: "#9a3cff", red_violet: "#e0237a", violet: "#7d3cff", blue_violet: "#5146ff", blue_green: "#1ab8a8", yellow_green: "#a4d81a",
+  yellow_orange: "#ffb31a", red_orange: "#ff5a1a" };
+
+Blockly.defineBlocksWithJsonArray([
+  { type: "pg_events_when_started", message0: "when started", nextStatement: null, colour: C.events },
+  // Drivetrain
+  stmt({ type: "pg_drivetrain_drive", message0: "drive %1", args0: [dd("DIRECTION", DIRS)], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_drive_for", message0: "drive %1 for %2 %3", args0: [dd("DIRECTION", DIRS), num("AMOUNT"), dd("UNITS", DIST_UNITS)], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_turn", message0: "turn %1", args0: [dd("TURNDIRECTION", TURNS)], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_turn_for", message0: "turn %1 for %2 degrees", args0: [dd("TURNDIRECTION", TURNS), num("AMOUNT")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_turn_to_heading", message0: "turn to heading %1 degrees", args0: [num("HEADING")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_turn_to_rotation", message0: "turn to rotation %1 degrees", args0: [num("ROTATION")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_stop_driving", message0: "stop driving", colour: C.drive }),
+  stmt({ type: "pg_drivetrain_set_drive_velocity", message0: "set drive velocity to %1 %%", args0: [num("VELOCITY")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_set_turn_velocity", message0: "set turn velocity to %1 %%", args0: [num("VELOCITY")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_set_drive_heading", message0: "set drive heading to %1 degrees", args0: [num("HEADING")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_set_drive_rotation", message0: "set drive rotation to %1 degrees", args0: [num("ROTATION")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_set_drive_timeout", message0: "set drive timeout to %1 seconds", args0: [num("TIME")], colour: C.drive }),
+  // Looks
+  stmt({ type: "pg_looks_move_pen", message0: "move pen %1", args0: [dd("DIRECTIONS", [["down", "down"], ["up", "up"]])], colour: C.looks }),
+  stmt({ type: "pg_looks_set_pen_color", message0: "set pen color to %1", args0: [dd("COLOR", [["black", "black"], ["red", "red"], ["green", "green"], ["blue", "blue"], ["orange", "orange"], ["purple", "purple"]])], colour: C.looks }),
+  stmt({ type: "pg_looks_print", message0: "print %1 and set cursor to next row", args0: [{ type: "input_value", name: "VALUE" }], colour: C.looks }),
+  stmt({ type: "pg_looks_clear_all_rows", message0: "clear all rows", colour: C.looks }),
+  // Control
+  stmt({ type: "pg_control_wait", message0: "wait %1 seconds", args0: [num("TIME")], colour: C.control }),
+  stmt({ type: "pg_control_repeat", message0: "repeat %1", args0: [num("TIMES")], message1: "%1", args1: [{ type: "input_statement", name: "SUBSTACK" }], colour: C.control, inputsInline: false }),
+  { type: "pg_control_forever", message0: "forever", message1: "%1", args1: [{ type: "input_statement", name: "SUBSTACK" }], previousStatement: null, colour: C.control },
+  stmt({ type: "pg_control_if", message0: "if %1 then", args0: [{ type: "input_value", name: "CONDITION", check: "Boolean" }], message1: "%1", args1: [{ type: "input_statement", name: "SUBSTACK" }], colour: C.control, inputsInline: false }),
+  stmt({ type: "pg_control_ifelse", message0: "if %1 then", args0: [{ type: "input_value", name: "CONDITION", check: "Boolean" }], message1: "%1", args1: [{ type: "input_statement", name: "SUBSTACK" }], message2: "else", message3: "%1", args3: [{ type: "input_statement", name: "SUBSTACK2" }], colour: C.control, inputsInline: false }),
+  stmt({ type: "pg_control_wait_until", message0: "wait until %1", args0: [{ type: "input_value", name: "CONDITION", check: "Boolean" }], colour: C.control }),
+  stmt({ type: "pg_control_repeat_until", message0: "repeat until %1", args0: [{ type: "input_value", name: "CONDITION", check: "Boolean" }], message1: "%1", args1: [{ type: "input_statement", name: "SUBSTACK" }], colour: C.control, inputsInline: false }),
+  stmt({ type: "pg_control_while", message0: "while %1", args0: [{ type: "input_value", name: "CONDITION", check: "Boolean" }], message1: "%1", args1: [{ type: "input_statement", name: "SUBSTACK" }], colour: C.control, inputsInline: false }),
+  { type: "pg_control_break", message0: "break", previousStatement: null, colour: C.control },
+  { type: "pg_control_stop_project", message0: "stop project", previousStatement: null, colour: C.control },
+  // Sensing (no device needed)
+  { type: "pg_sensing_timer", message0: "timer in seconds", output: "Number", colour: C.sensing },
+  stmt({ type: "pg_sensing_reset_timer", message0: "reset timer", colour: C.sensing }),
+  { type: "pg_sensing_position", message0: "position %1 in %2", args0: [dd("AXIS", [["X", "x"], ["Y", "y"]]), dd("UNITS", DIST_UNITS)], output: "Number", colour: C.sensing },
+  { type: "pg_sensing_drivetrain_is_done", message0: "drive is done?", output: "Boolean", colour: C.sensing },
+  { type: "pg_sensing_drivetrain_is_moving", message0: "drive is moving?", output: "Boolean", colour: C.sensing },
+  { type: "pg_sensing_drivetrain_heading", message0: "drive heading in degrees", output: "Number", colour: C.sensing },
+  { type: "pg_sensing_drivetrain_rotation", message0: "drive rotation in degrees", output: "Number", colour: C.sensing },
+  { type: "pg_sensing_drivetrain_velocity", message0: "drive velocity in %%", output: "Number", colour: C.sensing },
+  // Operators
+  ...[["add", "+"], ["subtract", "-"], ["multiply", "*"], ["divide", "/"]].map(([n, s]) =>
+    ({ type: "pg_operators_" + n, message0: "%1 " + s + " %2", args0: [num("NUM1"), num("NUM2")], output: "Number", inputsInline: true, colour: C.ops })),
+  ...[["less_than", "<"], ["greater_than", ">"], ["equal", "="]].map(([n, s]) =>
+    ({ type: "pg_operators_" + n, message0: "%1 " + s + " %2", args0: [num("NUM1"), num("NUM2")], output: "Boolean", inputsInline: true, colour: C.ops })),
+  { type: "pg_operators_and", message0: "%1 and %2", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
+  { type: "pg_operators_or", message0: "%1 or %2", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
+  { type: "pg_operators_not", message0: "not %1", args0: [{ type: "input_value", name: "BOOL", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
+  { type: "pg_operators_random", message0: "pick random %1 to %2", args0: [num("FROM"), num("TO")], output: "Number", inputsInline: true, colour: C.ops },
+  { type: "pg_operators_round", message0: "round %1", args0: [num("NUM")], output: "Number", inputsInline: true, colour: C.ops },
+  { type: "pg_operators_join", message0: "join %1 %2", args0: [{ type: "input_value", name: "STRING1" }, { type: "input_value", name: "STRING2" }], output: "String", inputsInline: true, colour: C.ops },
+]);
+
+/* Device blocks: the first field is a dropdown of the student's devices of that type.
+   parts: list of items, each a string (label), ["value", NAME, check?] or ["dd", NAME, options]. */
+function deviceMenu(type) {
+  return function () {
+    const list = devOf(type).map(d => [d.name, d.name]);
+    return list.length ? list : [["(add in Devices)", "__none"]];
+  };
+}
+function defDev(type, devType, colour, parts, shape) {
+  Blockly.Blocks[type] = {
+    init() {
+      let inp = this.appendDummyInput("D0");
+      let devPlaced = false, k = 0;
+      for (const p of parts) {
+        if (p === "@") { inp.appendField(new Blockly.FieldDropdown(deviceMenu(devType)), "DEVICE"); devPlaced = true; }
+        else if (typeof p === "string") inp.appendField(p);
+        else if (p[0] === "dd") inp.appendField(new Blockly.FieldDropdown(p[2]), p[1]);
+        else if (p[0] === "value") { this.appendValueInput(p[1]).setCheck(p[2] || null); inp = this.appendDummyInput("D" + (++k)); }
+      }
+      if (!devPlaced) this.getInput("D0").insertFieldAt(0, new Blockly.FieldDropdown(deviceMenu(devType)), "DEVICE");
+      this.setInputsInline(true);
+      this.setColour(colour);
+      if (shape === "stmt") { this.setPreviousStatement(true); this.setNextStatement(true); }
+      else this.setOutput(true, shape);
+    },
+  };
+}
+// Motors (Motion)
+defDev("iq_motor_spin", "motor", C.motion, ["spin", "@", ["dd", "DIRECTION", DIRS]], "stmt");
+defDev("iq_motor_spin_for", "motor", C.motion, ["spin", "@", ["dd", "DIRECTION", DIRS], "for", ["value", "AMOUNT", "Number"], ["dd", "UNITS", ROT_UNITS]], "stmt");
+defDev("iq_motor_spin_to_position", "motor", C.motion, ["spin", "@", "to position", ["value", "POSITION", "Number"], ["dd", "UNITS", ROT_UNITS]], "stmt");
+defDev("iq_motor_stop", "motor", C.motion, ["stop", "@"], "stmt");
+defDev("iq_motor_set_position", "motor", C.motion, ["set", "@", "position to", ["value", "POSITION", "Number"], ["dd", "UNITS", ROT_UNITS]], "stmt");
+defDev("iq_motor_set_velocity", "motor", C.motion, ["set", "@", "velocity to", ["value", "VELOCITY", "Number"], "%"], "stmt");
+defDev("iq_motor_set_timeout", "motor", C.motion, ["set", "@", "timeout to", ["value", "TIME", "Number"], "seconds"], "stmt");
+defDev("iq_motor_is_done", "motor", C.sensing, ["@", "is done?"], "Boolean");
+defDev("iq_motor_is_spinning", "motor", C.sensing, ["@", "is spinning?"], "Boolean");
+defDev("iq_motor_position", "motor", C.sensing, ["@", "position in", ["dd", "UNITS", ROT_UNITS]], "Number");
+defDev("iq_motor_velocity", "motor", C.sensing, ["@", "velocity in %"], "Number");
+// Touch LED (Looks + Sensing)
+defDev("iq_touchled_set_color", "touchled", C.looks, ["set", "@", "color to", ["dd", "COLOR", LED_COLORS]], "stmt");
+defDev("iq_touchled_set_brightness", "touchled", C.looks, ["set", "@", "brightness to", ["value", "BRIGHTNESS", "Number"], "%"], "stmt");
+defDev("iq_touchled_pressed", "touchled", C.sensing, ["@", "pressed?"], "Boolean");
+// Gyro (Gen 1)
+defDev("iq_gyro_calibrate", "gyro", C.sensing, ["calibrate", "@"], "stmt");
+defDev("iq_gyro_set_heading", "gyro", C.sensing, ["set", "@", "heading to", ["value", "HEADING", "Number"], "degrees"], "stmt");
+defDev("iq_gyro_set_rotation", "gyro", C.sensing, ["set", "@", "rotation to", ["value", "ROTATION", "Number"], "degrees"], "stmt");
+defDev("iq_gyro_heading", "gyro", C.sensing, ["@", "heading in degrees"], "Number");
+defDev("iq_gyro_rotation", "gyro", C.sensing, ["@", "rotation in degrees"], "Number");
+defDev("iq_gyro_rate", "gyro", C.sensing, ["@", "rate in dps"], "Number");
+// Distance (Gen 1 ultrasonic)
+defDev("pg_sensing_distance_found", "distance", C.sensing, ["@", "found an object?"], "Boolean");
+defDev("pg_sensing_distance_from", "distance", C.sensing, ["@", "distance in", ["dd", "UNITS", DIST_UNITS]], "Number");
+// Color (Gen 1)
+defDev("iq_color_detects", "color", C.sensing, ["@", "detects", ["dd", "COLORS", IQ_COLORS], "?"], "Boolean");
+defDev("iq_color_name", "color", C.sensing, ["@", "color name"], "String");
+defDev("iq_color_found", "color", C.sensing, ["@", "found an object?"], "Boolean");
+defDev("iq_color_brightness", "color", C.sensing, ["@", "brightness in %"], "Number");
+defDev("iq_color_hue", "color", C.sensing, ["@", "hue in degrees"], "Number");
+// Bumper
+defDev("pg_sensing_bumper_pressed", "bumper", C.sensing, ["@", "pressed?"], "Boolean");
+
+/* Toolbox: categories unlock as devices are added */
+const sh = (type, fields) => ({ shadow: { type, fields } });
+const N = v => sh("math_number", { NUM: v });
+function blk(type, inputs) { return inputs ? { kind: "block", type, inputs } : { kind: "block", type }; }
+const lockLabel = what => ({ kind: "label", text: `Add a ${what} in Devices to unlock these blocks.` });
+function buildToolbox() {
+  const dt = !!drivetrain(), has = t => devOf(t).length > 0;
+  const cats = [];
+  cats.push({ kind: "category", name: "Drivetrain", colour: C.drive, contents: dt ? [
+    blk("pg_drivetrain_drive"), blk("pg_drivetrain_drive_for", { AMOUNT: N(200) }), blk("pg_drivetrain_turn"),
+    blk("pg_drivetrain_turn_for", { AMOUNT: N(90) }), blk("pg_drivetrain_turn_to_heading", { HEADING: N(90) }),
+    blk("pg_drivetrain_turn_to_rotation", { ROTATION: N(90) }), blk("pg_drivetrain_stop_driving"),
+    blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }),
+    blk("pg_drivetrain_set_drive_heading", { HEADING: N(0) }), blk("pg_drivetrain_set_drive_rotation", { ROTATION: N(0) }),
+    blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }),
+  ] : [lockLabel("Drivetrain")] });
+  cats.push({ kind: "category", name: "Motion", colour: C.motion, contents: has("motor") ? [
+    blk("iq_motor_spin"), blk("iq_motor_spin_for", { AMOUNT: N(90) }), blk("iq_motor_spin_to_position", { POSITION: N(90) }),
+    blk("iq_motor_stop"), blk("iq_motor_set_position", { POSITION: N(0) }), blk("iq_motor_set_velocity", { VELOCITY: N(50) }),
+    blk("iq_motor_set_timeout", { TIME: N(1) }),
+  ] : [lockLabel("Motor")] });
+  const looks = [blk("pg_looks_print", { VALUE: sh("text", { TEXT: "Hello" }) }), blk("pg_looks_clear_all_rows"),
+    blk("pg_looks_move_pen"), blk("pg_looks_set_pen_color")];
+  if (has("touchled")) looks.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_set_color"), blk("iq_touchled_set_brightness", { BRIGHTNESS: N(100) }));
+  cats.push({ kind: "category", name: "Looks", colour: C.looks, contents: looks });
+  cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started")] });
+  cats.push({ kind: "category", name: "Control", colour: C.control, contents: [
+    blk("pg_control_wait", { TIME: N(1) }), blk("pg_control_repeat", { TIMES: N(10) }), blk("pg_control_forever"),
+    blk("pg_control_if"), blk("pg_control_ifelse"), blk("pg_control_wait_until"), blk("pg_control_repeat_until"),
+    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ] });
+  const sensing = [];
+  if (dt) sensing.push({ kind: "label", text: "Drivetrain" }, blk("pg_sensing_drivetrain_is_done"), blk("pg_sensing_drivetrain_is_moving"),
+    blk("pg_sensing_drivetrain_heading"), blk("pg_sensing_drivetrain_rotation"), blk("pg_sensing_drivetrain_velocity"));
+  if (has("motor")) sensing.push({ kind: "label", text: "Motor" }, blk("iq_motor_is_done"), blk("iq_motor_is_spinning"), blk("iq_motor_position"), blk("iq_motor_velocity"));
+  if (has("touchled")) sensing.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_pressed"));
+  if (has("bumper")) sensing.push({ kind: "label", text: "Bumper" }, blk("pg_sensing_bumper_pressed"));
+  if (has("gyro")) sensing.push({ kind: "label", text: "Gyro" }, blk("iq_gyro_calibrate"), blk("iq_gyro_set_heading", { HEADING: N(0) }),
+    blk("iq_gyro_set_rotation", { ROTATION: N(0) }), blk("iq_gyro_heading"), blk("iq_gyro_rotation"), blk("iq_gyro_rate"));
+  if (has("distance")) sensing.push({ kind: "label", text: "Distance" }, blk("pg_sensing_distance_found"), blk("pg_sensing_distance_from"));
+  if (has("color")) sensing.push({ kind: "label", text: "Color" }, blk("iq_color_detects"), blk("iq_color_name"), blk("iq_color_found"), blk("iq_color_brightness"), blk("iq_color_hue"));
+  sensing.push({ kind: "label", text: "Brain" }, blk("pg_sensing_timer"), blk("pg_sensing_reset_timer"));
+  if (S.allowPosition) sensing.push({ kind: "label", text: "Field position" }, blk("pg_sensing_position"));
+  cats.push({ kind: "category", name: "Sensing", colour: C.sensing, contents: sensing });
+  cats.push({ kind: "category", name: "Operators", colour: C.ops, contents: [
+    blk("pg_operators_add", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_subtract", { NUM1: N(0), NUM2: N(0) }),
+    blk("pg_operators_multiply", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_divide", { NUM1: N(0), NUM2: N(0) }),
+    blk("pg_operators_less_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_greater_than", { NUM1: N(0), NUM2: N(50) }),
+    blk("pg_operators_equal", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_and"), blk("pg_operators_or"), blk("pg_operators_not"),
+    blk("pg_operators_random", { FROM: N(1), TO: N(10) }), blk("pg_operators_round", { NUM: N(0) }),
+    blk("pg_operators_join", { STRING1: sh("text", { TEXT: "apple " }), STRING2: sh("text", { TEXT: "banana" }) }) ] });
+  cats.push({ kind: "category", name: "Variables", colour: "#FF8C1A", custom: "VARIABLE" });
+  return { kind: "categoryToolbox", contents: cats };
+}
+
+const ws = Blockly.inject("blockly", {
+  toolbox: buildToolbox(), renderer: "zelos", trashcan: false, sounds: false,
+  zoom: { controls: false, wheel: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
+  move: { scrollbars: true, drag: true, wheel: false }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
+});
+window.addEventListener("resize", () => Blockly.svgResize(ws));
+new ResizeObserver(() => Blockly.svgResize(ws)).observe(document.getElementById("blockly"));
+
+const STARTER = `<xml xmlns="https://developers.google.com/blockly/xml"><block type="pg_events_when_started" x="40" y="40"></block></xml>`;
+function loadXml(text) {
+  ws.clear();
+  Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(text), ws);
+}
+try { loadXml(LS.get("rfs.workspace", STARTER)); } catch (e) { loadXml(STARTER); }
+ws.addChangeListener(e => { if (!e.isUiEvent) LS.set("rfs.workspace", Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws))); });
+
+/* =====================================================================
+   World + robot physics
+   ===================================================================== */
+const DT = 1 / 60;
+let W;            // world state
+let VIEW = { Wd: 1, Ht: 1, sc: 1, dpr: 1 };
+const EDIT = { on: false, sel: -1, draft: null, drag: null };
+function newWorld() {
+  W = {
+    t: 0, timer0: 0,
+    x: S.startX, y: S.startY, rot: S.startH, rate: 0,   // true pose; rot is cumulative, clockwise degrees
+    encL: 0, encR: 0,                                    // drivetrain motor encoders (degrees)
+    estRot: S.startH, headingOffset: 0, rotationOffset: 0,
+    mode: "idle", cmd: null, pen: false, penColor: "black",
+    path: [[S.startX, S.startY]], trails: [], lastTrail: null,
+    drivePct: 50, turnPct: 50, timeout: 0, velocityNow: 0,
+    blocked: false, warned: new Set(),
+    motors: {},          // per student motor: {enc, mode, dir, target, vel, timeout, deadline}
+    arm: 0, claw: 0,     // real arm/claw motor shaft positions (degrees)
+    gyros: {},           // per gyro device: {hOff, rOff, calUntil}
+    leds: {},            // per touch LED: {color, bright, pressed}
+  };
+  for (const m of devOf("motor")) W.motors[m.name] = { enc: 0, mode: "idle", dir: 1, target: 0, vel: 50, timeout: 0, deadline: 0 };
+  for (const g of devOf("gyro")) W.gyros[g.name] = { hOff: 0, rOff: 0, calUntil: 0 };
+  for (const l of devOf("touchled")) W.leds[l.name] = { color: "none", bright: 100, pressed: false };
+}
+newWorld();
+
+const DEG = Math.PI / 180;
+function heading() { return ((W.rot % 360) + 360) % 360; }
+function warnOnce(key, msg) { if (!W.warned.has(key)) { W.warned.add(key); log(msg, "warn"); } }
+
+function portOk(dev, role) {
+  if (!S.checkPorts) return true;
+  if (dev.port === S.ports[role]) return true;
+  const label = (PORT_ROLES.find(r => r[0] === role) || [role, role])[1].toLowerCase();
+  warnOnce("port" + dev.name, `${dev.name} is set to port ${dev.port}, but this robot has no ${label} on port ${dev.port}, so it reads nothing.` +
+    (S.showPortMap ? ` Check the robot's port map in Devices.` : ""));
+  return false;
+}
+function gyroDevice() {
+  const dt = drivetrain();
+  if (!dt || !dt.gyro) return null;
+  const g = devByName("gyro", dt.gyro) || devOf("gyro")[0];
+  if (!g) { warnOnce("nogyro", "The Drivetrain is set to use a gyro, but there is no Gyro sensor in Devices."); return null; }
+  return portOk(g, "gyro") ? g : null;
+}
+
+/* ---- Walls students place on the field (thick line segments) ---- */
+let WALLS = LS.get("rfs.walls", []);       // [{x1,y1,x2,y2}] in mm
+const WALL_T = 40;                          // wall thickness, mm
+function saveWalls() { LS.set("rfs.walls", WALLS); }
+function wallPoly(w) {
+  const dx = w.x2 - w.x1, dy = w.y2 - w.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len * WALL_T / 2, ny = dx / len * WALL_T / 2;
+  const ex = dx / len * WALL_T / 2, ey = dy / len * WALL_T / 2;   // extend the ends by half the thickness
+  return [[w.x1 - ex + nx, w.y1 - ey + ny], [w.x2 + ex + nx, w.y2 + ey + ny], [w.x2 + ex - nx, w.y2 + ey - ny], [w.x1 - ex - nx, w.y1 - ey - ny]];
+}
+function polysOverlap(a, b) {   // separating-axis test for two convex polygons
+  for (const poly of [a, b]) {
+    for (let i = 0; i < poly.length; i++) {
+      const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length], ax = y1 - y2, ay = x2 - x1;
+      let amin = Infinity, amax = -Infinity, bmin = Infinity, bmax = -Infinity;
+      for (const [x, y] of a) { const p = x * ax + y * ay; amin = Math.min(amin, p); amax = Math.max(amax, p); }
+      for (const [x, y] of b) { const p = x * ax + y * ay; bmin = Math.min(bmin, p); bmax = Math.max(bmax, p); }
+      if (amax <= bmin + 1e-9 || bmax <= amin + 1e-9) return false;
+    }
+  }
+  return true;
+}
+function pointInPoly(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function rayPoly(px, py, dx, dy, poly) {
+  if (pointInPoly(px, py, poly)) return 0;
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length], ex = x2 - x1, ey = y2 - y1;
+    const den = dx * ey - dy * ex; if (Math.abs(den) < 1e-12) continue;
+    const t = ((x1 - px) * ey - (y1 - py) * ex) / den, u = ((x1 - px) * dy - (y1 - py) * dx) / den;
+    if (t >= 0 && u >= 0 && u <= 1) best = Math.min(best, t);
+  }
+  return best;
+}
+/* distance from a point along a heading (clockwise degrees from +y) to the nearest wall */
+function castRay(px, py, angDeg) {
+  const a = angDeg * DEG, dx = Math.sin(a), dy = Math.cos(a);
+  let best = distanceToWall(px, py, angDeg);
+  for (const w of WALLS) best = Math.min(best, rayPoly(px, py, dx, dy, wallPoly(w)));
+  return best;
+}
+
+/* ---- Where a sensor sits on the robot ---- */
+const MOUNTS = [["front", "Front"], ["back", "Back"], ["left", "Left side"], ["right", "Right side"]];
+function mountLocal(dev) {   // -> forward/right offsets from robot center (mm) and facing angle relative to the robot
+  const side = dev.mount || "front", off = +dev.offset || 0, hl = S.robotL / 2, hw = S.robotW / 2;
+  if (side === "back") return { f: -hl, r: -Math.max(-hw, Math.min(hw, off)), ang: 180 };
+  if (side === "left") return { f: Math.max(-hl, Math.min(hl, off)), r: -hw, ang: 270 };
+  if (side === "right") return { f: Math.max(-hl, Math.min(hl, off)), r: hw, ang: 90 };
+  return { f: hl, r: Math.max(-hw, Math.min(hw, off)), ang: 0 };
+}
+function mountWorld(dev) {
+  const m = mountLocal(dev), a = W.rot * DEG, s = Math.sin(a), c = Math.cos(a);
+  return { x: W.x + s * m.f + c * m.r, y: W.y + c * m.f - s * m.r, ang: W.rot + m.ang };
+}
+function sensorRange(dev) { const p = mountWorld(dev); return castRay(p.x, p.y, p.ang); }
+function bumperPressed(dev) {
+  // a 50 mm wide pad that sticks 4 mm out from where the bumper is mounted
+  const p = mountWorld(dev), a = p.ang * DEG, fx = Math.sin(a), fy = Math.cos(a), rx = Math.cos(a), ry = -Math.sin(a);
+  const pad = [[-25, 0], [25, 0], [25, 4], [-25, 4]].map(([r, f]) => [p.x + rx * r + fx * f, p.y + ry * r + fy * f]);
+  const hx = S.fieldW / 2, hy = S.fieldH / 2;
+  if (S.walls && pad.some(([x, y]) => Math.abs(x) > hx || Math.abs(y) > hy)) return true;
+  return WALLS.some(w => polysOverlap(pad, wallPoly(w)));
+}
+
+function corners(x, y, rot) {
+  const a = rot * DEG, s = Math.sin(a), c = Math.cos(a), hl = S.robotL / 2, hw = S.robotW / 2;
+  return [[hl, hw], [hl, -hw], [-hl, -hw], [-hl, hw]].map(([f, r]) => [x + s * f + c * r, y + c * f - s * r]);
+}
+function poseOk(x, y, rot) {
+  const body = corners(x, y, rot);
+  if (S.walls) { const hx = S.fieldW / 2, hy = S.fieldH / 2; if (!body.every(([px, py]) => Math.abs(px) <= hx && Math.abs(py) <= hy)) return false; }
+  return !WALLS.some(w => polysOverlap(body, wallPoly(w)));
+}
+function distanceToWall(x, y, rot) {
+  if (!S.walls) return Infinity;
+  const a = rot * DEG, dx = Math.sin(a), dy = Math.cos(a), hx = S.fieldW / 2, hy = S.fieldH / 2;
+  let best = Infinity;
+  if (dx > 1e-9) best = Math.min(best, (hx - x) / dx);
+  if (dx < -1e-9) best = Math.min(best, (-hx - x) / dx);
+  if (dy > 1e-9) best = Math.min(best, (hy - y) / dy);
+  if (dy < -1e-9) best = Math.min(best, (-hy - y) / dy);
+  return best;
+}
+function frontDistance() {
+  const a = W.rot * DEG, fx = W.x + Math.sin(a) * S.robotL / 2, fy = W.y + Math.cos(a) * S.robotL / 2;
+  return distanceToWall(fx, fy, W.rot);
+}
+
+const realMM = deg => deg / 360 / S.gear * S.wheelTravel;                                  // real build
+const cfgMM = deg => { const d = drivetrain(); return deg / 360 / (d.gear || 1) * d.wheelTravel; };   // what the student entered
+const cfgDeg = mm => { const d = drivetrain(); return mm / d.wheelTravel * 360 * (d.gear || 1); };
+const motorDegPerSec = pct => Math.max(0, Math.min(100, Math.abs(pct))) / 100 * S.motorRPM * 6;
+
+function physicsStep() {
+  W.t += DT;
+  const dt = drivetrain();
+  // 1) drivetrain motor degrees this tick (student's left/right)
+  let dL = 0, dR = 0;
+  if (dt && W.mode !== "idle") {
+    const c = W.cmd;
+    if (W.mode === "spin") { dL = c.l * motorDegPerSec(c.lp()) * DT; dR = c.r * motorDegPerSec(c.rp()) * DT; }
+    else if (W.mode === "target") {
+      const sp = motorDegPerSec(c.pct()) * DT;
+      const remL = c.tL - W.encL, remR = c.tR - W.encR, big = Math.max(Math.abs(remL), Math.abs(remR));
+      if (big < 1e-6) W.mode = "idle";
+      else { const k = Math.min(1, sp / big); dL = remL * k; dR = remR * k; }
+    } else if (W.mode === "gyro") {
+      const rem = c.target - W.rot;
+      if (Math.abs(rem) < 0.02) W.mode = "idle";
+      else {
+        const sp = motorDegPerSec(c.pct()) * DT, dir = Math.sign(rem);
+        const turnPer = (2 * realMM(sp)) / S.track / DEG;
+        const k = Math.min(1, Math.abs(rem) / Math.max(turnPer, 1e-9));
+        dL = dir * sp * k; dR = -dir * sp * k;
+      }
+    }
+    if (W.cmd && W.cmd.deadline && W.t >= W.cmd.deadline && W.mode !== "spin") W.mode = "idle";
+  }
+  W.encL += dL; W.encR += dR;
+  if (dt) W.estRot += (cfgMM(dL) - cfgMM(dR)) / dt.track / DEG;
+
+  // 2) collect what every motor port does this tick. out = shaft turn as seen from the motor itself.
+  const ports = {};  // port -> shaft degrees
+  const add = (port, deg) => { ports[port] = (ports[port] || 0) + deg; };
+  let wL = 0, wR = 0;
+  if (dt) {
+    if (!S.checkPorts) { wL += dL; wR += dR; }
+    else { add(dt.left, dL); add(dt.right, -dR); }   // the drivetrain runs its right motor reversed, like VEXcode does
+  }
+  for (const m of devOf("motor")) {
+    const st = W.motors[m.name]; if (!st) continue;
+    let d = 0;
+    if (st.mode === "spin") d = st.dir * motorDegPerSec(st.vel) * DT;
+    else if (st.mode === "target") {
+      const rem = st.target - st.enc, sp = motorDegPerSec(st.vel) * DT;
+      if (Math.abs(rem) < 1e-6) st.mode = "idle"; else d = Math.sign(rem) * Math.min(Math.abs(rem), sp);
+      if (st.deadline && W.t >= st.deadline) st.mode = "idle";
+    }
+    st.enc += d; st.lastD = d;
+    if (d) add(m.port, m.reverse ? -d : d);
+  }
+  // 3) apply each port to the real robot
+  for (const [p, deg] of Object.entries(ports)) {
+    const port = +p;
+    if (port === S.ports.left) wL += deg;
+    else if (port === S.ports.right) wR += S.rightMirrored ? -deg : deg;
+    else if (port === S.ports.arm) W.arm += deg;
+    else if (port === S.ports.claw) W.claw = Math.max(-10, Math.min(100, W.claw + deg));
+    else if (deg) warnOnce("motor" + port, `No motor found on port ${port}. Check your Devices setup.`);
+  }
+  // 4) move the robot
+  const mL = realMM(wL), mR = realMM(wR);
+  const dCenter = (mL + mR) / 2, dRot = (mL - mR) / S.track / DEG;
+  const before = W.rot;
+  if (dCenter || dRot) {
+    const mid = (W.rot + dRot / 2) * DEG;
+    const nx = W.x + Math.sin(mid) * dCenter, ny = W.y + Math.cos(mid) * dCenter, nr = W.rot + dRot;
+    if (poseOk(nx, ny, nr)) { W.x = nx; W.y = ny; W.rot = nr; W.blocked = false; }
+    else {
+      // Something is in the way: move as far as possible so the robot ends up touching it,
+      // then let the wheels slip (encoders still count, like a real robot pushing a wall).
+      W.blocked = true;
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 14; i++) {
+        const t = (lo + hi) / 2;
+        if (poseOk(W.x + (nx - W.x) * t, W.y + (ny - W.y) * t, W.rot + (nr - W.rot) * t)) lo = t; else hi = t;
+      }
+      const ox = W.x, oy = W.y;
+      W.x += (nx - ox) * lo; W.y += (ny - oy) * lo; W.rot += (nr - W.rot) * lo;
+      // slide along the wall with whatever motion is left
+      const rx = W.x + (nx - ox) * (1 - lo), ry = W.y + (ny - oy) * (1 - lo);
+      if (poseOk(rx, W.y, W.rot)) W.x = rx; else if (poseOk(W.x, ry, W.rot)) W.y = ry;
+    }
+    const last = W.path[W.path.length - 1];
+    if (Math.hypot(W.x - last[0], W.y - last[1]) > 4) W.path.push([W.x, W.y]);
+    if (W.pen) {
+      if (!W.lastTrail) { W.lastTrail = { color: W.penColor, pts: [[W.x, W.y]] }; W.trails.push(W.lastTrail); }
+      W.lastTrail.pts.push([W.x, W.y]);
+    }
+  }
+  W.rate = (W.rot - before) / DT;
+  W.velocityNow = W.mode === "idle" ? 0 : (W.cmd && W.cmd.pct ? W.cmd.pct() : W.cmd && W.cmd.lp ? W.cmd.lp() : 0);
+}
+
+/* readings the program sees */
+function rd_rotation() { return (gyroDevice() ? W.rot : W.estRot) + W.rotationOffset; }
+function rd_heading() { const r = (gyroDevice() ? W.rot : W.estRot) + W.headingOffset; return ((r % 360) + 360) % 360; }
+function colorReading(dev) {
+  // Gen 1 color sensor. Facing down it sees the white field tiles; facing out it sees walls up close (gray, no color).
+  if (dev.facing === "down") return { found: true, name: "white", bright: 92, hue: 0 };
+  const d = sensorRange(dev);
+  if (d <= 60) return { found: true, name: "none", bright: Math.round(70 - d * 0.6), hue: 0 };
+  return { found: false, name: "none", bright: 3, hue: 0 };
+}
+const fmtNum = x => typeof x === "number" ? String(+x.toFixed(4)) : String(x);
+
+/* =====================================================================
+   Program interpreter (generators; each yield = one physics tick)
+   ===================================================================== */
+class Stop extends Error {}
+class Break extends Error {}
+let RUN = null;
+
+function devFor(block, type, role) {
+  const name = block.getFieldValue("DEVICE");
+  const dev = devByName(type, name) || devOf(type)[0];
+  if (!dev) { warnOnce("nodev" + type, `There is no ${DEVICE_TYPES[type].label} in Devices for a "${block.type}" block.`); return null; }
+  return role && !portOk(dev, role) ? null : dev;
+}
+
+function val(block) {
+  if (!block) return 0;
+  const f = n => block.getFieldValue(n), v = n => val(block.getInputTargetBlock(n));
+  const t = block.type;
+  switch (t) {
+    case "math_number": return Number(f("NUM")) || 0;
+    case "text": return f("TEXT");
+    case "logic_boolean": return f("BOOL") === "TRUE";
+    case "variables_get": { const m = block.workspace.getVariableById(f("VAR")); return RUN.vars[m ? m.name : f("VAR")] ?? 0; }
+    case "pg_operators_add": return +v("NUM1") + +v("NUM2");
+    case "pg_operators_subtract": return +v("NUM1") - +v("NUM2");
+    case "pg_operators_multiply": return +v("NUM1") * +v("NUM2");
+    case "pg_operators_divide": { const d = +v("NUM2"); return d ? +v("NUM1") / d : 0; }
+    case "pg_operators_less_than": return +v("NUM1") < +v("NUM2");
+    case "pg_operators_greater_than": return +v("NUM1") > +v("NUM2");
+    case "pg_operators_equal": return +v("NUM1") === +v("NUM2");
+    case "pg_operators_and": return !!v("BOOL1") && !!v("BOOL2");
+    case "pg_operators_or": return !!v("BOOL1") || !!v("BOOL2");
+    case "pg_operators_not": return !v("BOOL");
+    case "pg_operators_random": { const a = Math.ceil(+v("FROM")), b = Math.floor(+v("TO")); return a + Math.floor(Math.random() * (b - a + 1)); }
+    case "pg_operators_round": return Math.round(+v("NUM"));
+    case "pg_operators_join": return fmtNum(v("STRING1")) + fmtNum(v("STRING2"));
+    case "pg_sensing_timer": return +(W.t - W.timer0).toFixed(3);
+    case "pg_sensing_position": { const p = f("AXIS") === "y" ? W.y : W.x; return f("UNITS") === "in" ? p / 25.4 : p; }
+    case "pg_sensing_drivetrain_is_done": return W.mode === "idle" || W.mode === "spin";
+    case "pg_sensing_drivetrain_is_moving": return W.mode !== "idle";
+    case "pg_sensing_drivetrain_heading": return +rd_heading().toFixed(2);
+    case "pg_sensing_drivetrain_rotation": return +rd_rotation().toFixed(2);
+    case "pg_sensing_drivetrain_velocity": return W.velocityNow;
+    // motors
+    case "iq_motor_is_done": case "iq_motor_is_spinning": case "iq_motor_position": case "iq_motor_velocity": {
+      const m = devFor(block, "motor"); if (!m) return 0;
+      const st = W.motors[m.name];
+      if (t === "iq_motor_is_done") return st.mode !== "target";
+      if (t === "iq_motor_is_spinning") return st.mode !== "idle";
+      if (t === "iq_motor_velocity") return st.mode === "idle" ? 0 : st.vel * (st.mode === "spin" ? st.dir : Math.sign(st.target - st.enc) || 1);
+      return +(f("UNITS") === "turns" ? st.enc / 360 : st.enc).toFixed(2);
+    }
+    // touch LED
+    case "iq_touchled_pressed": { const l = devFor(block, "touchled", "touchled"); return !!(l && W.leds[l.name] && W.leds[l.name].pressed); }
+    // gyro
+    case "iq_gyro_heading": case "iq_gyro_rotation": case "iq_gyro_rate": {
+      const g = devFor(block, "gyro", "gyro"); if (!g) return 0;
+      const st = W.gyros[g.name];
+      if (W.t < st.calUntil) return 0;
+      if (t === "iq_gyro_rate") return +W.rate.toFixed(2);
+      if (t === "iq_gyro_rotation") return +(W.rot + st.rOff).toFixed(2);
+      return +((((W.rot + st.hOff) % 360) + 360) % 360).toFixed(2);
+    }
+    // distance (Gen 1)
+    case "pg_sensing_distance_found": case "pg_sensing_distance_from": {
+      const dev = devFor(block, "distance", "distance");
+      if (!dev) return t.endsWith("found") ? false : 0;
+      const d = sensorRange(dev), found = d >= 24 && d <= S.distanceMax;
+      if (t.endsWith("found")) return found;
+      const mm = found ? d : (d < 24 ? 24 : S.distanceMax); return +(f("UNITS") === "in" ? mm / 25.4 : mm).toFixed(1);
+    }
+    // color (Gen 1)
+    case "iq_color_detects": case "iq_color_name": case "iq_color_found": case "iq_color_brightness": case "iq_color_hue": {
+      const dev = devFor(block, "color", "color");
+      if (!dev) return t === "iq_color_name" ? "none" : (t === "iq_color_brightness" || t === "iq_color_hue") ? 0 : false;
+      const r = colorReading(dev);
+      if (t === "iq_color_detects") return r.name === f("COLORS");
+      if (t === "iq_color_name") return r.name;
+      if (t === "iq_color_found") return r.found;
+      if (t === "iq_color_brightness") return r.bright;
+      return r.hue;
+    }
+    case "pg_sensing_bumper_pressed": { const dev = devFor(block, "bumper", "bumper"); return !!dev && bumperPressed(dev); }
+  }
+  log(`Block "${t}" is not supported yet; it counts as 0.`, "warn");
+  return 0;
+}
+
+function needDrive() {
+  if (!drivetrain()) { warnOnce("nodt", "No Drivetrain in Devices, so drive blocks do nothing."); return false; }
+  return true;
+}
+function* waitMotion() { yield; while (W.mode === "target" || W.mode === "gyro") yield; }
+function deadline() { return W.timeout > 0 ? W.t + W.timeout : 0; }
+function* turnBy(deg) {
+  if (!needDrive() || !deg) return;
+  const pct = () => W.turnPct;
+  if (gyroDevice()) { W.cmd = { target: W.rot + deg, pct, deadline: deadline() }; W.mode = "gyro"; }
+  else {
+    const dtc = drivetrain(), arc = Math.PI * dtc.track * deg / 360, md = cfgDeg(arc);
+    W.cmd = { tL: W.encL + md, tR: W.encR - md, pct, deadline: deadline() }; W.mode = "target";
+  }
+  yield* waitMotion();
+}
+const rotDeg = (amt, units) => units === "turns" ? amt * 360 : amt;
+
+function* exec(b) {
+  const f = n => b.getFieldValue(n), v = n => val(b.getInputTargetBlock(n)), sub = n => b.getInputTargetBlock(n);
+  switch (b.type) {
+    case "pg_drivetrain_drive_for": {
+      if (!needDrive()) return;
+      let mm = +v("AMOUNT"); if (f("UNITS") === "in") mm *= 25.4; if (f("DIRECTION") === "rev") mm = -mm;
+      const md = cfgDeg(mm);
+      W.cmd = { tL: W.encL + md, tR: W.encR + md, pct: () => W.drivePct, deadline: deadline() }; W.mode = "target";
+      yield* waitMotion(); return;
+    }
+    case "pg_drivetrain_drive": { if (!needDrive()) return; const s = f("DIRECTION") === "rev" ? -1 : 1;
+      W.cmd = { l: s, r: s, lp: () => W.drivePct, rp: () => W.drivePct }; W.mode = "spin"; return; }
+    case "pg_drivetrain_turn": { if (!needDrive()) return; const s = f("TURNDIRECTION") === "left" ? -1 : 1;
+      W.cmd = { l: s, r: -s, lp: () => W.turnPct, rp: () => W.turnPct }; W.mode = "spin"; return; }
+    case "pg_drivetrain_turn_for": { const d = +v("AMOUNT"); yield* turnBy(f("TURNDIRECTION") === "left" ? -d : d); return; }
+    case "pg_drivetrain_turn_to_heading": { const diff = ((+v("HEADING") - rd_heading()) % 360 + 540) % 360 - 180; yield* turnBy(diff); return; }
+    case "pg_drivetrain_turn_to_rotation": { yield* turnBy(+v("ROTATION") - rd_rotation()); return; }
+    case "pg_drivetrain_stop_driving": W.mode = "idle"; W.cmd = null; return;
+    case "pg_drivetrain_set_drive_velocity": W.drivePct = Math.max(0, Math.min(100, +v("VELOCITY"))); return;
+    case "pg_drivetrain_set_turn_velocity": W.turnPct = Math.max(0, Math.min(100, +v("VELOCITY"))); return;
+    case "pg_drivetrain_set_drive_heading": W.headingOffset += +v("HEADING") - rd_heading(); return;
+    case "pg_drivetrain_set_drive_rotation": W.rotationOffset += +v("ROTATION") - rd_rotation(); return;
+    case "pg_drivetrain_set_drive_timeout": W.timeout = Math.max(0, +v("TIME")); return;
+    // single motors
+    case "iq_motor_spin": { const m = devFor(b, "motor"); if (!m) return; const st = W.motors[m.name];
+      st.mode = "spin"; st.dir = f("DIRECTION") === "rev" ? -1 : 1; return; }
+    case "iq_motor_spin_for": case "iq_motor_spin_to_position": {
+      const m = devFor(b, "motor"); if (!m) return; const st = W.motors[m.name];
+      if (b.type === "iq_motor_spin_for") { let d = rotDeg(+v("AMOUNT"), f("UNITS")); if (f("DIRECTION") === "rev") d = -d; st.target = st.enc + d; }
+      else st.target = rotDeg(+v("POSITION"), f("UNITS"));
+      st.mode = "target"; st.deadline = st.timeout > 0 ? W.t + st.timeout : 0;
+      yield; while (st.mode === "target") yield; return;
+    }
+    case "iq_motor_stop": { const m = devFor(b, "motor"); if (m) W.motors[m.name].mode = "idle"; return; }
+    case "iq_motor_set_position": { const m = devFor(b, "motor"); if (m) W.motors[m.name].enc = rotDeg(+v("POSITION"), f("UNITS")); return; }
+    case "iq_motor_set_velocity": { const m = devFor(b, "motor"); if (m) W.motors[m.name].vel = Math.max(-100, Math.min(100, +v("VELOCITY"))); return; }
+    case "iq_motor_set_timeout": { const m = devFor(b, "motor"); if (m) W.motors[m.name].timeout = Math.max(0, +v("TIME")); return; }
+    // touch LED
+    case "iq_touchled_set_color": { const l = devFor(b, "touchled", "touchled"); if (l) { W.leds[l.name].color = f("COLOR"); paintLeds(); } return; }
+    case "iq_touchled_set_brightness": { const l = devFor(b, "touchled", "touchled"); if (l) { W.leds[l.name].bright = Math.max(0, Math.min(100, +v("BRIGHTNESS"))); paintLeds(); } return; }
+    // gyro
+    case "iq_gyro_calibrate": { const g = devFor(b, "gyro", "gyro"); if (!g) return; const st = W.gyros[g.name];
+      st.calUntil = W.t + 2; while (W.t < st.calUntil) yield; return; }
+    case "iq_gyro_set_heading": { const g = devFor(b, "gyro", "gyro"); if (!g) return; const st = W.gyros[g.name];
+      st.hOff = +v("HEADING") - W.rot; return; }
+    case "iq_gyro_set_rotation": { const g = devFor(b, "gyro", "gyro"); if (!g) return; const st = W.gyros[g.name];
+      st.rOff = +v("ROTATION") - W.rot; return; }
+    // looks
+    case "pg_looks_move_pen": W.pen = f("DIRECTIONS") === "down"; W.lastTrail = null; return;
+    case "pg_looks_set_pen_color": W.penColor = f("COLOR"); W.lastTrail = null; return;
+    case "pg_looks_print": log(fmtNum(v("VALUE"))); return;
+    case "pg_looks_clear_all_rows": clearLog(); return;
+    // control
+    case "pg_control_wait": { const end = W.t + +v("TIME"); while (W.t < end - 1e-9) yield; return; }
+    case "pg_control_wait_until": while (!v("CONDITION")) yield; return;
+    case "pg_control_repeat": { const n = Math.floor(+v("TIMES")); try { for (let i = 0; i < n; i++) { yield* runStack(sub("SUBSTACK")); yield; } } catch (e) { if (!(e instanceof Break)) throw e; } return; }
+    case "pg_control_forever": try { for (;;) { yield* runStack(sub("SUBSTACK")); yield; } } catch (e) { if (!(e instanceof Break)) throw e; } return;
+    case "pg_control_repeat_until": try { while (!v("CONDITION")) { yield* runStack(sub("SUBSTACK")); yield; } } catch (e) { if (!(e instanceof Break)) throw e; } return;
+    case "pg_control_while": try { while (v("CONDITION")) { yield* runStack(sub("SUBSTACK")); yield; } } catch (e) { if (!(e instanceof Break)) throw e; } return;
+    case "pg_control_if": if (v("CONDITION")) yield* runStack(sub("SUBSTACK")); return;
+    case "pg_control_ifelse": yield* runStack(sub(v("CONDITION") ? "SUBSTACK" : "SUBSTACK2")); return;
+    case "pg_control_break": throw new Break();
+    case "pg_control_stop_project": throw new Stop();
+    case "pg_sensing_reset_timer": W.timer0 = W.t; return;
+    case "variables_set": { const m = b.workspace.getVariableById(f("VAR")); RUN.vars[m ? m.name : f("VAR")] = v("VALUE"); return; }
+    case "math_change": { const m = b.workspace.getVariableById(f("VAR")); const k = m ? m.name : f("VAR"); RUN.vars[k] = (+RUN.vars[k] || 0) + +v("DELTA"); return; }
+  }
+  if (!b.type.startsWith("pg_events_")) log(`Block "${b.type}" is not supported yet; skipped.`, "warn");
+}
+function* runStack(b) {
+  while (b) {
+    if (b.isEnabled()) {
+      RUN.current.add(b.id);
+      try { yield* exec(b); } finally { RUN.current.delete(b.id); }
+    }
+    b = b.getNextBlock();
+  }
+}
+
+function startProgram() {
+  stopProgram(false);
+  newWorld(); clearLog(); paintLeds();
+  const tops = ws.getTopBlocks(true).filter(b => b.type === "pg_events_when_started" && b.isEnabled());
+  if (!tops.length) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
+  const loose = ws.getTopBlocks(true).filter(b => b.type !== "pg_events_when_started" && !b.isShadow());
+  if (loose.length) log(`${loose.length} loose stack${loose.length > 1 ? "s are" : " is"} not attached to "when started" and won't run.`, "warn");
+  RUN = { vars: {}, current: new Set(), scripts: tops.map(t => runStack(t.getNextBlock())), last: 0, acc: 0 };
+  setRunning(true);
+  requestAnimationFrame(loop);
+}
+function motorsBusy() { return Object.values(W.motors).some(m => m.mode !== "idle"); }
+function stopProgram(redraw = true) {
+  if (RUN) RUN.scripts = [];
+  RUN = null;
+  if (W) { W.mode = "idle"; W.cmd = null; Object.values(W.motors).forEach(m => m.mode = "idle"); }
+  ws.highlightBlock(null);
+  setRunning(false);
+  if (redraw) draw();
+}
+function tickScripts() {
+  const alive = [];
+  for (const s of RUN.scripts) {
+    let done = false;
+    try { done = s.next().done; }
+    catch (e) {
+      if (e instanceof Stop) { log("Project stopped."); RUN.scripts = []; W.mode = "idle"; Object.values(W.motors).forEach(m => m.mode = "idle"); return false; }
+      if (e instanceof Break) done = true;
+      else { log("Error: " + e.message, "err"); console.error(e); done = true; }
+    }
+    if (!done) alive.push(s);
+  }
+  RUN.scripts = alive;
+  return alive.length > 0 || W.mode !== "idle" || motorsBusy();
+}
+function loop(ts) {
+  if (!RUN) return;
+  if (!RUN.last) RUN.last = ts;
+  RUN.acc += Math.min(0.1, (ts - RUN.last) / 1000) * +document.getElementById("speed").value;
+  RUN.last = ts;
+  let alive = true;
+  while (RUN && RUN.acc >= DT) {
+    RUN.acc -= DT;
+    alive = tickScripts();
+    physicsStep();
+    if (!alive) break;
+  }
+  if (RUN) { const ids = [...RUN.current]; ws.highlightBlock(null); ids.forEach(id => ws.highlightBlock(id, true)); }
+  draw();
+  if (!alive) { if (RUN) { RUN = null; ws.highlightBlock(null); setRunning(false); } return; }
+  if (RUN) requestAnimationFrame(loop);
+}
+function setRunning(on) {
+  document.getElementById("btnRun").disabled = on;
+  document.getElementById("btnRun").style.opacity = on ? .55 : 1;
+}
+
+/* =====================================================================
+   Console, readouts, Touch LEDs
+   ===================================================================== */
+const cons = document.getElementById("console");
+function log(msg, cls) { const d = document.createElement("div"); if (cls) d.className = cls; d.textContent = msg; cons.appendChild(d); cons.scrollTop = cons.scrollHeight; }
+function clearLog() { cons.textContent = ""; }
+const ro = document.getElementById("readouts");
+const plugged = (d, role) => !S.checkPorts || d.port === S.ports[role];
+const NOSENSOR = "wrong port";
+function readouts() {
+  const items = [["X", W.x.toFixed(0) + " mm"], ["Y", W.y.toFixed(0) + " mm"], ["Heading", (drivetrain() ? rd_heading() : heading()).toFixed(1) + "°"],
+    ["Timer", (W.t - W.timer0).toFixed(1) + " s"]];
+  if (drivetrain()) items.push(["Drive vel.", W.drivePct + "%"], ["Turn vel.", W.turnPct + "%"]);
+  devOf("motor").forEach(m => { const st = W.motors[m.name]; items.push([m.name, st ? st.enc.toFixed(0) + "°" : "–"]); });
+  devOf("gyro").forEach(g => { const st = W.gyros[g.name]; items.push([g.name, !plugged(g, "gyro") ? NOSENSOR : st && W.t < st.calUntil ? "calibrating" : ((((W.rot + (st ? st.hOff : 0)) % 360) + 360) % 360).toFixed(1) + "°"]); });
+  devOf("distance").forEach(d => { const fd = sensorRange(d); items.push([d.name, !plugged(d, "distance") ? NOSENSOR : fd >= 24 && fd <= S.distanceMax ? fd.toFixed(0) + " mm" : "no object"]); });
+  devOf("color").forEach(d => items.push([d.name, !plugged(d, "color") ? NOSENSOR : colorReading(d).name]));
+  devOf("bumper").forEach(d => items.push([d.name, !plugged(d, "bumper") ? NOSENSOR : bumperPressed(d) ? "pressed" : "released"]));
+  if (S.ports.arm && devOf("motor").some(m => m.port === S.ports.arm || !S.checkPorts)) items.push(["Arm", W.arm.toFixed(0) + "°"]);
+  if (S.ports.claw && devOf("motor").some(m => m.port === S.ports.claw || !S.checkPorts)) items.push(["Claw", W.claw.toFixed(0) + "°"]);
+  const html = items.map(([k, v]) => `<div class="ro"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
+  if (ro.innerHTML !== html) ro.innerHTML = html;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ledBox = document.getElementById("leds");
+function buildLeds() {
+  ledBox.innerHTML = devOf("touchled").map(l => `<div class="led"><button type="button" data-led="${esc(l.name)}" aria-label="Press ${esc(l.name)}"></button><div><div>${esc(l.name)}</div><div class="hint">Press and hold to push it</div></div></div>`).join("");
+  ledBox.querySelectorAll("[data-led]").forEach(btn => {
+    const set = on => { const st = W.leds[btn.dataset.led]; if (st) st.pressed = on; btn.classList.toggle("down", on); };
+    btn.addEventListener("pointerdown", e => { e.preventDefault(); btn.setPointerCapture(e.pointerId); set(true); });
+    btn.addEventListener("pointerup", () => set(false));
+    btn.addEventListener("pointercancel", () => set(false));
+    btn.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); set(true); } });
+    btn.addEventListener("keyup", () => set(false));
+  });
+  paintLeds();
+}
+function paintLeds() {
+  ledBox.querySelectorAll("[data-led]").forEach(btn => {
+    const st = W.leds[btn.dataset.led], dev = devByName("touchled", btn.dataset.led);
+    const on = st && dev && plugged(dev, "touchled") && st.color !== "none";
+    btn.style.background = on ? LED_HEX[st.color] : LED_HEX.none;
+    btn.style.opacity = on ? 0.35 + 0.65 * st.bright / 100 : 1;
+  });
+}
+
+/* =====================================================================
+   Drawing
+   ===================================================================== */
+const cv = document.getElementById("field"), ctx = cv.getContext("2d");
+const PEN = { black: "#111", red: "#e02020", green: "#18a050", blue: "#1f6fd1", orange: "#f08a00", purple: "#7b3fd0" };
+function sizeCanvas() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); draw();
+}
+new ResizeObserver(sizeCanvas).observe(cv);
+function draw() {
+  if (!cv.width) return;
+  const Wd = cv.width, Ht = cv.height, pad = Wd * 0.085;
+  const span = Math.max(S.fieldW, S.fieldH), sc = (Wd - 2 * pad) / span;
+  const X = x => Wd / 2 + x * sc, Y = y => Ht / 2 - y * sc;
+  VIEW = { Wd, Ht, sc, dpr: Wd / cv.getBoundingClientRect().width };
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#8a8f98"; ctx.fillRect(0, 0, Wd, Ht);
+  const hx = S.fieldW / 2, hy = S.fieldH / 2;
+  ctx.fillStyle = "#f7f8fa"; ctx.fillRect(X(-hx), Y(hy), S.fieldW * sc, S.fieldH * sc);
+  ctx.strokeStyle = "#d9dde4"; ctx.lineWidth = 1;
+  for (let gx = Math.ceil(-hx / S.grid) * S.grid; gx <= hx; gx += S.grid) { ctx.beginPath(); ctx.moveTo(X(gx), Y(hy)); ctx.lineTo(X(gx), Y(-hy)); ctx.stroke(); }
+  for (let gy = Math.ceil(-hy / S.grid) * S.grid; gy <= hy; gy += S.grid) { ctx.beginPath(); ctx.moveTo(X(-hx), Y(gy)); ctx.lineTo(X(hx), Y(gy)); ctx.stroke(); }
+  ctx.strokeStyle = "#b9c0cc"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(X(0), Y(hy)); ctx.lineTo(X(0), Y(-hy)); ctx.moveTo(X(-hx), Y(0)); ctx.lineTo(X(hx), Y(0)); ctx.stroke();
+  ctx.font = `${Math.max(10, Wd * 0.018)}px "IBM Plex Mono", monospace`;
+  ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const step = S.grid * Math.max(1, Math.round(500 / S.grid));
+  for (let gx = Math.ceil(-hx / step) * step; gx <= hx; gx += step) ctx.fillText(gx, X(gx), Y(-hy) + pad * 0.5);
+  ctx.textAlign = "right";
+  for (let gy = Math.ceil(-hy / step) * step; gy <= hy; gy += step) ctx.fillText(gy, X(-hx) - pad * 0.15, Y(gy));
+  ctx.strokeStyle = S.walls ? "#3a4252" : "rgba(58,66,82,.35)"; ctx.lineWidth = S.walls ? Math.max(3, Wd * 0.008) : 2;
+  ctx.setLineDash(S.walls ? [] : [8, 6]); ctx.strokeRect(X(-hx), Y(hy), S.fieldW * sc, S.fieldH * sc); ctx.setLineDash([]);
+  // student walls
+  WALLS.forEach((w, i) => {
+    const poly = wallPoly(w);
+    ctx.fillStyle = i === EDIT.sel ? "#1f6fd1" : "#3a4252";
+    ctx.beginPath(); poly.forEach(([px, py], k) => k ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py))); ctx.closePath(); ctx.fill();
+  });
+  if (EDIT.draft) {
+    const poly = wallPoly(EDIT.draft); ctx.fillStyle = "rgba(31,111,209,.5)";
+    ctx.beginPath(); poly.forEach(([px, py], k) => k ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py))); ctx.closePath(); ctx.fill();
+    const len = Math.hypot(EDIT.draft.x2 - EDIT.draft.x1, EDIT.draft.y2 - EDIT.draft.y1);
+    ctx.fillStyle = "#1c2230"; ctx.textAlign = "left"; ctx.fillText(len.toFixed(0) + " mm", X(EDIT.draft.x2) + 8, Y(EDIT.draft.y2) - 8);
+  }
+  ctx.save(); ctx.translate(X(S.startX), Y(S.startY)); ctx.rotate(S.startH * DEG);
+  ctx.strokeStyle = "#9aa3b2"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
+  ctx.strokeRect(-S.robotW / 2 * sc, -S.robotL / 2 * sc, S.robotW * sc, S.robotL * sc); ctx.restore(); ctx.setLineDash([]);
+  if (document.getElementById("showPath").checked && W.path.length > 1) {
+    ctx.strokeStyle = "rgba(31,111,209,.45)"; ctx.lineWidth = Math.max(1.5, Wd * 0.003); ctx.lineJoin = "round";
+    ctx.beginPath(); W.path.forEach(([px, py], i) => i ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py)));
+    ctx.lineTo(X(W.x), Y(W.y)); ctx.stroke();
+  }
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (const tr of W.trails) {
+    ctx.strokeStyle = PEN[tr.color] || "#111"; ctx.lineWidth = Math.max(2.5, Wd * 0.006);
+    ctx.beginPath(); tr.pts.forEach(([px, py], i) => i ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py))); ctx.stroke();
+  }
+  devOf("distance").forEach(d => {
+    if (!plugged(d, "distance")) return;
+    const m = mountWorld(d), a = m.ang * DEG, fx = m.x, fy = m.y;
+    const dd = Math.min(sensorRange(d), S.distanceMax);
+    ctx.strokeStyle = "rgba(224,32,32,.55)"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(X(fx), Y(fy)); ctx.lineTo(X(fx + Math.sin(a) * dd), Y(fy + Math.cos(a) * dd)); ctx.stroke(); ctx.setLineDash([]);
+  });
+  // robot
+  ctx.save(); ctx.translate(X(W.x), Y(W.y)); ctx.rotate(W.rot * DEG);
+  const rw = S.robotW * sc, rl = S.robotL * sc, wh = Math.max(3, rw * 0.14);
+  ctx.fillStyle = "#20252e";
+  ctx.fillRect(-rw / 2 - wh * 0.2, -rl * 0.38, wh, rl * 0.76); ctx.fillRect(rw / 2 - wh * 0.8, -rl * 0.38, wh, rl * 0.76);
+  ctx.fillStyle = W.blocked ? "#c9463b" : "#4a5466"; ctx.fillRect(-rw / 2 + wh * 0.9, -rl / 2, rw - wh * 1.8, rl);
+  ctx.fillStyle = "#f08a00"; ctx.fillRect(-rw / 2 + wh * 0.9, -rl / 2, rw - wh * 1.8, rl * 0.22);
+  // claw fingers open with the claw motor
+  if (S.ports.claw && devOf("motor").length) {
+    const open = Math.max(0, Math.min(1, W.claw / 90)), gap = rw * (0.08 + 0.18 * open);
+    ctx.fillStyle = "#6c7486";
+    ctx.fillRect(-gap - rw * 0.05, -rl / 2 - rl * 0.16, rw * 0.05, rl * 0.18); ctx.fillRect(gap, -rl / 2 - rl * 0.16, rw * 0.05, rl * 0.18);
+  }
+  ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.moveTo(0, -rl * 0.36); ctx.lineTo(rw * 0.12, -rl * 0.12); ctx.lineTo(-rw * 0.12, -rl * 0.12); ctx.closePath(); ctx.fill();
+  if (W.pen) { ctx.fillStyle = PEN[W.penColor]; ctx.beginPath(); ctx.arc(0, 0, Math.max(3, rw * 0.08), 0, 7); ctx.fill(); }
+  // sensors where they are mounted
+  const SENS_COL = { distance: "#d23a2f", color: "#e0237a", bumper: "#1d9b55" };
+  for (const d of DEVICES) {
+    if (!SENS_COL[d.type]) continue;
+    const m = mountLocal(d), sz = Math.max(5, 34 * sc);
+    ctx.save(); ctx.translate(m.r * sc, -m.f * sc); ctx.rotate(m.ang * DEG);
+    ctx.fillStyle = SENS_COL[d.type]; ctx.fillRect(-sz / 2, -sz * 0.45, sz, sz * 0.6);
+    ctx.fillStyle = "#fff"; ctx.fillRect(-sz * 0.2, -sz * 0.45, sz * 0.4, sz * 0.15);
+    ctx.restore();
+  }
+  ctx.restore();
+  readouts();
+}
+
+/* =====================================================================
+   Devices dialog (student)
+   ===================================================================== */
+const devBody = document.getElementById("devBody");
+let editing = null;
+function portsOf(d) { return d.type === "drivetrain" ? [d.left, d.right] : [d.port]; }
+function portOptions(sel) {
+  const used = new Set(DEVICES.filter(d => d !== editing?.orig).flatMap(portsOf));
+  let h = "";
+  for (let i = 1; i <= KIT.ports; i++) h += `<option value="${i}" ${i === sel ? "selected" : ""} ${used.has(i) && i !== sel ? "disabled" : ""}>Port ${i}${used.has(i) && i !== sel ? " (in use)" : ""}</option>`;
+  return h;
+}
+const ICONS = {
+  drivetrain: '<svg class="ic" viewBox="0 0 34 34"><rect x="9" y="6" width="16" height="22" rx="2" fill="#4C97FF"/><rect x="4" y="8" width="5" height="8" rx="1" fill="#20252e"/><rect x="25" y="8" width="5" height="8" rx="1" fill="#20252e"/><rect x="4" y="18" width="5" height="8" rx="1" fill="#20252e"/><rect x="25" y="18" width="5" height="8" rx="1" fill="#20252e"/></svg>',
+  motor: '<svg class="ic" viewBox="0 0 34 34"><rect x="5" y="8" width="24" height="18" rx="3" fill="#4C97FF"/><circle cx="17" cy="17" r="5" fill="#fff"/><rect x="15.5" y="12" width="3" height="10" fill="#1c2230"/></svg>',
+  gyro: '<svg class="ic" viewBox="0 0 34 34"><circle cx="17" cy="17" r="11" fill="none" stroke="#5CB1D6" stroke-width="3"/><path d="M17 8v9l6 4" stroke="#1c2230" stroke-width="2.5" fill="none"/></svg>',
+  distance: '<svg class="ic" viewBox="0 0 34 34"><rect x="4" y="11" width="10" height="12" rx="2" fill="#5CB1D6"/><circle cx="9" cy="14.5" r="2" fill="#fff"/><circle cx="9" cy="19.5" r="2" fill="#fff"/><path d="M18 12q4 5 0 10M23 9q6 8 0 16" stroke="#d23a2f" stroke-width="2.2" fill="none"/></svg>',
+  color: '<svg class="ic" viewBox="0 0 34 34"><rect x="7" y="7" width="20" height="20" rx="4" fill="#5CB1D6"/><circle cx="17" cy="17" r="5" fill="#fff"/><circle cx="17" cy="17" r="2.5" fill="#e0237a"/></svg>',
+  touchled: '<svg class="ic" viewBox="0 0 34 34"><rect x="6" y="6" width="22" height="22" rx="5" fill="#9966FF"/><circle cx="17" cy="17" r="7" fill="#ffe11a"/></svg>',
+  bumper: '<svg class="ic" viewBox="0 0 34 34"><rect x="6" y="14" width="22" height="12" rx="2" fill="#5CB1D6"/><rect x="12" y="8" width="10" height="6" rx="1" fill="#d23a2f"/></svg>',
+};
+function renderDevices() {
+  if (editing) { renderEditor(); return; }
+  let h = `<p class="hint">Set up your robot the same way you would in VEXcode IQ: add each device and pick the port it is plugged into. Blocks for a device show up after you add it. Robot kit: <b>${KIT.name}</b>.</p>`;
+  if (S.checkPorts && S.showPortMap) {
+    const byPort = {}; PORT_ROLES.forEach(([k, label]) => { if (S.ports[k]) byPort[S.ports[k]] = label; });
+    h += `<div class="portmap" aria-label="Robot port map"><div class="pm-title">How this robot is wired</div><div class="pm-grid">` +
+      Array.from({ length: KIT.ports }, (_, i) => i + 1).map(p => `<div class="pm ${byPort[p] ? "" : "empty"}"><b>${p}</b><span>${byPort[p] || "empty"}</span></div>`).join("") +
+      `</div></div>`;
+  }
+  h += `<div class="devgrid">`;
+  DEVICES.forEach((d, i) => {
+    const where = ["distance", "color", "bumper"].includes(d.type) ? ` · ${(MOUNTS.find(m => m[0] === (d.mount || "front")) || MOUNTS[0])[1].toLowerCase()}${+d.offset ? ` ${d.offset > 0 ? "+" : ""}${d.offset} mm` : ""}` : "";
+    const info = d.type === "drivetrain" ? `Left ${d.left} · Right ${d.right}${d.gyro ? " · gyro" : ""}` : `Port ${d.port}${d.reverse ? " · reversed" : ""}${d.type === "color" ? (d.facing === "down" ? " · faces down" : "") : ""}${where}`;
+    h += `<button class="dev" type="button" data-edit="${i}">${ICONS[d.type]}<span class="t">${esc(d.name)}</span><span class="s">${info}</span></button>`;
+  });
+  h += `<button class="dev add" type="button" id="addDev">+ Add a device</button></div>`;
+  devBody.innerHTML = h;
+  devBody.querySelectorAll("[data-edit]").forEach(el => el.onclick = () => { const d = DEVICES[+el.dataset.edit]; editing = { orig: d, d: { ...d } }; renderDevices(); });
+  document.getElementById("addDev").onclick = renderPicker;
+}
+function renderPicker() {
+  let h = `<p class="hint">Pick a device to add.</p><div class="devgrid">`;
+  for (const [t, m] of Object.entries(DEVICE_TYPES)) {
+    if (t === "drivetrain" && drivetrain()) continue;
+    h += `<button class="dev" type="button" data-new="${t}">${ICONS[t]}<span class="t">${m.label}</span><span class="s">${m.sub}</span></button>`;
+  }
+  h += `</div><div><button class="btn" type="button" id="pickBack">Back</button></div>`;
+  devBody.innerHTML = h;
+  document.getElementById("pickBack").onclick = () => renderDevices();
+  devBody.querySelectorAll("[data-new]").forEach(el => el.onclick = () => {
+    const t = el.dataset.new;
+    const used = new Set(DEVICES.flatMap(portsOf)), free = () => { for (let i = 1; i <= KIT.ports; i++) if (!used.has(i)) { used.add(i); return i; } return 1; };
+    let d;
+    if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: free(), right: free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "" };
+    else {
+      const real = S.ports[t], p = real && !used.has(real) ? (used.add(real), real) : free();   // start on the real robot's port when it's free
+      d = { type: t, name: DEVICE_TYPES[t].base + p, port: p }; if (t === "motor") d.reverse = false; if (t === "color") d.facing = "down";
+      if (["distance", "color", "bumper"].includes(t)) { d.mount = "front"; d.offset = 0; } }
+    editing = { orig: null, d }; renderDevices();
+  });
+}
+function renderEditor() {
+  const { d } = editing;
+  let f = `<label>Name<input type="text" id="fName" value="${esc(d.name)}" ${d.type === "drivetrain" ? "readonly" : ""}></label>`;
+  if (d.type === "drivetrain") {
+    const wopts = KIT.wheels.map(([n, v]) => `<option value="${v}" ${Math.abs(v - d.wheelTravel) < .01 ? "selected" : ""}>${n} (${v} mm travel)</option>`).join("");
+    const gyros = devOf("gyro");
+    const gopts = `<option value="">No gyro</option>` + gyros.map(g => `<option value="${esc(g.name)}" ${d.gyro === g.name ? "selected" : ""}>${esc(g.name)}</option>`).join("");
+    f += `<label>Left motor<select id="fLeft">${portOptions(d.left)}</select></label>
+      <label>Right motor<select id="fRight">${portOptions(d.right)}</select></label>
+      <label>Wheel size<select id="fWheel">${wopts}</select></label>
+      <label>Gear ratio (driven : driving)<input type="number" id="fGear" step="0.01" min="0.1" value="${d.gear}"></label>
+      <label>Track width (mm)<input type="number" id="fTrack" step="1" min="50" value="${d.track}"></label>
+      <label>Wheelbase (mm)<input type="number" id="fBase" step="1" min="0" value="${d.wheelbase}"></label>
+      <label>Gyro for turns<select id="fGyro">${gopts}</select></label>
+      ${gyros.length ? "" : `<p class="hint full">To turn with a gyro, add a Gyro sensor first, then choose it here.</p>`}`;
+  } else {
+    f += `<label>Port<select id="fPort">${portOptions(d.port)}</select></label>`;
+    if (d.type === "motor") f += `<label class="chk"><input type="checkbox" id="fRev" ${d.reverse ? "checked" : ""}> Reverse direction</label>`;
+    if (d.type === "color") f += `<label>Sensor points<select id="fFacing"><option value="down" ${d.facing === "down" ? "selected" : ""}>Down at the field</option><option value="forward" ${d.facing === "forward" ? "selected" : ""}>Out from the robot</option></select></label>`;
+    if (["distance", "color", "bumper"].includes(d.type)) f += `
+      <label>Mounted on<select id="fMount">${MOUNTS.map(([v, n]) => `<option value="${v}" ${(d.mount || "front") === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label>Shift along that side (mm)<input type="number" id="fOffset" step="5" value="${+d.offset || 0}"></label>
+      <p class="hint full">The sensor faces straight out from the side it is on. Shift moves it along that side: on the front or back, + is toward the robot's right; on a side, + is toward the front. The field shows where it sits.</p>`;
+  }
+  devBody.innerHTML = `<fieldset><legend>${ICONS[d.type].replace('class="ic"', 'class="ic" style="vertical-align:middle;width:24px;height:24px"')} ${DEVICE_TYPES[d.type].label}</legend><div class="form">${f}</div></fieldset>
+    <div class="err-text" id="fErr"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" type="button" id="fOk">Done</button>
+      <button class="btn" type="button" id="fCancel">Cancel</button>
+      ${editing.orig ? `<span style="flex:1"></span><button class="btn stop" type="button" id="fDel">Delete device</button>` : ""}
+    </div>`;
+  document.getElementById("fCancel").onclick = () => { editing = null; renderDevices(); };
+  if (editing.orig) document.getElementById("fDel").onclick = () => {
+    const gone = editing.orig;
+    DEVICES = DEVICES.filter(x => x !== gone);
+    if (gone.type === "gyro") DEVICES.forEach(x => { if (x.type === "drivetrain" && x.gyro === gone.name) x.gyro = ""; });
+    editing = null; devicesChanged();
+  };
+  document.getElementById("fOk").onclick = () => {
+    const g = id => document.getElementById(id);
+    const nd = { ...d, name: g("fName").value.trim().replace(/[^A-Za-z0-9_]/g, "") || d.name };
+    if (d.type === "drivetrain") {
+      Object.assign(nd, { left: +g("fLeft").value, right: +g("fRight").value, wheelTravel: +g("fWheel").value, gear: +g("fGear").value || 1,
+        track: +g("fTrack").value || KIT.track, wheelbase: +g("fBase").value || 0, gyro: g("fGyro").value });
+      if (nd.left === nd.right) { g("fErr").textContent = "Left and right motors need different ports."; return; }
+    } else {
+      nd.port = +g("fPort").value;
+      if (d.type === "motor") nd.reverse = g("fRev").checked;
+      if (d.type === "color") nd.facing = g("fFacing").value;
+      if (g("fMount")) { nd.mount = g("fMount").value; nd.offset = +g("fOffset").value || 0; }
+      const base = DEVICE_TYPES[d.type].base;
+      if (new RegExp("^" + base + "\\d+$").test(nd.name)) nd.name = base + nd.port;   // keep default names in step with the port
+    }
+    if (DEVICES.some(x => x !== editing.orig && x.name === nd.name)) { g("fErr").textContent = "Another device already has that name."; return; }
+    if (editing.orig) {
+      if (d.type === "gyro" && editing.orig.name !== nd.name) DEVICES.forEach(x => { if (x.type === "drivetrain" && x.gyro === editing.orig.name) x.gyro = nd.name; });
+      DEVICES[DEVICES.indexOf(editing.orig)] = nd;
+    } else DEVICES.push(nd);
+    editing = null; devicesChanged();
+  };
+}
+function devicesChanged() {
+  LS.set("rfs.devices", DEVICES);
+  ws.updateToolbox(buildToolbox());
+  if (!RUN) newWorld(); else W.warned = new Set();
+  buildLeds(); renderDevices(); draw();
+}
+
+/* =====================================================================
+   Teacher settings
+   ===================================================================== */
+const tBody = document.getElementById("tBody");
+let tDraft = null;
+function portList(v) { let h = `<option value="0" ${!v ? "selected" : ""}>not on robot</option>`; for (let i = 1; i <= KIT.ports; i++) h += `<option value="${i}" ${i === v ? "selected" : ""}>Port ${i}</option>`; return h; }
+function renderTeacher() {
+  const s = tDraft;
+  tBody.innerHTML = `
+  <p class="hint">These settings describe the real robot (VEX IQ, Gen 1 parts) and the field. Students set up Devices to match. If their ports, wheel size, or motor direction don't match, the robot behaves like a real one would: a motor on the wrong port won't move. Settings are saved in this browser. Use "Copy settings code" to move them to another computer.</p>
+  <fieldset><legend>Field</legend><div class="form">
+    <label>Field width (mm)<input type="number" id="t_fieldW" value="${s.fieldW}" min="500" step="10"></label>
+    <label>Field height (mm)<input type="number" id="t_fieldH" value="${s.fieldH}" min="500" step="10"></label>
+    <label>Grid spacing (mm)<input type="number" id="t_grid" value="${s.grid}" min="50" step="10"></label>
+    <label class="chk"><input type="checkbox" id="t_walls" ${s.walls ? "checked" : ""}> Walls around the field</label>
+    <label>Start X (mm)<input type="number" id="t_startX" value="${s.startX}" step="10"></label>
+    <label>Start Y (mm)<input type="number" id="t_startY" value="${s.startY}" step="10"></label>
+    <label>Start heading (°)<input type="number" id="t_startH" value="${s.startH}" step="1"></label>
+    <label class="chk"><input type="checkbox" id="t_allowPosition" ${s.allowPosition ? "checked" : ""}> Allow "position X/Y" blocks</label>
+  </div></fieldset>
+  <fieldset><legend>Robot build</legend><div class="form">
+    <label>Robot length (mm)<input type="number" id="t_robotL" value="${s.robotL}" step="5"></label>
+    <label>Robot width (mm)<input type="number" id="t_robotW" value="${s.robotW}" step="5"></label>
+    <label>Wheel travel (mm per turn)<input type="number" id="t_wheelTravel" value="${s.wheelTravel}" step="0.01"></label>
+    <label>Track width (mm)<input type="number" id="t_track" value="${s.track}" step="1"></label>
+    <label>Gear ratio<input type="number" id="t_gear" value="${s.gear}" step="0.01"></label>
+    <label>Motor speed at 100% (rpm)<input type="number" id="t_motorRPM" value="${s.motorRPM}" step="5"></label>
+    <label>Distance sensor range (mm)<input type="number" id="t_distanceMax" value="${s.distanceMax}" step="50"></label>
+    <label class="chk full"><input type="checkbox" id="t_rightMirrored" ${s.rightMirrored ? "checked" : ""}> Right drive motor is mounted mirrored (a single right Motor needs "Reverse" to drive forward, like a real build)</label>
+  </div></fieldset>
+  <fieldset><legend>Ports on the real robot</legend><div class="form">
+    <label class="chk full"><input type="checkbox" id="t_checkPorts" ${s.checkPorts ? "checked" : ""}> Check student ports against these (turn off to let any port work)</label>
+    <label class="chk full"><input type="checkbox" id="t_showPortMap" ${s.showPortMap ? "checked" : ""}> Show students this port map in Devices (turn off if they should find the ports another way, like from a build sheet)</label>
+    ${PORT_ROLES.map(([k, label]) => `<label>${label}<select id="p_${k}">${portList(s.ports[k])}</select></label>`).join("")}
+  </div></fieldset>`;
+}
+function readTeacher() {
+  const g = id => document.getElementById(id), n = id => +g(id).value;
+  const s = tDraft;
+  ["fieldW", "fieldH", "grid", "startX", "startY", "startH", "robotL", "robotW", "wheelTravel", "track", "gear", "motorRPM", "distanceMax"].forEach(k => { if (g("t_" + k)) s[k] = n("t_" + k); });
+  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
+  PORT_ROLES.forEach(([k]) => { s.ports[k] = n("p_" + k); });
+  s.grid = Math.max(50, s.grid); s.gear = s.gear || 1; s.fieldW = Math.max(500, s.fieldW); s.fieldH = Math.max(500, s.fieldH);
+}
+function applySettings(ns) {
+  S = ns; LS.set("rfs.settings", S);
+  stopProgram(false); newWorld(); ws.updateToolbox(buildToolbox()); buildLeds(); draw();
+}
+
+/* =====================================================================
+   Save / open / misc wiring
+   ===================================================================== */
+function projectJSON() {
+  return JSON.stringify({ mode: "Blocks", platform: "RobotFieldSim", robotKit: "IQ Gen 1", robotConfig: DEVICES, fieldWalls: WALLS,
+    workspace: Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws)) });
+}
+function openProject(text) {
+  const data = JSON.parse(text);
+  if (!data.workspace) throw new Error("This file has no blocks in it.");
+  loadXml(data.workspace);
+  if (Array.isArray(data.robotConfig) && data.robotConfig.length && data.robotConfig[0].type) DEVICES = data.robotConfig.filter(d => KNOWN_TYPES.includes(d.type));
+  else if (data.playground) log(`Opened a VEXcode VR project. VR robots have no device setup, so add a Drivetrain${/distance/.test(data.workspace) ? " and sensors" : ""} in Devices.`, "warn");
+  if (Array.isArray(data.fieldWalls)) { WALLS = data.fieldWalls.filter(w => [w.x1, w.y1, w.x2, w.y2].every(Number.isFinite)); saveWalls(); }
+  stopProgram(false); devicesChanged();
+}
+const modal = id => document.getElementById(id);
+function show(id) { modal(id).hidden = false; }
+function hide(id) { modal(id).hidden = true; }
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => { b.closest(".modal").hidden = true; editing = null; });
+document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) { m.hidden = true; editing = null; } }));
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => { m.hidden = true; editing = null; }); });
+
+document.getElementById("btnDevices").onclick = () => { editing = null; renderDevices(); show("mDevices"); };
+document.getElementById("btnTeacher").onclick = () => { tDraft = JSON.parse(JSON.stringify(S)); renderTeacher(); show("mTeacher"); };
+document.getElementById("tSave").onclick = () => { readTeacher(); applySettings(tDraft); hide("mTeacher"); log("Teacher settings saved."); };
+document.getElementById("tDefaults").onclick = () => { tDraft = defaultSettings(); renderTeacher(); };
+document.getElementById("tExport").onclick = () => { readTeacher(); textDialog("Settings code", "Copy this code and paste it into Teacher settings on another computer.", btoa(JSON.stringify(tDraft)), null); };
+document.getElementById("tImport").onclick = () => textDialog("Paste settings code", "Paste a settings code, then press Load.", "", txt => {
+  tDraft = loadSettings(JSON.parse(atob(txt.trim()))); renderTeacher(); });
+document.getElementById("btnSave").onclick = () => textDialog("Save project", "Copy this text and save it as a file ending in .iqblocks, or paste it into your class assignment. Your work also saves automatically in this browser.", projectJSON(), null);
+document.getElementById("btnOpen").onclick = () => document.getElementById("fileIn").click();
+document.getElementById("fileIn").onchange = e => {
+  const file = e.target.files[0]; if (!file) return;
+  file.text().then(t => { try { openProject(t); log(`Opened ${file.name}.`); } catch (err) { log("Could not open that file: " + err.message, "err"); } });
+  e.target.value = "";
+};
+document.getElementById("btnNew").onclick = () => { stopProgram(); loadXml(STARTER); newWorld(); clearLog(); paintLeds(); draw(); };
+document.getElementById("btnRun").onclick = () => { if (EDIT.on) setEdit(false); startProgram(); };
+document.getElementById("btnStop").onclick = () => stopProgram();
+document.getElementById("btnReset").onclick = () => { stopProgram(false); newWorld(); clearLog(); paintLeds(); draw(); };
+document.getElementById("showPath").onchange = draw;
+
+function textDialog(title, hint, text, onLoad) {
+  document.getElementById("xTitle").textContent = title;
+  document.getElementById("xHint").textContent = hint;
+  const ta = document.getElementById("xText"); ta.value = text; ta.readOnly = !onLoad;
+  document.getElementById("xErr").textContent = "";
+  const act = document.getElementById("xAction"); act.hidden = !onLoad;
+  document.getElementById("xCopy").hidden = !!onLoad;
+  act.onclick = () => { try { onLoad(ta.value); hide("mText"); } catch (e) { document.getElementById("xErr").textContent = "That code didn't work: " + e.message; } };
+  show("mText");
+  if (!onLoad) { ta.focus(); ta.select(); }
+}
+document.getElementById("xCopy").onclick = () => {
+  const ta = document.getElementById("xText"), btn = document.getElementById("xCopy");
+  const done = () => { btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy", 1500); };
+  try { navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); }); } catch (e) { ta.select(); }
+};
+
+/* =====================================================================
+   Wall editing: drag on the field to draw a wall; click a wall to select it,
+   drag it to move it, Delete key or the button to remove it.
+   ===================================================================== */
+const btnWalls = document.getElementById("btnWalls"), btnDelWall = document.getElementById("btnDelWall"), wallTip = document.getElementById("wallTip");
+function setEdit(on) {
+  if (on && RUN) stopProgram(false);
+  EDIT.on = on; EDIT.sel = -1; EDIT.draft = null; EDIT.drag = null;
+  btnWalls.textContent = on ? "Done editing walls" : "Edit walls";
+  btnWalls.classList.toggle("primary", on);
+  wallTip.hidden = !on; cv.style.cursor = on ? "crosshair" : "";
+  updateWallButtons(); draw();
+}
+function updateWallButtons() { btnDelWall.hidden = !(EDIT.on && EDIT.sel >= 0); document.getElementById("btnClearWalls").hidden = !(EDIT.on && WALLS.length); }
+function toField(e) {
+  const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * VIEW.dpr, py = (e.clientY - r.top) * VIEW.dpr;
+  const snap = v => Math.round(v / 10) * 10;
+  return [snap((px - VIEW.Wd / 2) / VIEW.sc), snap((VIEW.Ht / 2 - py) / VIEW.sc)];
+}
+function wallAt(x, y) { for (let i = WALLS.length - 1; i >= 0; i--) if (pointInPoly(x, y, wallPoly(WALLS[i]))) return i; return -1; }
+cv.addEventListener("pointerdown", e => {
+  if (!EDIT.on) return;
+  e.preventDefault(); cv.setPointerCapture(e.pointerId);
+  const [x, y] = toField(e), hit = wallAt(x, y);
+  if (hit >= 0) { EDIT.sel = hit; EDIT.drag = { x, y, orig: { ...WALLS[hit] } }; }
+  else { EDIT.sel = -1; EDIT.draft = { x1: x, y1: y, x2: x, y2: y }; }
+  updateWallButtons(); draw();
+});
+cv.addEventListener("pointermove", e => {
+  if (!EDIT.on) return;
+  const [x, y] = toField(e);
+  if (EDIT.draft) {
+    // hold Shift for any angle; otherwise keep walls straight up/down or across
+    let x2 = x, y2 = y;
+    if (!e.shiftKey) { if (Math.abs(x - EDIT.draft.x1) >= Math.abs(y - EDIT.draft.y1)) y2 = EDIT.draft.y1; else x2 = EDIT.draft.x1; }
+    EDIT.draft.x2 = x2; EDIT.draft.y2 = y2; draw();
+  } else if (EDIT.drag && EDIT.sel >= 0) {
+    const dx = x - EDIT.drag.x, dy = y - EDIT.drag.y, o = EDIT.drag.orig;
+    WALLS[EDIT.sel] = { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy }; draw();
+  }
+});
+cv.addEventListener("pointerup", () => {
+  if (!EDIT.on) return;
+  if (EDIT.draft) {
+    const w = EDIT.draft, len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+    if (len >= 50) {
+      if (polysOverlap(corners(W.x, W.y, W.rot), wallPoly(w))) log("That wall would sit on top of the robot. Draw it somewhere else.", "warn");
+      else { WALLS.push(w); EDIT.sel = WALLS.length - 1; }
+    }
+    EDIT.draft = null;
+  }
+  if (EDIT.drag && EDIT.sel >= 0 && polysOverlap(corners(W.x, W.y, W.rot), wallPoly(WALLS[EDIT.sel]))) { WALLS[EDIT.sel] = EDIT.drag.orig; log("A wall can't go on top of the robot.", "warn"); }
+  EDIT.drag = null; saveWalls(); updateWallButtons(); draw();
+});
+function deleteSelectedWall() { if (EDIT.sel < 0) return; WALLS.splice(EDIT.sel, 1); EDIT.sel = -1; saveWalls(); updateWallButtons(); draw(); }
+btnWalls.onclick = () => setEdit(!EDIT.on);
+btnDelWall.onclick = deleteSelectedWall;
+document.getElementById("btnClearWalls").onclick = () => { WALLS = []; EDIT.sel = -1; saveWalls(); updateWallButtons(); draw(); };
+document.addEventListener("keydown", e => {
+  if (EDIT.on && (e.key === "Delete" || e.key === "Backspace") && EDIT.sel >= 0 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); deleteSelectedWall(); }
+});
+
+buildLeds();
+if (!DEVICES.length) log("Start by opening Devices and adding a Drivetrain or Motors.");
+draw();
+</script>
+</body>
+</html>
