@@ -595,6 +595,7 @@ function frontDistance() {
 const realMM = deg => deg / 360 / S.gear * S.wheelTravel;                                  // real build
 const cfgMM = deg => { const d = drivetrain(); return deg / 360 / (d.gear || 1) * d.wheelTravel; };   // what the student entered
 const cfgDeg = mm => { const d = drivetrain(); return mm / d.wheelTravel * 360 * (d.gear || 1); };
+const velSign = pct => (+pct < 0 ? -1 : 1);
 const motorDegPerSec = pct => Math.max(0, Math.min(100, Math.abs(pct))) / 100 * S.motorRPM * 6;
 
 function physicsStep() {
@@ -604,7 +605,7 @@ function physicsStep() {
   let dL = 0, dR = 0;
   if (dt && W.mode !== "idle") {
     const c = W.cmd;
-    if (W.mode === "spin") { dL = c.l * motorDegPerSec(c.lp()) * DT; dR = c.r * motorDegPerSec(c.rp()) * DT; }
+    if (W.mode === "spin") { dL = c.l * velSign(c.lp()) * motorDegPerSec(c.lp()) * DT; dR = c.r * velSign(c.rp()) * motorDegPerSec(c.rp()) * DT; }
     else if (W.mode === "target") {
       const sp = motorDegPerSec(c.pct()) * DT;
       const remL = c.tL - W.encL, remR = c.tR - W.encR, big = Math.max(Math.abs(remL), Math.abs(remR));
@@ -636,7 +637,7 @@ function physicsStep() {
   for (const m of devOf("motor")) {
     const st = W.motors[m.name]; if (!st) continue;
     let d = 0;
-    if (st.mode === "spin") d = st.dir * motorDegPerSec(st.vel) * DT;
+    if (st.mode === "spin") d = st.dir * velSign(st.vel) * motorDegPerSec(st.vel) * DT;   // negative velocity spins the other way, like VEXcode
     else if (st.mode === "target") {
       const rem = st.target - st.enc, sp = motorDegPerSec(st.vel) * DT;
       if (Math.abs(rem) < 1e-6) st.mode = "idle"; else d = Math.sign(rem) * Math.min(Math.abs(rem), sp);
@@ -826,8 +827,8 @@ function* exec(b) {
     case "pg_drivetrain_turn_to_heading": { const diff = ((+v("HEADING") - rd_heading()) % 360 + 540) % 360 - 180; yield* turnBy(diff); return; }
     case "pg_drivetrain_turn_to_rotation": { yield* turnBy(+v("ROTATION") - rd_rotation()); return; }
     case "pg_drivetrain_stop_driving": W.mode = "idle"; W.cmd = null; return;
-    case "pg_drivetrain_set_drive_velocity": W.drivePct = Math.max(0, Math.min(100, +v("VELOCITY"))); return;
-    case "pg_drivetrain_set_turn_velocity": W.turnPct = Math.max(0, Math.min(100, +v("VELOCITY"))); return;
+    case "pg_drivetrain_set_drive_velocity": W.drivePct = Math.max(-100, Math.min(100, +v("VELOCITY"))); return;
+    case "pg_drivetrain_set_turn_velocity": W.turnPct = Math.max(-100, Math.min(100, +v("VELOCITY"))); return;
     case "pg_drivetrain_set_drive_heading": W.headingOffset += +v("HEADING") - rd_heading(); return;
     case "pg_drivetrain_set_drive_rotation": W.rotationOffset += +v("ROTATION") - rd_rotation(); return;
     case "pg_drivetrain_set_drive_timeout": W.timeout = Math.max(0, +v("TIME")); return;
@@ -1148,11 +1149,14 @@ function renderPicker() {
   devBody.querySelectorAll("[data-new]").forEach(el => el.onclick = () => {
     const t = el.dataset.new;
     const used = new Set(DEVICES.flatMap(portsOf)), free = () => { for (let i = 1; i <= KIT.ports; i++) if (!used.has(i)) { used.add(i); return i; } return 1; };
+    const realFree = r => r && !used.has(r) ? (used.add(r), r) : 0;
     let d;
     if (t === "controller") d = { type: t, name: "Controller", drive: drivetrain() ? "left_arcade" : "none", buttons: { E: "", F: "", L: "", R: "" } };
-    else if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: free(), right: free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "" };
+    else if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: realFree(S.ports.left) || free(), right: realFree(S.ports.right) || free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "" };
     else {
-      const real = S.ports[t], p = real && !used.has(real) ? (used.add(real), real) : free();   // start on the real robot's port when it's free
+      // start on the real robot's port when it's free (motors: drive, arm, then claw ports)
+      const p = t === "motor" ? (["left", "right", "arm", "claw"].map(k => S.ports[k]).find(r => r && !used.has(r) && used.add(r)) || free())
+        : realFree(S.ports[t]) || free();
       d = { type: t, name: DEVICE_TYPES[t].base + p, port: p }; if (t === "motor") d.reverse = false; if (t === "color") d.facing = "down";
       if (["distance", "color", "bumper"].includes(t)) { d.mount = "front"; d.offset = 0; } }
     editing = { orig: null, d }; renderDevices();
