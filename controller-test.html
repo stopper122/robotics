@@ -60,13 +60,15 @@ textarea{width:100%;min-height:160px;font:12px var(--mono);border:2px solid var(
       <li>Use <b>Chrome</b> or <b>Edge</b> on a computer (not a phone).</li>
       <li>Plug the IQ controller into the computer with its USB cable and turn it on. If it is paired with a Brain, turn the Brain on too.</li>
       <li>Close VEXcode and any other tab that is connected to the controller, so this page can use it.</li>
-      <li>Click each button below. A box will pop up: pick the VEX device and click <b>Connect</b>. If more than one VEX item is listed, connect one, then click the button again for the next one.</li>
+      <li>Click each button below, starting with <b>USB device</b>. A box will pop up: pick the VEX device and click <b>Connect</b>. If more than one VEX item is listed, connect one, then click the button again for the next one.</li>
     </ol>
     <div class="row">
       <button type="button" id="bSerial">Connect: USB serial</button>
       <button type="button" id="bHid" class="ghost">Connect: HID device</button>
+      <button type="button" id="bUsb" class="ghost">Connect: USB device</button>
     </div>
     <div class="status" id="status"></div>
+    <p class="small">If the controller isn't in any of the three lists: check the cable is a data cable (the one VEXcode uses), try another USB port, and open <b>chrome://device-log</b> in a new tab (Edge: <b>edge://device-log</b>). Copy any lines that mention VEX or USB and send them to Claude.</p>
     <p class="small">A regular game controller is also checked automatically. If the IQ controller shows up there, press any button on it once so the browser notices it.</p>
   </section>
 
@@ -120,6 +122,7 @@ const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, "0")).joi
 function setStatus() {
   const lines = [];
   lines.push([!!navigator.serial, "USB serial " + (navigator.serial ? "is available in this browser" : "is NOT available (use Chrome or Edge on a computer)")]);
+  lines.push([!!navigator.usb, "USB device " + (navigator.usb ? "is available in this browser" : "is NOT available")]);
   lines.push([!!navigator.hid, "HID " + (navigator.hid ? "is available in this browser" : "is NOT available")]);
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   lines.push([pads.length > 0, pads.length ? "Game controller seen: " + pads.map(p => p.id).join(", ") : "No game controller seen yet"]);
@@ -185,9 +188,13 @@ $("bSerial").onclick = async () => {
 };
 $("bQuery").onclick = async () => {
   // V5-style "system version" request. The controller may ignore it; that's fine.
-  if (!writer) return;
-  try { await writer.write(new Uint8Array([0xC9, 0x36, 0xB8, 0x47, 0x21])); record("sent", "c9 36 b8 47 21 (hello)"); }
-  catch (e) { record("sent", "write error: " + e.message); }
+  const msg = new Uint8Array([0xC9, 0x36, 0xB8, 0x47, 0x21]);
+  try {
+    if (writer) await writer.write(msg);
+    else if (usbOut) await usbOut.d.transferOut(usbOut.n, msg);
+    else return;
+    record("sent", "c9 36 b8 47 21 (hello)");
+  } catch (e) { record("sent", "write error: " + e.message); }
 };
 
 /* ---- HID ---- */
@@ -204,6 +211,41 @@ $("bHid").onclick = async () => {
     }
     setStatus();
   } catch (e) { alertBox("Could not connect: " + e.message); }
+};
+
+/* ---- Raw USB (vendor-specific devices) ---- */
+let usbOut = null;
+$("bUsb").onclick = async () => {
+  if (!navigator.usb) { alertBox("This browser can't use USB devices. Open the page in Chrome or Edge."); return; }
+  let d;
+  try { d = await navigator.usb.requestDevice({ filters: [] }); }
+  catch (e) { if (e.name !== "NotFoundError") alertBox("Could not connect: " + e.message); return; }
+  const name = `usb "${d.productName || "?"}" by "${d.manufacturerName || "?"}" vid=0x${d.vendorId.toString(16)} pid=0x${d.productId.toString(16)}`;
+  sources.push(name); setStatus();
+  const src = "U" + sources.length;
+  try {
+    await d.open();
+    if (!d.configuration) await d.selectConfiguration(1);
+  } catch (e) { record(src, "open error: " + e.message); return; }
+  for (const cfg of d.configurations) for (const itf of cfg.interfaces) for (const alt of itf.alternates)
+    record(src, `descriptor: config ${cfg.configurationValue} interface ${itf.interfaceNumber} alt ${alt.alternateSetting} class=0x${alt.interfaceClass.toString(16)} sub=0x${alt.interfaceSubclass.toString(16)} proto=0x${alt.interfaceProtocol.toString(16)} endpoints=[${alt.endpoints.map(ep => `${ep.direction} #${ep.endpointNumber} ${ep.type} ${ep.packetSize}B`).join(", ")}]`);
+  for (const itf of d.configuration.interfaces) {
+    try { await d.claimInterface(itf.interfaceNumber); }
+    catch (e) { record(src, `interface ${itf.interfaceNumber}: can't claim (${e.message})`); continue; }
+    record(src, `interface ${itf.interfaceNumber}: claimed`);
+    for (const ep of itf.alternate.endpoints) {
+      if (ep.direction === "out") { if (!usbOut) { usbOut = { d, n: ep.endpointNumber }; $("bQuery").disabled = false; } continue; }
+      (async () => {
+        for (;;) {
+          try {
+            const r = await d.transferIn(ep.endpointNumber, Math.max(64, ep.packetSize));
+            if (r.data && r.data.byteLength) record(`${src}.${ep.endpointNumber}`, hex(new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)));
+            if (r.status === "stall") await d.clearHalt("in", ep.endpointNumber);
+          } catch (e) { record(`${src}.${ep.endpointNumber}`, "read error: " + e.message); break; }
+        }
+      })();
+    }
+  }
 };
 
 /* ---- Regular game controllers ---- */
