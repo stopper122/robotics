@@ -4072,7 +4072,7 @@ function genCode(lang, opts = {}) {
       case "iq_gyro_rate": return call(d(), "rate", "");
       case "pg_sensing_distance_found": return call(d(), "is_object_detected", "");
       case "pg_sensing_distance_from": return call(d(), "distance", u(f(b, "UNITS")));
-      case "iq_color_detects": return `${call(d(), "color", "")} == ${py ? "Color." + f(b, "COLORS").toUpperCase() : f(b, "COLORS")}`;
+      case "iq_color_detects": return `(${call(d(), "color", "")} == ${py ? "Color." + f(b, "COLORS").toUpperCase() : f(b, "COLORS")})`;
       case "iq_color_name": return call(d(), "color", "");
       case "iq_color_found": return call(d(), "is_near_object", "");
       case "iq_color_brightness": return call(d(), "brightness", "");
