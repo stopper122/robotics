@@ -629,8 +629,8 @@ for (const t of ["procedures_defnoreturn", "procedures_callnoreturn"]) {
 }
 const ws = Blockly.inject("blockly", {
   toolbox: buildToolbox(), renderer: "zelos", trashcan: false, sounds: false,
-  zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel does nothing, so code can't slide away by accident
-  move: { scrollbars: true, drag: true, wheel: false }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
+  zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel scrolls instead of zooming
+  move: { scrollbars: true, drag: true, wheel: true }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
 });
 /* zoom buttons on the workspace: bigger, smaller, and find my code */
 (function zoomBar() {
@@ -872,7 +872,7 @@ const TASK_STEPS = {
   waittouch: { goal: "Wait for the Bumper. Then drive 500 mm.", steps: ["The robot waits. It does not move yet.", "Someone presses the Bumper.", "The robot drives forward 500 mm."], keys: "To press the Bumper, hold the Bumper button below the field." },
   counter: { goal: "Press the Bumper a few times. The robot drives 200 mm for each press.", steps: ["Count each Bumper press.", "When the Touch LED is pressed, stop counting.", "Drive 200 mm for each press. Example: 3 presses = 600 mm."], tip: "Make a variable called count. Add 1 for each press. Then wait until the Bumper is let go.", keys: "Hold Z to press the Bumper. Click the Touch LED below the field." },
   fixcount: { goal: "Fix the broken program. It should drive 200 mm for each Bumper press.", steps: ["What the program should do: count Bumper presses. When you press the Touch LED, the robot drives 200 mm for each press.", 'Click "Load the broken program".', "Click Run. Press the Bumper 1 time. Then click the Touch LED.", 'The robot drives too far. Look at "count (variable)" under the field. It went up by more than 1.', "Fix the program so 1 press adds only 1. Then click Check my work."], keys: "Hold Z to press the Bumper. Click the Touch LED below the field." },
-  modemenu: { goal: "Use the Touch LED like a menu button.", steps: ["At the start: robot stopped, LED red. This is mode 0.", "Press 1 time: drive forward, LED green. This is mode 1.", "Press again: turn right, LED blue. This is mode 2.", "Press again: go back to mode 0."], tip: "Keep the mode in a variable. After each press, wait until the Touch LED is let go." },
+  modemenu: { goal: "Each time you press the Touch LED, the robot switches to the next job. It works like a fan button: off, low, high, off.", steps: ["When the program starts, the robot stays still and the Touch LED is red.", "Press the Touch LED once. The robot drives forward and keeps going. The LED turns green.", "Press it again. The robot spins right in place and keeps spinning. The LED turns blue.", "Press it again. The robot stops and the LED is red again, just like the start.", "Each press after that keeps going around: red (stop), green (forward), blue (spin)."], tip: 'Make a variable called mode that counts the presses: 0 = stop, 1 = forward, 2 = spin. After 2, set it back to 0. After each press, "wait until not TouchLED pressed?".', keys: "Click the Touch LED below the field to press it." },
   distance: { goal: "Drive to the wall. Stop 200 mm away (at the dashed line).", steps: ["Drive forward.", "Watch the Distance sensor.", "Stop when the distance is less than 200 mm."] },
   fixloop: { goal: "Fix the broken program. It should stop 200 mm from the wall.", steps: ["What the program should do: drive forward and stop 200 mm from the wall.", 'Click "Load the broken program". Click Run.', "The robot hits the wall and keeps pushing. Click Pause.", "Look at the while block. It says TRUE, so the loop keeps going.", "Fix the while block so it turns FALSE at 200 mm. Then click Check my work."] },
   timeout: { goal: "Stop 150 mm from the wall. Never drive more than 4 seconds.", steps: ["Drive forward.", "Stop when the wall is less than 150 mm away.", "Also stop if 4 seconds go by.", "The test runs one time with no wall."], tip: '"wait until (distance < 150) or (timer > 4)"' },
@@ -3796,7 +3796,7 @@ async function counterCheck() {
   const said = `The test pressed the Bumper 2 times, then 4 times. The robot drove ${runs[0].dist.toFixed(0)} mm, then ${runs[1].dist.toFixed(0)} mm. The goal is 400 mm, then 800 mm.`;
   if (ok === 2) return result(4, said);
   if (ok === 1) return result(3, said, "One count was right. Start count at 0. Add 1 for each press.");
-  if (runs.every(r => r.dist > r.want + 100)) return result(2, said, "It counted too many presses. While the Bumper is held down, the loop counts it again and again. After you add 1, wait until the Bumper is NOT pressed.");
+  if (runs.every(r => r.dist > r.want + 100)) return result(2, said + ` It counted each press more than once.`, 'It counted too many presses. While the Bumper is held down, the loop counts it again and again. After you add 1, use "wait until not Bumper pressed?". A wait for some seconds does not work, because a press can be short or long.');
   const per = runs.map(r => r.dist / r.n);
   if (per[0] > 20 && Math.abs(per[0] - per[1]) <= 0.15 * per[0]) return result(2, said + ` That is about ${per[0].toFixed(0)} mm for each press. It should be 200 mm for each press.`, "Check 2 things: count goes up by exactly 1 for each press, and the robot drives count × 200 mm.");
   if (Math.abs(runs[0].dist - runs[1].dist) < 30) return result(2, said, "The robot drove the same distance both times. Use your count: drive forward (count × 200) mm.");
