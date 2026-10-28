@@ -814,23 +814,23 @@ const LEVELS = [
     guides: DRIVE_GATES.map((g, i) => ({ pts: [[g[0], g[1]], [g[2], g[3]]], label: i === DRIVE_GATES.length - 1 ? "finish" : String(i + 1) })),
     task: "Drive through the numbered gates in order and back through the finish as fast as you can. Each wall touch adds 2 seconds. Add a Controller in Devices and pick a drive mode (for example Split arcade), press Start, then drive with the on-screen sticks or a real controller through Sim Link. No program needed.", needs: "Drivetrain, Controller with a drive mode" },
 ];
-/* "Fix it" warm-ups: a broken program to repair, on the same field and check as the level before them.
-   They are numbered 5b, 6b... so the main levels keep their numbers (and their score sheet columns). */
+/* "Fix it" warm-ups: a broken program to repair, on the same field and check as the main level right after them.
+   They are numbered 5a, 6a... so the main levels keep their numbers (and their score sheet columns). */
 const XB = inner => `<xml xmlns="https://developers.google.com/blockly/xml"><block type="pg_events_when_started" x="30" y="30"><next>${inner}</next></block></xml>`;
 const dname = (t, i = 0, port) => (devOf(t)[i] || {}).name || DEVICE_TYPES[t].base + port;
 const XN = n => `<block type="math_number"><field name="NUM">${n}</field></block>`;
 const XBUMP = (i, port) => `<block type="pg_sensing_bumper_pressed"><field name="DEVICE">${dname("bumper", i, port)}</field></block>`;
 const FIXES = [
-  { after: "counter", id: "fixcount", name: "Fix it: the runaway counter",
+  { before: "counter", id: "fixcount", name: "Fix it: the runaway counter",
     task: "This program should count Bumper presses, but the robot drives much too far. Load the broken program, press the Bumper once while you Step through it, and watch the count variable. Then fix it.",
     starter: () => `<xml xmlns="https://developers.google.com/blockly/xml"><variables><variable id="fxc">count</variable></variables><block type="pg_events_when_started" x="30" y="30"><next><block type="variables_set"><field name="VAR" id="fxc">count</field><value name="VALUE">${XN(0)}</value><next><block type="pg_control_while"><value name="CONDITION"><block type="pg_operators_not"><value name="BOOL"><block type="iq_touchled_pressed"><field name="DEVICE">${dname("touchled", 0, 2)}</field></block></value></block></value><statement name="SUBSTACK"><block type="pg_control_if"><value name="CONDITION">${XBUMP(0, 8)}</value><statement name="SUBSTACK"><block type="math_change"><field name="VAR" id="fxc">count</field><value name="DELTA">${XN(1)}</value></block></statement></block></statement><next><block type="pg_drivetrain_drive_for"><field name="DIRECTION">fwd</field><field name="UNITS">mm</field><value name="AMOUNT"><block type="pg_operators_multiply"><value name="NUM1"><block type="variables_get"><field name="VAR" id="fxc">count</field></block></value><value name="NUM2">${XN(200)}</value></block></value></block></next></block></next></block></next></block></xml>` },
-  { after: "distance", id: "fixloop", name: "Fix it: the loop that never ends",
+  { before: "distance", id: "fixloop", name: "Fix it: the loop that never ends",
     task: "This program should stop 200 mm from the wall, but the robot drives into the wall and keeps pushing. Load the broken program, pause it near the wall, and read whether the while condition is TRUE or FALSE. Then fix it.",
     starter: () => XB(`<block type="pg_control_while"><value name="CONDITION"><block type="pg_operators_greater_than"><value name="NUM1"><block type="pg_sensing_distance_from"><field name="DEVICE">${dname("distance", 0, 7)}</field><field name="UNITS">mm</field></block></value><value name="NUM2">${XN(0)}</value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_drive"><field name="DIRECTION">fwd</field></block></statement><next><block type="pg_drivetrain_stop_driving"></block></next></block>`) },
-  { after: "find", id: "fixfind", name: "Fix it: it only works once",
+  { before: "find", id: "fixfind", name: "Fix it: it only works once",
     task: "This program found the cube once, so its author thought it was done. But the cube moves every run! Load the broken program and press Check my work to see which test fails. Then make it search with the Distance sensor instead.",
     starter: () => XB(`<block type="pg_drivetrain_turn_for"><field name="TURNDIRECTION">right</field><value name="AMOUNT">${XN(120)}</value><next><block type="pg_drivetrain_drive"><field name="DIRECTION">fwd</field><next><block type="pg_control_wait_until"><value name="CONDITION"><block type="pg_operators_less_than"><value name="NUM1"><block type="pg_sensing_distance_from"><field name="DEVICE">${dname("distance", 0, 7)}</field><field name="UNITS">mm</field></block></value><value name="NUM2">${XN(50)}</value></block></value><next><block type="pg_drivetrain_stop_driving"></block></next></block></next></block></next></block>`) },
-  { after: "rc1", id: "fixifs", name: "Fix it: the fighting if blocks",
+  { before: "rc1", id: "fixifs", name: "Fix it: the fighting if blocks",
     task: "This remote should drive forward when you hold both Bumpers, but it turns instead. Load the broken program, hold both Bumpers (Z and X), and Step through it to see which block wins. Then fix it.",
     starter: () => XB(`<block type="pg_control_forever"><statement name="SUBSTACK"><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_and"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_drive"><field name="DIRECTION">fwd</field></block></statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(0, 8)}</value><statement name="SUBSTACK"><block type="pg_drivetrain_turn"><field name="TURNDIRECTION">left</field></block></statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(1, 9)}</value><statement name="SUBSTACK"><block type="pg_drivetrain_turn"><field name="TURNDIRECTION">right</field></block></statement><next><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_not"><value name="BOOL"><block type="pg_operators_or"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_stop_driving"></block></statement></block></next></block></next></block></next></block></statement></block>`) },
 ];
@@ -840,9 +840,9 @@ const EXTRAS = [
   { after: "square", id: "hexagon", name: "Pen art: hexagon", start: [0, -400, 0], walls: [],
     guides: [{ pts: [[0, -400], ...HEX_CW], label: "300 mm sides" }],
     task: "Put the pen down and draw a hexagon with 300 mm sides, ending where you started. A hexagon has 6 sides, and the robot turns 360 ÷ 6 degrees at each corner. Use a repeat loop and let the math block do the dividing.", needs: "Drivetrain" },
-  { after: "fixcount", id: "modemenu", name: "Touch LED mode menu", start: [0, -300, 0], walls: [],
+  { after: "counter", id: "modemenu", name: "Touch LED mode menu", start: [0, -300, 0], walls: [],
     task: "Make a menu with the Touch LED. The robot starts in mode 0: stopped, LED red. Each press goes to the next mode. Mode 1: drive forward, LED green. Mode 2: turn right in place, LED blue. After mode 2 it goes back to mode 0. Tip: keep the mode in a variable, and wait until the Touch LED is let go after each press.", needs: "Drivetrain, Touch LED" },
-  { after: "fixloop", id: "timeout", name: "Safety timeout", start: [0, -700, 0], walls: [{ x1: -500, y1: -100, x2: 500, y2: -100 }],
+  { after: "distance", id: "timeout", name: "Safety timeout", start: [0, -700, 0], walls: [{ x1: -500, y1: -100, x2: 500, y2: -100 }],
     guides: [{ y: -270, x1: -500, x2: 500, label: "150 mm from the wall" }],
     task: "Drive toward the wall and stop 150 mm away. But if 4 seconds go by first, stop anyway: the wall might not be there, and a real robot shouldn't drive forever. The test also runs once with the wall taken away. Tip: \"wait until (distance < 150) or (timer > 4)\".", needs: "Drivetrain, Distance sensor on the front" },
   { after: "stayaway", id: "garage", name: "Park in the garage", start: [0, -700, 0],
@@ -856,8 +856,13 @@ const EXTRAS = [
     floor: [{ line: stadium(0, 0, 450, 400, 3), width: 25, color: "black" }],
     task: "Follow the oval smoothly instead of wobbling. Steer by how far off the line you are: brightness 50% means right on the edge. Set each wheel's speed to a base speed plus or minus (brightness − 50) × a small number. This is called proportional control. Finish one lap in under 40 seconds.", needs: "Two Motors (left and right), Color sensor pointing down" },
 ];
-for (const f of [...FIXES, ...EXTRAS]) { const base = LEVELS.find(l => l.id === f.after); const { after, ...rest } = f; LEVELS.splice(LEVELS.indexOf(base) + 1, 0, f.starter ? { ...base, ...rest, base: after, sub: true } : { ...rest, sub: true }); }
-{ let n = 0, sub = 0; LEVELS.forEach((l, i) => { if (!i) return; if (l.sub) l.name = n + String.fromCharCode(98 + sub++) + ". " + l.name; else { n++; sub = 0; l.name = n + ". " + l.name; } }); }
+// Fix it levels go just before their main level (a warm-up, "5a"); extras go after it ("5b", "5c")
+for (const f of [...EXTRAS].reverse()) { const base = LEVELS.find(l => l.id === f.after); const { after, ...rest } = f; LEVELS.splice(LEVELS.indexOf(base) + 1, 0, { ...rest, sub: true }); }
+for (const f of FIXES) { const base = LEVELS.find(l => l.id === f.before); const { before, ...rest } = f; LEVELS.splice(LEVELS.indexOf(base), 0, { ...base, ...rest, base: before, sub: true, pre: true }); }
+{ let n = 0, sub = 0; LEVELS.forEach((l, i) => { if (!i) return; if (l.pre) l.name = (n + 1) + "a. " + l.name; else if (l.sub) l.name = n + String.fromCharCode(98 + sub++) + ". " + l.name; else { n++; sub = 0; l.name = n + ". " + l.name; } }); }
+// find a level by its name; old names (like "5b. Fix it: ...") still match by the words after the number
+const bareName = s => String(s).replace(/^\d+[a-z]?\.\s*/, "");
+const levelByName = name => LEVELS.find(x => x.name === name) || LEVELS.find(x => bareName(x.name) === bareName(name));
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
 const lvl = () => LEVELS.find(l => l.id === LEVEL);
@@ -4071,7 +4076,7 @@ function mergeProgress(j) {
   LS.set("rfs.scoresowner", STUDENT.name);
   let n = 0;
   for (const [name, sc] of Object.entries(j.progress)) {
-    const l = LEVELS.find(x => x.name === name); if (!l) continue;
+    const l = levelByName(name); if (!l) continue;
     const cur = SCORES[l.id];
     if (!cur || sc > cur.best) { SCORES[l.id] = { ...(cur || { misses: 0 }), best: sc, last: cur ? cur.last : sc, at: cur ? cur.at : 0 }; n++; }
   }
@@ -4090,7 +4095,7 @@ function welcomeBack(j) {
   document.getElementById("sKeep").onclick = () => { renderTask(); hide("mSign"); };
   if (last) document.getElementById("sLast").onclick = () => {
     try {
-      const lv = LEVELS.find(x => x.name === last.level);
+      const lv = levelByName(last.level);
       if (lv && levelOpen(lv.id)) setLevel(lv.id, true);
       openProject(last.program); log("Opened your last program.");
     } catch (e) { log("Couldn't open your last program.", "warn"); }
@@ -5548,7 +5553,7 @@ function mergeLevelProgs(programs) {
   if (!programs) return 0;
   let n = 0;
   for (const [name, p] of Object.entries(programs)) {
-    const l = LEVELS.find(x => x.name === name); if (!l || !p || !p.program) continue;
+    const l = levelByName(name); if (!l || !p || !p.program) continue;
     const t = Date.parse(p.time) || 0, cur = LEVEL_PROGS[l.id];
     if (!cur || (t && t > cur.at)) { LEVEL_PROGS[l.id] = { at: t || Date.now(), program: String(p.program) }; n++; if (l.id === LEVEL) restoreLevelProg(l.id); }
   }
