@@ -1010,10 +1010,33 @@ function readAloud(parts, btn) {
   u.onend = u.onerror = () => { btn.classList.remove("on"); if (SPEAK_BTN === btn) SPEAK_BTN = null; };
   SPEAK_BTN = btn; btn.classList.add("on"); sy.speak(u);
 }
+// which drive setup fits each level, and why (shown in the task box and read aloud)
+const BUILD_WHY = {
+  exact: ["Drivetrain", "It can drive an exact distance and turn an exact number of degrees."],
+  simple: ["Drivetrain", "One block drives the whole robot. With 2 Motors you need 2 blocks for everything."],
+  steer: ["2 Motors", "Each wheel gets its own speed. Then the robot can steer while it drives."],
+  leds: ["2 Motors", "Each Touch LED shows what one motor is doing. So you need 2 Motors."],
+  either: ["Drivetrain or 2 Motors", "Both work. 2 Motors can steer while driving, so they are faster on curves."],
+  preset: ["Drivetrain", "Pick the robot build in Devices. It already has a Drivetrain."],
+  controller: ["Drivetrain", "The Controller drive modes need a Drivetrain."],
+};
+const LEVEL_BUILD = {
+  square: "exact", hexagon: "exact", gyro: "exact", myblocks: "exact", garage: "exact", line: "exact", maze: "exact", maze2: "exact", maze3: "exact",
+  touch: "simple", waittouch: "simple", counter: "simple", fixcount: "simple", modemenu: "simple", distance: "simple", fixloop: "simple", timeout: "simple",
+  stayaway: "simple", patrol: "simple", find: "simple", fixfind: "simple", color: "simple", countlines: "simple", sumo: "simple", rc1: "simple", fixifs: "simple", rc2: "simple",
+  wallfollow: "steer", smoothline: "steer", line2: "either", crc1: "leds", crc2: "leds",
+  pincher: "preset", lift: "preset", sort: "preset", skills: "preset", driving: "controller",
+};
+const buildFor = id => BUILD_WHY[LEVEL_BUILD[id]];
+function buildHTML(id) {
+  const b = buildFor(id);
+  return b ? `<div class="tip">🤖 Best build: <b>${esc(b[0])}</b>. ${esc(b[1])}</div>` : "";
+}
 function taskParts(l) {
   const t = TASK_STEPS[l.id];
   if (!t) return [l.name, LEVEL === "open" ? CUSTOM.task : l.task];
-  return [l.name, "Goal: " + t.goal, ...t.steps.map((s, i) => `Step ${i + 1}: ${s}`), t.tip && "Tip: " + t.tip, t.keys];
+  const b = buildFor(l.id);
+  return [l.name, "Goal: " + t.goal, ...t.steps.map((s, i) => `Step ${i + 1}: ${s}`), t.tip && "Tip: " + t.tip, t.keys, b && `Best build: ${b[0]}. ${b[1]}`];
 }
 function taskStepsHTML(t) {
   return `<div class="goal">🎯 ${esc(t.goal)}</div><ol class="steps">${t.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol>${t.tip ? `<div class="tip">💡 ${esc(t.tip)}</div>` : ""}${t.keys ? `<div class="tip">⌨️ ${esc(t.keys)}</div>` : ""}`;
@@ -3760,6 +3783,19 @@ for (const id of ["wallfollow", "line", "line2", "smoothline", "patrol", "sumo"]
     return r;
   };
 }
+// a low score with the drive setup that makes this level harder: say which one fits better
+const usingMotors = () => !drivetrain() && devOf("motor").filter(m => m.port === S.ports.left || m.port === S.ports.right).length >= 2;
+for (const id of Object.keys(CHECKS)) {
+  const fn = CHECKS[id];
+  CHECKS[id] = async (...a) => {
+    const r = await fn(...a), k = LEVEL_BUILD[lvl().id];
+    if (!r || r.score >= 4 || r.score === 0 && !r.hint || /Drivetrain|2 Motors|Reverse/.test(r.hint || "")) return r;
+    const add = (k === "steer" || k === "leds") && drivetrain() ? "This level is easier with 2 Motors instead of a Drivetrain. Each wheel gets its own speed."
+      : (k === "exact" || k === "simple") && usingMotors() ? "This level is easier with a Drivetrain. One block drives the whole robot." : "";
+    if (add) r.hint = r.hint ? r.hint + " " + add : add;
+    return r;
+  };
+}
 // skills challenge points: 3 per cube in its own color zone, 1 in the other zone, 2 for parking on green
 function skillPoints() {
   let cubes = 0, wrong = 0;
@@ -5711,7 +5747,7 @@ function renderTask() {
   box.hidden = !l.task;
   const task = LEVEL === "open" ? CUSTOM.task : l.task;
   box.hidden = !task;
-  if (task) box.innerHTML = `<div class="taskhead"><b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><button class="btn small speak" type="button" id="btnSpeakTask" title="Read the task out loud">🔊 Read to me</button></div>${TASK_STEPS[LEVEL] ? taskStepsHTML(TASK_STEPS[LEVEL]) : `<span>${esc(task)}</span>`}${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
+  if (task) box.innerHTML = `<div class="taskhead"><b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><button class="btn small speak" type="button" id="btnSpeakTask" title="Read the task out loud">🔊 Read to me</button></div>${TASK_STEPS[LEVEL] ? taskStepsHTML(TASK_STEPS[LEVEL]) + buildHTML(LEVEL) : `<span>${esc(task)}</span>`}${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
   box.querySelectorAll("[data-note]").forEach(t => t.oninput = () => { const n = LS.get("rfs.notes", {}); n[LEVEL] = n[LEVEL] || {}; n[LEVEL][t.dataset.note] = t.value.slice(0, 600); LS.set("rfs.notes", n); });
   const bs = document.getElementById("btnStarter");
   if (bs) bs.onclick = () => {
