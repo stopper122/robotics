@@ -472,7 +472,7 @@ Blockly.defineBlocksWithJsonArray([
   // Operators
   ...[["add", "+"], ["subtract", "-"], ["multiply", "*"], ["divide", "/"]].map(([n, s]) =>
     ({ type: "pg_operators_" + n, message0: "%1 " + s + " %2", args0: [num("NUM1"), num("NUM2")], output: "Number", inputsInline: true, colour: C.ops })),
-  ...[["less_than", "<"], ["greater_than", ">"], ["equal", "="]].map(([n, s]) =>
+  ...[["less_than", "<"], ["less_equal", "≤"], ["greater_than", ">"], ["greater_equal", "≥"], ["equal", "="]].map(([n, s]) =>
     ({ type: "pg_operators_" + n, message0: "%1 " + s + " %2", args0: [num("NUM1"), num("NUM2")], output: "Boolean", inputsInline: true, colour: C.ops })),
   { type: "pg_operators_and", message0: "%1 and %2", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
   { type: "pg_operators_or", message0: "%1 or %2", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
@@ -610,7 +610,8 @@ function buildToolbox() {
   cats.push({ kind: "category", name: "Operators", colour: C.ops, contents: [
     blk("pg_operators_add", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_subtract", { NUM1: N(0), NUM2: N(0) }),
     blk("pg_operators_multiply", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_divide", { NUM1: N(0), NUM2: N(0) }),
-    blk("pg_operators_less_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_greater_than", { NUM1: N(0), NUM2: N(50) }),
+    blk("pg_operators_less_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_less_equal", { NUM1: N(0), NUM2: N(50) }),
+    blk("pg_operators_greater_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_greater_equal", { NUM1: N(0), NUM2: N(50) }),
     blk("pg_operators_equal", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_and"), blk("pg_operators_or"), blk("pg_operators_not"),
     blk("pg_operators_random", { FROM: N(1), TO: N(10) }), blk("pg_operators_round", { NUM: N(0) }),
     blk("iq_operator_remainder", { NUM1: N(7), NUM2: N(2) }), blk("iq_operator_function", { NUM: N(0) }),
@@ -1410,6 +1411,8 @@ function val(block) {
     case "pg_operators_divide": { const d = +v("NUM2"); return d ? +v("NUM1") / d : 0; }
     case "pg_operators_less_than": return +v("NUM1") < +v("NUM2");
     case "pg_operators_greater_than": return +v("NUM1") > +v("NUM2");
+    case "pg_operators_less_equal": return +v("NUM1") <= +v("NUM2");
+    case "pg_operators_greater_equal": return +v("NUM1") >= +v("NUM2");
     case "pg_operators_equal": return +v("NUM1") === +v("NUM2");
     case "pg_operators_and": return !!v("BOOL1") && !!v("BOOL2");
     case "pg_operators_or": return !!v("BOOL1") || !!v("BOOL2");
@@ -2317,7 +2320,7 @@ const IQ_MAP = [
 const IQ_IN = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [a, { to: b, names: n, ...o }]));
 const IQ_OUT = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [b, { to: a, names: Object.fromEntries(Object.entries(n).map(([k, v]) => [v, k])),
   add: o.add, sh: o.sh, vals: o.vals && Object.fromEntries(Object.entries(o.vals).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([x, y]) => [y, x]))])) }]));
-const MATH_OPS = { "+": "add", "-": "subtract", "*": "multiply", "/": "divide" }, CMP_OPS = { "==": "equal", "<": "less_than", ">": "greater_than" };
+const MATH_OPS = { "+": "add", "-": "subtract", "*": "multiply", "/": "divide" }, CMP_OPS = { "==": "equal", "<": "less_than", ">": "greater_than", "<=": "less_equal", ">=": "greater_equal" };
 const BRAIN_GYRO_NAME = "BrainInertial";
 const GYRO_IN = { iq_sensing_heading_of_gyro: ["iq_brain_heading", "iq_gyro_heading"], iq_sensing_rotation_of_gyro: ["iq_brain_rotation", "iq_gyro_rotation"],
   iq_sensing_set_gyro_heading: ["iq_brain_set_heading", "iq_gyro_set_heading", "HEADING"], iq_sensing_set_gyro_rotation: ["iq_brain_set_rotation", "iq_gyro_set_rotation", "ROTATION"] };
@@ -4180,6 +4183,8 @@ function genCode(lang, opts = {}) {
       case "pg_operators_divide": return bin("/");
       case "pg_operators_less_than": return bin("<");
       case "pg_operators_greater_than": return bin(">");
+      case "pg_operators_less_equal": return bin("<=");
+      case "pg_operators_greater_equal": return bin(">=");
       case "pg_operators_equal": return bin("==");
       case "pg_operators_and": return `(${val(b, "BOOL1", "False")} ${py ? "and" : "&&"} ${val(b, "BOOL2", "False")})`;
       case "pg_operators_or": return `(${val(b, "BOOL1", "False")} ${py ? "or" : "||"} ${val(b, "BOOL2", "False")})`;
@@ -4703,8 +4708,8 @@ const CPP = (() => {
       const not = r => ({ xml: B("pg_operators_not", line, V("BOOL", r)).xml, type: "bool" });
       if (op === "<") return cmp("pg_operators_less_than", a, b);
       if (op === ">") return cmp("pg_operators_greater_than", a, b);
-      if (op === "<=") return not(cmp("pg_operators_greater_than", a, b));
-      if (op === ">=") return not(cmp("pg_operators_less_than", a, b));
+      if (op === "<=") return cmp("pg_operators_less_equal", a, b);
+      if (op === ">=") return cmp("pg_operators_greater_equal", a, b);
       if (op === "==") return cmp("pg_operators_equal", a, b);
       if (op === "!=") return not(cmp("pg_operators_equal", a, b));
       fail(`The sim doesn't support ${op} yet.`, e);
