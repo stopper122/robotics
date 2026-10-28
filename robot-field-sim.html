@@ -644,6 +644,24 @@ ws.registerToolboxCategoryCallback("MYBLOCKS", w => {
   tip.setAttribute("text", "Make a block once, then use it as many times as you like.");
   return [tip].concat(items);
 });
+/* "set variable to" needs a number to type in (Blockly leaves its slot empty) */
+function numShadow(v) {
+  const sh = Blockly.utils.xml.createElement("shadow"); sh.setAttribute("type", "math_number");
+  const f = Blockly.utils.xml.createElement("field"); f.setAttribute("name", "NUM"); f.textContent = v; sh.appendChild(f); return sh;
+}
+ws.registerToolboxCategoryCallback("VARIABLE", w => Blockly.Variables.flyoutCategory(w).map(x => {
+  if (x.getAttribute && x.getAttribute("type") === "variables_set" && !x.querySelector("value")) {
+    const val = Blockly.utils.xml.createElement("value"); val.setAttribute("name", "VALUE"); val.appendChild(numShadow(0)); x.appendChild(val);
+  }
+  return x;
+}));
+function fillSetSlots() {
+  ws.getBlocksByType("variables_set", false).forEach(b => {
+    const c = b.getInput("VALUE") && b.getInput("VALUE").connection;
+    if (c && !c.targetConnection && !c.getShadowDom()) c.setShadowDom(numShadow(0));
+  });
+}
+ws.addChangeListener(e => { if (e.type === Blockly.Events.BLOCK_CREATE || e.type === Blockly.Events.FINISHED_LOADING) fillSetSlots(); });
 window.addEventListener("resize", () => Blockly.svgResize(ws));
 new ResizeObserver(() => Blockly.svgResize(ws)).observe(document.getElementById("blockly"));
 
