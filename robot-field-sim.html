@@ -120,6 +120,21 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .lvl select { font: 600 13px var(--body); background: #2b3446; color: #fff; border: 1px solid #3b465c; border-radius: 6px; padding: 6px 8px; }
 .task { background: #eaf2fd; border: 1px solid #c4dbf7; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 .task .needs { color: var(--muted); font-size: 12px; }
+.checkrow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.checkrow .best { font-size: 12px; color: var(--muted); }
+.score { margin-top: 6px; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid #c4dbf7; }
+.score b { font-size: 14px; }
+.score.s4 { border-color: #7fcf9f; background: #eaf8ef; }
+.score.s3 { border-color: #c9d66a; background: #f7f9e6; }
+.score.s0, .score.s1, .score.s2 { border-color: #f0b38a; background: #fdf1e8; }
+.score.checking { color: var(--muted); }
+.score .hint2 { font-size: 12.5px; }
+.score .saved { font-size: 12px; color: var(--muted); }
+.form1 { display: flex; flex-direction: column; gap: 10px; }
+.form1 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.form1 input, .form1 select { font: inherit; padding: 7px 8px; border: 1px solid #c9ced8; border-radius: 6px; }
+.dlg.small { max-width: 420px; }
+ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
 .led.bump button { border-radius: 6px; background: #d23a2f; border-color: #a52a21; }
 .led.bump button.down { background: #8f2219; }
 #field3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 6px; }
@@ -143,6 +158,7 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
     <input type="file" id="fileIn" accept=".vrblocks,.iqblocks,.json,.txt" hidden>
     <label class="lvl" for="level">Level <select id="level"></select></label>
     <span class="sp"></span>
+    <button class="btn" id="btnSign" type="button" hidden>Sign in</button>
     <button class="btn" id="btnTeacher" type="button">Teacher settings</button>
   </div>
   <div class="main">
@@ -212,6 +228,13 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
       <button class="btn" type="button" id="tImport">Paste settings code</button>
       <button class="btn primary" type="button" id="tSave">Save settings</button>
     </footer>
+  </div>
+</div>
+<div class="modal" id="mSign" hidden>
+  <div class="dlg small" role="dialog" aria-modal="true" aria-labelledby="sTitle">
+    <header><h2 id="sTitle">Sign in to your class</h2><button class="btn" type="button" data-close>Close</button></header>
+    <div class="body" id="signBody"></div>
+    <footer id="signFoot"></footer>
   </div>
 </div>
 <div class="modal" id="mText" hidden>
@@ -667,7 +690,7 @@ function newWorld() {
     gyros: {},           // per gyro device: {hOff, rOff, calUntil}
     leds: {},            // per touch LED: {color, bright, pressed}
     bumps: {},           // bumpers pressed by hand with the button under the field
-    cubes: [], done: false,
+    cubes: [], done: false, lastWL: 0, lastWR: 0, prints: null,
   };
   resetCubes();
   for (const m of devOf("motor")) W.motors[m.name] = { enc: 0, mode: "idle", dir: 1, target: 0, vel: 50, timeout: 0, deadline: 0 };
@@ -820,7 +843,8 @@ function squarePoly(x, y, rot, size) {
 const cubePoly = c => squarePoly(c.x, c.y, c.rot || 0, CUBE);
 function resetCubes() {
   const lv = lvl(), list = CUBES.map(c => ({ x: c.x, y: c.y, z: 0, rot: 0, color: c.color, held: false, ready: false }));
-  if (LEVEL !== "open" && lv.shuffle) {   // sorting levels mix up the colors each run
+  if (FORCE_COLORS) list.forEach((c, i) => { if (FORCE_COLORS[i]) c.color = FORCE_COLORS[i]; });   // a check picks the order
+  else if (LEVEL !== "open" && lv.shuffle) {   // sorting levels mix up the colors each run
     const cols = list.map(c => c.color);
     for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; }
     list.forEach((c, i) => c.color = cols[i]);
@@ -963,6 +987,7 @@ function physicsStep() {
   }
   // 4) move the robot
   const mL = realMM(wL), mR = realMM(wR);
+  W.lastWL = mL; W.lastWR = mR;   // how far each side's wheels turned this tick (mm), for checks
   const dCenter = (mL + mR) / 2, dRot = (mL - mR) / S.track / DEG;
   const before = W.rot, ox0 = W.x, oy0 = W.y;
   if (dCenter || dRot) {
@@ -1169,7 +1194,7 @@ function* exec(b) {
     // looks
     case "pg_looks_move_pen": W.pen = f("DIRECTIONS") === "down"; W.lastTrail = null; return;
     case "pg_looks_set_pen_color": W.penColor = f("COLOR"); W.lastTrail = null; return;
-    case "pg_looks_print": log(fmtNum(v("VALUE"))); return;
+    case "pg_looks_print": { const t = fmtNum(v("VALUE")); log(t); if (W.prints) W.prints.push(t); return; }
     case "pg_looks_clear_all_rows": clearLog(); return;
     // control
     case "pg_control_wait": { const end = W.t + +v("TIME"); while (W.t < end - 1e-9) yield; return; }
@@ -1243,7 +1268,7 @@ function tickScripts() {
   return alive.length > 0 || W.mode !== "idle" || motorsBusy() || RUN.persistent;
 }
 function loop(ts) {
-  if (!RUN) return;
+  if (!RUN || CHECKING) return;
   if (!RUN.last) RUN.last = ts;
   RUN.acc += Math.min(0.1, (ts - RUN.last) / 1000) * +document.getElementById("speed").value;
   RUN.last = ts;
@@ -1705,7 +1730,24 @@ function renderTeacher() {
     <label class="chk full"><input type="checkbox" id="t_checkPorts" ${s.checkPorts ? "checked" : ""}> Check student ports against these (turn off to let any port work)</label>
     <label class="chk full"><input type="checkbox" id="t_showPortMap" ${s.showPortMap ? "checked" : ""}> Show students a map of the ports they have used in Devices, with wrong ports marked</label>
     ${PORT_ROLES.map(([k, label]) => `<label>${label}<select id="p_${k}">${portList(s.ports[k])}</select></label>`).join("")}
-  </div></fieldset>`;
+  </div></fieldset>
+  <fieldset><legend>Score sheet (roster and scores)</legend>
+    <p class="hint">Students sign in with a class code, and every Check my work score goes to a Google Sheet in your Drive. Student names stay in your Sheet, not on this website.</p>
+    <ol class="steps">
+      <li>Make a new Google Sheet. Open <b>Extensions › Apps Script</b>, delete what is there, and paste the script (<button class="btn" type="button" id="tCopyScript">Copy the script</button>). Save.</li>
+      <li>Pick <b>setup</b> in the function menu and press <b>Run</b>. Allow access when Google asks. This adds the Roster, Attempts, Best scores and Settings tabs.</li>
+      <li>Press <b>Deploy › New deployment</b>, pick <b>Web app</b>, set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>, then Deploy and copy the Web app URL.</li>
+      <li>Paste the URL here, type your students into the Roster tab, and give students the class code from the Settings tab.</li>
+    </ol>
+    <div class="form"><label class="full">Web app URL<input id="t_sheetUrl" value="${esc(s.sheetUrl || "")}" placeholder="https://script.google.com/macros/s/.../exec"></label></div>
+    <p><button class="btn" type="button" id="tStudentLink">Copy student link</button> <span class="hint">Post this link (for example in Google Classroom) so students' browsers know where to send scores.</span></p>
+  </fieldset>`;
+  document.getElementById("tCopyScript").onclick = () => textDialog("Score sheet script", "Copy all of this into Extensions › Apps Script in your Google Sheet.", SHEET_SCRIPT, null);
+  document.getElementById("tStudentLink").onclick = () => {
+    const u = document.getElementById("t_sheetUrl").value.trim();
+    if (!validSheet(u)) { textDialog("Student link", "Paste the Web app URL first. It starts with https://script.google.com/ and ends with /exec.", "", null); return; }
+    textDialog("Student link", "Give students this link. Opening it once sets up their browser to send scores to your Sheet.", location.origin + location.pathname + "?sheet=" + encodeURIComponent(u), null);
+  };
 }
 function readTeacher() {
   const g = id => document.getElementById(id), n = id => +g(id).value;
@@ -1713,10 +1755,11 @@ function readTeacher() {
   ["fieldW", "fieldH", "grid", "startX", "startY", "startH", "robotL", "robotW", "wheelTravel", "track", "gear", "motorRPM", "distanceMax"].forEach(k => { if (g("t_" + k)) s[k] = n("t_" + k); });
   s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
   PORT_ROLES.forEach(([k]) => { s.ports[k] = n("p_" + k); });
+  s.sheetUrl = g("t_sheetUrl").value.trim();
   s.grid = Math.max(50, s.grid); s.gear = s.gear || 1; s.fieldW = Math.max(500, s.fieldW); s.fieldH = Math.max(500, s.fieldH);
 }
 function applySettings(ns) {
-  S = ns; LS.set("rfs.settings", S);
+  S = ns; LS.set("rfs.settings", S); renderSignBtn();
   stopProgram(false); newWorld(); ws.updateToolbox(buildToolbox()); buildLeds(); draw();
 }
 
@@ -1759,9 +1802,9 @@ document.getElementById("fileIn").onchange = e => {
   e.target.value = "";
 };
 document.getElementById("btnNew").onclick = () => { stopProgram(); loadXml(STARTER); newWorld(); clearLog(); paintLeds(); draw(); };
-document.getElementById("btnRun").onclick = () => { if (EDIT.on) setEdit(false); startProgram(); };
+document.getElementById("btnRun").onclick = () => { if (CHECKING) return; if (EDIT.on) setEdit(false); startProgram(); };
 document.getElementById("btnStop").onclick = () => stopProgram();
-document.getElementById("btnReset").onclick = () => { stopProgram(false); newWorld(); clearLog(); paintLeds(); draw(); };
+document.getElementById("btnReset").onclick = () => { if (CHECKING) return; stopProgram(false); newWorld(); clearLog(); paintLeds(); draw(); };
 document.getElementById("showPath").onchange = draw;
 
 function textDialog(title, hint, text, onLoad) {
@@ -2414,6 +2457,353 @@ function render3d() {
 }
 document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
 
+/* =====================================================================
+   Class sign-in and score saving to the teacher's Google Sheet.
+   The sheet's web app link comes from the student link (?sheet=...) or
+   Teacher settings. Nothing about students is stored on the website itself.
+   ===================================================================== */
+const validSheet = u => typeof u === "string" && /^https:\/\/script\.google\.com\/(a\/macros\/[\w.-]+|macros)\/s\/[\w-]+\/exec$/.test(u.trim());
+(function readSheetParam() {
+  try { const u = new URLSearchParams(location.search).get("sheet"); if (validSheet(u)) LS.set("rfs.sheet", u.trim()); } catch (e) {}
+})();
+const sheetUrl = () => { const a = LS.get("rfs.sheet", ""); return validSheet(a) ? a : validSheet(S.sheetUrl) ? S.sheetUrl.trim() : ""; };
+let STUDENT = LS.get("rfs.student", null);   // { name, cls, code, pin }
+async function sheetCall(data) {
+  const url = sheetUrl(); if (!url) throw new Error("No score sheet is set up.");
+  const res = data.action === "roster"
+    ? await fetch(`${url}?action=roster&code=${encodeURIComponent(data.code)}`)
+    : await fetch(url, { method: "POST", body: JSON.stringify(data) });   // plain text body: no CORS preflight
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || "The score sheet said no.");
+  return j;
+}
+function renderSignBtn() {
+  const b = document.getElementById("btnSign");
+  b.hidden = !sheetUrl();
+  b.textContent = STUDENT ? "👤 " + STUDENT.name : "Sign in";
+}
+function openSignIn() {
+  const body = document.getElementById("signBody"), foot = document.getElementById("signFoot");
+  if (STUDENT) {
+    body.innerHTML = `<p>Signed in as <b>${esc(STUDENT.name)}</b>${STUDENT.cls ? ` (${esc(STUDENT.cls)})` : ""}. Your scores from Check my work go to your teacher.</p>`;
+    foot.innerHTML = `<button class="btn" type="button" id="sOut">Sign out</button>`;
+    document.getElementById("sOut").onclick = () => { STUDENT = null; LS.set("rfs.student", null); renderSignBtn(); renderTask(); hide("mSign"); };
+  } else {
+    body.innerHTML = `<div class="form1"><label>Class code<input id="sCode" inputmode="numeric" autocomplete="off" placeholder="from your teacher"></label>
+      <div id="sNames"></div><div class="err-text" id="sErr"></div></div>`;
+    foot.innerHTML = `<button class="btn primary" type="button" id="sNext">Next</button>`;
+    let students = null;
+    const err = t => { document.getElementById("sErr").textContent = t; };
+    document.getElementById("sNext").onclick = async () => {
+      const code = document.getElementById("sCode").value.trim(), btn = document.getElementById("sNext");
+      err(""); btn.disabled = true;
+      try {
+        if (!students) {
+          students = (await sheetCall({ action: "roster", code })).students;
+          if (!students.length) { students = null; throw new Error("The roster is empty. Ask your teacher."); }
+          document.getElementById("sNames").innerHTML = `<label>Your name<select id="sName"><option value="">Pick your name</option>${students.map((s, i) => `<option value="${i}">${esc(s.name)}${s.cls ? " · " + esc(s.cls) : ""}</option>`).join("")}</select></label><label id="sPinL" hidden>Your PIN<input id="sPin" inputmode="numeric" autocomplete="off"></label>`;
+          document.getElementById("sName").onchange = e => { const s = students[+e.target.value]; document.getElementById("sPinL").hidden = !(s && s.pin); };
+          document.getElementById("sCode").readOnly = true; btn.textContent = "Sign in";
+        } else {
+          const s = students[+document.getElementById("sName").value];
+          if (!s) throw new Error("Pick your name first.");
+          const pin = s.pin ? document.getElementById("sPin").value.trim() : "";
+          await sheetCall({ action: "signin", code, name: s.name, pin });
+          STUDENT = { name: s.name, cls: s.cls, code, pin }; LS.set("rfs.student", STUDENT);
+          renderSignBtn(); renderTask(); hide("mSign"); log(`Signed in as ${s.name}.`);
+          flushQueue();
+        }
+      } catch (e) { err(e.message === "Failed to fetch" ? "Couldn't reach the score sheet. Check your internet, or ask your teacher." : e.message); }
+      btn.disabled = false;
+    };
+  }
+  show("mSign");
+}
+// send a Check my work result; if it fails, keep it and try again later
+async function reportScore(level, r) {
+  if (!sheetUrl()) return;
+  if (!STUDENT) { CHECK_RESULT.saved = "Sign in to send your scores to your teacher."; renderTask(); return; }
+  const lv = LEVELS.find(l => l.id === level);
+  const item = { action: "score", code: STUDENT.code, name: STUDENT.name, pin: STUDENT.pin, level: lv ? lv.name : level, score: r.score, said: r.said, hint: r.hint, program: projectJSON(), at: Date.now() };
+  CHECK_RESULT.saved = "Saving your score…"; renderTask();
+  try { await sheetCall(item); CHECK_RESULT.saved = "✓ Score sent to your teacher."; flushQueue(); }
+  catch (e) {
+    if (/roster|PIN|class code/i.test(e.message)) { CHECK_RESULT.saved = "Not saved: " + e.message + " Sign out and sign in again."; }
+    else { const q = LS.get("rfs.queue", []); q.push(item); LS.set("rfs.queue", q.slice(-30)); CHECK_RESULT.saved = "Couldn't reach the score sheet. Your score will be sent next time."; }
+  }
+  if (CHECK_RESULT && CHECK_RESULT.level === level) renderTask();
+}
+async function flushQueue() {
+  const q = LS.get("rfs.queue", []); if (!q.length || !STUDENT) return;
+  const left = [];
+  for (const item of q) { if (item.name !== STUDENT.name) { left.push(item); continue; } try { await sheetCall(item); } catch (e) { left.push(item); } }
+  LS.set("rfs.queue", left);
+}
+document.getElementById("btnSign").onclick = openSignIn;
+const SHEET_SCRIPT = "// Robot Field Sim score sheet\n// Paste this into Extensions > Apps Script in a Google Sheet, run \"setup\" once,\n// then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).\n\nvar LEVEL_NAMES = [\"1. Go till touch\", \"2. Wait for touch\", \"3. Go till distance\", \"4. Stay away\", \"5. Color detection\",\n  \"6. Line tracing (oval)\", \"7. Line tracing (tricky)\", \"8. Color maze (easy)\", \"9. Color maze (medium)\", \"10. Color maze (counting)\",\n  \"11. Remote control\", \"12. Remote control 2\", \"13. Color remote control\", \"14. Color remote control 2\",\n  \"15. Pincher: move the cube\", \"16. Clawbot: up on the platform\", \"17. Sort the cubes\"];\n\nfunction setup() {\n  var ss = SpreadsheetApp.getActive();\n  var roster = ensureSheet_(ss, \"Roster\", [[\"Name\", \"Class\", \"PIN (optional)\"]]);\n  roster.setColumnWidth(1, 200);\n  ensureSheet_(ss, \"Attempts\", [[\"Time\", \"Name\", \"Class\", \"Level\", \"Score\", \"What happened\", \"Hint\", \"Program\"]]);\n  var best = ensureSheet_(ss, \"Best scores\", [[\"Name\", \"Class\"].concat(LEVEL_NAMES)]);\n  best.setColumnWidth(1, 200);\n  var range = best.getRange(2, 3, 500, LEVEL_NAMES.length);\n  best.setConditionalFormatRules([\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(4).setBackground(\"#c8ecd4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(3).setBackground(\"#eef3c4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(3).setBackground(\"#fbdcc8\").setRanges([range]).build()]);\n  var settings = ensureSheet_(ss, \"Settings\", [[\"Class code\", String(1000 + Math.floor(Math.random() * 9000))],\n    [\"\", \"Students type this code to sign in. Change it any time.\"]]);\n  settings.setColumnWidth(1, 120);\n  var extra = ss.getSheetByName(\"Sheet1\");\n  if (extra && extra.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(extra);\n}\n\nfunction ensureSheet_(ss, name, rows) {\n  var sh = ss.getSheetByName(name);\n  if (!sh) {\n    sh = ss.insertSheet(name);\n    sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);\n    sh.setFrozenRows(1);\n    sh.getRange(1, 1, 1, rows[0].length).setFontWeight(\"bold\");\n  }\n  return sh;\n}\n\nfunction sheet_(name) { return SpreadsheetApp.getActive().getSheetByName(name); }\nfunction classCode_() { return String(sheet_(\"Settings\").getRange(\"B1\").getValue()).trim(); }\nfunction roster_() {\n  return sheet_(\"Roster\").getDataRange().getValues().slice(1)\n    .filter(function (r) { return String(r[0]).trim() !== \"\"; })\n    .map(function (r) { return { name: String(r[0]).trim(), cls: String(r[1] || \"\").trim(), pin: String(r[2] || \"\").trim() }; });\n}\nfunction out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }\n\n// GET ?action=roster&code=1234 -> the names students pick from\nfunction doGet(e) {\n  var p = (e && e.parameter) || {};\n  if (String(p.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  if (p.action === \"roster\") return out_({ ok: true, students: roster_().map(function (s) { return { name: s.name, cls: s.cls, pin: s.pin !== \"\" }; }) });\n  return out_({ ok: false, error: \"Unknown request.\" });\n}\n\n// POST {action: \"signin\" | \"score\", code, name, pin, level, score, said, hint, program}\nfunction doPost(e) {\n  var d;\n  try { d = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: \"Bad request.\" }); }\n  if (String(d.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  var st = roster_().filter(function (s) { return s.name === d.name; })[0];\n  if (!st) return out_({ ok: false, error: \"That name isn't on the roster.\" });\n  if (st.pin !== \"\" && st.pin !== String(d.pin || \"\").trim()) return out_({ ok: false, error: \"That PIN isn't right.\" });\n  if (d.action === \"signin\") return out_({ ok: true, name: st.name, cls: st.cls });\n  if (d.action !== \"score\") return out_({ ok: false, error: \"Unknown request.\" });\n  var score = Math.max(0, Math.min(4, Math.round(Number(d.score) || 0)));\n  var level = String(d.level || \"\").slice(0, 80);\n  var lock = LockService.getScriptLock();\n  lock.waitLock(10000);\n  try {\n    sheet_(\"Attempts\").appendRow([new Date(), st.name, st.cls, level, score, String(d.said || \"\").slice(0, 500), String(d.hint || \"\").slice(0, 500), String(d.program || \"\").slice(0, 45000)]);\n    updateBest_(st, level, score);\n  } finally { lock.releaseLock(); }\n  return out_({ ok: true });\n}\n\nfunction updateBest_(st, level, score) {\n  var sh = sheet_(\"Best scores\"), data = sh.getDataRange().getValues();\n  var col = data[0].indexOf(level);\n  if (col < 0) { col = data[0].length; sh.getRange(1, col + 1).setValue(level); }\n  var row = -1;\n  for (var i = 1; i < data.length; i++) if (data[i][0] === st.name) { row = i; break; }\n  if (row < 0) { row = data.length; sh.getRange(row + 1, 1, 1, 2).setValues([[st.name, st.cls]]); }\n  var cell = sh.getRange(row + 1, col + 1), cur = cell.getValue();\n  if (cur === \"\" || score > Number(cur)) cell.setValue(score);\n}\n";
+
+/* =====================================================================
+   Check my work: runs the student's program in a test (fast, with scripted
+   bumper presses or wall moves where the level needs them) and scores it 0-4
+   with a hint. Each check returns { score, said, hint }.
+   ===================================================================== */
+var CHECKING = false, FORCE_COLORS = null;   // var: newWorld() runs before this part of the file
+const sumTo = (a, b) => Math.hypot(a, b);
+function frontAhead() { const p = toWorld(W.x, W.y, W.rot, S.robotL / 2 + 1, 0); return castRay(p.x, p.y, W.rot); }
+function downColor() { return devOf("color").find(d => d.facing === "down" && plugged(d, "color")); }
+function nearestOnLine(pts, x, y) {   // distance to a polyline and how far along it (mm) the closest point is
+  let best = { d: Infinity, s: 0 }, acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [x1, y1] = pts[i - 1], [x2, y2] = pts[i], dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1, L = Math.sqrt(L2);
+    const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L2)), d = Math.hypot(x - x1 - t * dx, y - y1 - t * dy);
+    if (d < best.d) best = { d, s: acc + t * L };
+    acc += L;
+  }
+  best.total = acc; return best;
+}
+// one test run: start the program, feed scripted events, step fast, and collect what happened
+async function testRun({ secs, setup, events = [], each, settle = 0, full = false }) {
+  stopProgram(false); newWorld(); if (setup) setup();
+  startProgram();
+  const st = { x0: W.x, y0: W.y, r0: W.rot, moved: 0, bumps: 0, wasBlocked: false, grabbed: false, maxHeldZ: 0, prints: [], lastMoveT: 0, ended: false, noProgram: !RUN };
+  if (!RUN) return st;
+  W.prints = st.prints;
+  const evs = events.slice().sort((a, b) => a.t - b.t);
+  let n = 0, endAt = Infinity;
+  while (W.t < secs && W.t < endAt) {
+    while (evs.length && W.t >= evs[0].t) evs.shift().fn();
+    const px = W.x, py = W.y, pr = W.rot;
+    const alive = RUN ? tickScripts() : false;
+    physicsStep();
+    if (!alive && RUN) { RUN = null; st.ended = true; st.endT = W.t; if (!full) endAt = W.t + settle; }
+    if (Math.hypot(W.x - px, W.y - py) > 0.3 || Math.abs(W.rot - pr) > 0.15) st.lastMoveT = W.t;
+    st.moved = Math.max(st.moved, Math.hypot(W.x - st.x0, W.y - st.y0), Math.abs(W.rot - st.r0) * 2);
+    if (W.blocked && !st.wasBlocked) st.bumps++;
+    st.wasBlocked = W.blocked;
+    const h = heldCube(); if (h) { st.grabbed = true; st.maxHeldZ = Math.max(st.maxHeldZ, h.z); }
+    if (each) each(st);
+    if (++n % 400 === 0) { draw(); await new Promise(r => setTimeout(r, 0)); if (!CHECKING) break; }
+  }
+  st.still = W.t - st.lastMoveT >= 0.8 || st.ended;
+  stopProgram(false);
+  return st;
+}
+const result = (score, said, hint) => ({ score, said, hint: score < 4 ? hint : "" });
+const nothing = st => st.noProgram ? result(0, "No program ran.", 'Put your blocks under "when started".')
+  : result(0, "The robot did not move.", "Check your Devices setup and that your drive blocks are under \"when started\".");
+
+const CHECKS = {
+  touch: async () => {
+    let touchT = null, push = 0;
+    const st = await testRun({ secs: 20, each: s => {
+      const front = devOf("bumper").some(b => (b.mount || "front") === "front" && bumperPressed(b));
+      if ((front || W.blocked) && touchT === null) touchT = W.t;
+      if (touchT !== null && W.blocked && Math.abs(W.lastWL) + Math.abs(W.lastWR) > 0.01) push += DT;
+    } });
+    if (st.moved < 20) return nothing(st);
+    if (touchT === null) return result(2, "The robot stopped before it reached the wall.", 'Drive forward and use "wait until Bumper pressed?" before you stop, so the robot keeps going until it touches.');
+    if (push > 0.5) return result(3, `The robot touched the wall but kept pushing for ${push.toFixed(1)} s.`, 'Stop driving right after the Bumper is pressed: "drive forward", "wait until Bumper pressed?", then "stop driving".');
+    return result(4, "The robot drove to the wall and stopped when the Bumper touched it.");
+  },
+  waittouch: async () => {
+    let early = 0, pressPos = null;
+    const press = on => () => devOf("bumper").forEach(b => W.bumps[b.name] = on);
+    const st = await testRun({ secs: 12, full: true, events: [{ t: 2, fn: () => { press(true)(); pressPos = [W.x, W.y]; } }, { t: 2.5, fn: press(false) }],
+      each: s => { if (W.t < 2) early = Math.max(early, Math.hypot(W.x - s.x0, W.y - s.y0)); } });
+    if (!devOf("bumper").length) return result(st.moved > 20 ? 1 : 0, "There is no Bumper in Devices.", "Add a Bumper in Devices, then wait for it to be pressed before driving.");
+    if (st.moved < 20) return nothing(st);
+    if (early > 20) return result(2, "The robot started driving before the Bumper was pressed.", 'Put "wait until Bumper pressed?" before your drive blocks.');
+    const dist = Math.hypot(W.x - pressPos[0], W.y - pressPos[1]);
+    if (Math.abs(dist - 500) <= 50 && st.still) return result(4, `The robot waited, then drove ${dist.toFixed(0)} mm.`);
+    return result(3, `The robot waited, then drove ${dist.toFixed(0)} mm instead of 500 mm.`, 'Use "drive forward for 500 mm" after the wait.');
+  },
+  distance: async () => {
+    const st = await testRun({ secs: 20 });
+    if (st.moved < 20) return nothing(st);
+    const d = frontAhead();
+    if (!st.still) return result(2, "The robot never stopped.", 'Stop driving when the Distance sensor reads 200 mm or less: "wait until Distance found an object and distance < 200".');
+    if (Math.abs(d - 200) <= 30) return result(4, `The robot stopped ${d.toFixed(0)} mm from the wall.`);
+    if (Math.abs(d - 200) <= 75) return result(3, `The robot stopped ${d.toFixed(0)} mm from the wall. The goal is 200 mm.`, "Close! Try a slower drive velocity so the robot doesn't roll past, or check the number in your comparison.");
+    return result(2, `The robot stopped ${d.toFixed(0)} mm from the wall. The goal is 200 mm.`, "Compare the Distance sensor reading with 200 in a wait-until or if block, and stop driving when it is close enough.");
+  },
+  stayaway: async () => {
+    const lv = lvl(), base = copyWalls(lv.walls), at = y => () => { WALLS[0] = { ...WALLS[0], y1: y, y2: y }; };
+    const readings = [];
+    const st = await testRun({ secs: 15, full: true, setup: () => { WALLS = copyWalls(base); },
+      events: [{ t: 4.9, fn: () => readings.push(frontAhead()) }, { t: 5, fn: at(150) }, { t: 9.9, fn: () => readings.push(frontAhead()) }, { t: 10, fn: at(700) }, { t: 14.9, fn: () => readings.push(frontAhead()) }] });
+    WALLS = copyWalls(base); newWorld();
+    if (st.moved < 20) return nothing(st);
+    const ok = readings.filter(d => Math.abs(d - 300) <= 60).length;
+    const said = `The test moved the wall twice. The robot ended ${readings.map(d => d.toFixed(0) + " mm").join(", ")} away (goal 300 mm).`;
+    if (ok === 3) return result(4, said);
+    return result(ok + 1, said, readings[1] < 240 ? "When the wall comes closer, the robot needs to back up. Use an if/else inside a forever loop: too close means drive reverse, too far means drive forward." : "Keep checking the distance in a forever loop so the robot reacts every time the wall moves.");
+  },
+  color: async () => {
+    const crossed = new Set();
+    const st = await testRun({ secs: 30, each: () => { const c = downColor(); if (!c) return; const p = mountWorld(c), f = floorAt(p.x, p.y); if (f !== "white" && f !== "black") crossed.add(f); } });
+    if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+    if (st.moved < 20) return nothing(st);
+    const said = new Set(st.prints.map(p => String(p).toLowerCase().trim()));
+    const right = [...crossed].filter(c => said.has(c)).length, c = downColor(), p = mountWorld(c), on = floorReading(p.x, p.y).name;
+    if (right >= Math.min(3, crossed.size) && crossed.size >= 2 || st.still && on !== "white" && on !== "none" && st.ended) return result(4, right ? `The robot printed ${right} of the colors it drove over.` : `The robot stopped on the ${on} tile.`);
+    if (right >= 1) return result(3, `The robot printed ${right} of the ${crossed.size} colors it drove over.`, "Check the color in a loop as the robot drives, and print it each time it changes.");
+    if (crossed.size) return result(2, "The robot drove over the tiles but didn't print or stop on a color.", 'Use "Color detects ___?" in an if block to print the color or stop on it.');
+    return result(1, "The robot didn't reach the tiles.", "Drive forward over the colored tiles while checking the Color sensor.");
+  },
+  line: () => lineCheck(false),
+  line2: () => lineCheck(true),
+  maze: () => mazeCheck(MAZE_PATH), maze2: () => mazeCheck(MAZE2_PATH), maze3: () => mazeCheck(MAZE3_PATH),
+  rc1: () => remoteCheck(false, false), rc2: () => remoteCheck(true, false), crc1: () => remoteCheck(false, true), crc2: () => remoteCheck(true, true),
+  pincher: async () => {
+    const st = await testRun({ secs: 60, settle: 1 });
+    if (!hasPart("claw")) return result(st.moved > 20 ? 1 : 0, "This robot has no claw.", "Use Robot builds in Devices to start from a Pincher bot.");
+    if (st.moved < 20) return nothing(st);
+    const c = W.cubes[0], tile = lvl().floor[0].rect, near = Math.hypot(c.x - (tile[0] + tile[2] / 2), c.y - (tile[1] + tile[3] / 2)) < 200;
+    if (cubeOnTile(c)) return result(4, "The cube is on the red square and the claw let go.");
+    if (c.held && floorAt(c.x, c.y) === c.color) return result(3, "The cube reached the red square but the claw never let go.", "Open the claw at the end and back away.");
+    if (near) return result(3, "The cube ended near the red square but not on it.", "Measure the drive and turn again, or drive a little farther before you open the claw.");
+    if (st.grabbed) return result(2, "The robot grabbed the cube but didn't get it to the square.", "After closing the claw, turn toward the red square and drive to it.");
+    return result(1, "The robot never grabbed the cube.", "Open the claw first, drive until the cube is between the fingers, then close it.");
+  },
+  lift: async () => {
+    const st = await testRun({ secs: 60, settle: 1 });
+    if (!hasPart("arm") || !hasPart("claw")) return result(st.moved > 20 ? 1 : 0, "This robot has no arm or no claw.", "Use Robot builds in Devices to start from a Clawbot.");
+    if (st.moved < 20) return nothing(st);
+    const c = W.cubes[0];
+    if (!c.held && c.z >= 150) return result(4, "The cube is on top of the platform.");
+    if (st.maxHeldZ >= 150) return result(3, "The robot lifted the cube high enough but didn't set it on the platform.", "Drive up to the platform with the arm raised, then open the claw.");
+    if (st.grabbed) return result(2, "The robot grabbed the cube but didn't lift it high enough.", "Spin ArmMotor forward about 225 degrees (the arm goes up about 45 degrees) before driving to the platform.");
+    return result(1, "The robot never grabbed the cube.", "Keep the arm down, open the claw, drive up to the cube, then close the claw.");
+  },
+  sort: async () => {
+    let right = 0, grabbed = false, moved = 0, firstOnly = null;
+    for (const order of [["red", "blue"], ["blue", "red"]]) {
+      FORCE_COLORS = order;
+      const st = await testRun({ secs: 90, settle: 1 });
+      FORCE_COLORS = null;
+      const n = W.cubes.filter(cubeOnTile).length; right += n; grabbed = grabbed || st.grabbed; moved = Math.max(moved, st.moved);
+      if (n === 2 && firstOnly === null) firstOnly = order[0]; else if (n === 2) firstOnly = false;
+      if (st.noProgram) return nothing(st);
+    }
+    newWorld();
+    if (moved < 20) return result(0, "The robot did not move.", 'Put your blocks under "when started".');
+    const said = `The test ran twice with the colors swapped. ${right} of 4 cubes ended on the right square.`;
+    if (right === 4) return result(4, said);
+    if (right === 3) return result(3, said, "Almost! Watch which cube ends up wrong and check the color reading for it.");
+    if (right === 2 && firstOnly) return result(2, said, "It only works for one color order. Read the cube with the Color sensor and decide where to take it, instead of always going the same way.");
+    if (right >= 1) return result(2, said, "Check each cube's color with the Color sensor facing forward, then carry it to the square of that color.");
+    return result(grabbed ? 1 : moved > 20 ? 1 : 0, said, "Start with one cube: grab it, read its color, and take it to the matching square.");
+  },
+};
+async function lineCheck(tricky) {
+  const line = lvl().floor[0].line, bins = new Set();
+  let on = 0, n = 0, total = 1;
+  const st = await testRun({ secs: tricky ? 150 : 90, settle: 1, each: () => {
+    const c = downColor(); if (!c) return;
+    const p = mountWorld(c), r = nearestOnLine(line, p.x, p.y); total = r.total; n++;
+    if (r.d < 40) { on++; bins.add(Math.min(49, Math.floor(r.s / r.total * 50))); }
+  } });
+  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (st.moved < 20) return nothing(st);
+  const cov = bins.size / 50, pct = Math.round(cov * 100);
+  const g = lvl().floor[1] && lvl().floor[1].rect, c = downColor(), p = mountWorld(c);
+  const finished = tricky && st.still && floorReading(p.x, p.y).name === "green";   // what the sensor itself sees
+  const hint = "Follow one edge of the line: when the sensor sees dark, turn one way; when it sees bright, turn the other way. Go slower if the robot loses the line on curves.";
+  if (tricky) {
+    if (finished && cov >= 0.8) return result(4, `The robot followed ${pct}% of the line and stopped on green.`);
+    if (finished || cov >= 0.7) return result(3, finished ? "The robot stopped on green but skipped parts of the line." : `The robot followed ${pct}% of the line but didn't stop on green.`, finished ? hint : 'Use "repeat until Color detects green" around your line following, then stop.');
+    return result(cov >= 0.3 ? 2 : 1, `The robot followed ${pct}% of the line.`, hint);
+  }
+  if (cov >= 0.95) return result(4, "The robot followed the whole oval.");
+  return result(cov >= 0.6 ? 3 : cov >= 0.25 ? 2 : 1, `The robot followed ${pct}% of the oval.`, hint);
+}
+async function mazeCheck(path) {
+  const corners = path.slice(1, -1); let reached = 0;
+  const st = await testRun({ secs: 150, settle: 1, each: () => { if (reached < corners.length && Math.hypot(W.x - corners[reached][0], W.y - corners[reached][1]) < 150) reached++; } });
+  if (st.moved < 20) return nothing(st);
+  const fin = FLOOR.find(f => f.color === "yellow").rect, inFin = (x, y) => x >= fin[0] - 60 && x <= fin[0] + fin[2] + 60 && y >= fin[1] - 60 && y <= fin[1] + fin[3] + 60;
+  const fr = toWorld(W.x, W.y, W.rot, S.robotL / 2, 0), done = reached === corners.length && (inFin(W.x, W.y) || inFin(fr.x, fr.y));
+  if (done && st.still && st.bumps <= 2) return result(4, "The robot made it through the maze and stopped on yellow.");
+  if (done) return result(3, st.still ? `The robot finished but bumped the walls ${st.bumps} times.` : "The robot reached yellow but didn't stop.", st.still ? "Drive about 190 mm onto each tile before turning so the robot turns in the middle of the corridor." : "When the Color sensor sees yellow, stop driving and stop the project.");
+  const said = `The robot got through ${reached} of ${corners.length} turns.`;
+  if (reached * 2 >= corners.length) return result(2, said, lvl().id === "maze3" ? "Count each tile with a variable. After the 3rd tile, swap what green and blue mean." : "Check each color: green = turn left, blue = turn right. Then drive off the tile before checking again.");
+  return result(1, said, "Drive forward until the Color sensor sees a tile, then turn the way that color means.");
+}
+async function remoteCheck(back, leds) {
+  const bumpers = devOf("bumper"), need = back ? 3 : 2;
+  if (bumpers.length < need) return result(0, `This level needs ${need} Bumpers in Devices.`, `Add ${need} Bumpers in Devices.`);
+  if (leds && devOf("touchled").length < 2) return result(0, "This level needs 2 Touch LEDs in Devices.", "Add 2 Touch LEDs, one for each motor.");
+  const cases = [[[], "stop"], [["L"], "left"], [["R"], "right"], [["L", "R"], "forward"], [[], "stop"]];
+  if (back) cases.push([["B"], "back"], [["B", "L"], "backturn"], [["B", "R"], "backturn"], [[], "stop"]);
+  const perms = arr => arr.length <= 1 ? [arr] : arr.flatMap((x, i) => perms([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [x, ...p]));
+  const names = bumpers.map(b => b.name), ledNames = devOf("touchled").map(l => l.name);
+  let best = { pass: -1 }, movedAny = 0;
+  for (const order of perms(names).filter((p, i, a) => a.findIndex(q => q.slice(0, need).join() === p.slice(0, need).join()) === i)) {
+    const role = { L: order[0], R: order[1], B: order[2] };
+    const events = [], meas = [];
+    cases.forEach(([keys, want], i) => {
+      const t0 = i * 1.5;
+      events.push({ t: t0, fn: () => { names.forEach(n => W.bumps[n] = false); keys.forEach(k => W.bumps[role[k]] = true); } });
+      events.push({ t: t0 + 0.5, fn: () => { meas[i] = { x: W.x, y: W.y, rot: W.rot, wl: 0, wr: 0 }; } });
+      events.push({ t: t0 + 1.49, fn: () => { const m = meas[i]; m.fd = (W.x - m.x) * Math.sin(m.rot * DEG) + (W.y - m.y) * Math.cos(m.rot * DEG); m.dr = W.rot - m.rot; m.led = ledNames.map(n => W.leds[n] && W.leds[n].color); } });
+    });
+    const st = await testRun({ secs: cases.length * 1.5 + 0.2, full: true, events, each: () => { meas.forEach(m => { if (m && m.fd === undefined) { m.wl += W.lastWL; m.wr += W.lastWR; } }); } });
+    if (st.noProgram) return nothing(st);
+    movedAny = Math.max(movedAny, st.moved);
+    const ledOk = m => {
+      if (!leds) return true;
+      const want = w => w > 2 ? "green" : w < -2 ? "yellow" : "red", wl = want(m.wl), wr = want(m.wr);
+      if (!back && (wl === "yellow" || wr === "yellow")) return m.led.includes(wl) && m.led.includes(wr);   // level 1 only checks green and red
+      return m.led[0] === wl && m.led[1] === wr || m.led[1] === wl && m.led[0] === wr;
+    };
+    const moveOk = (m, want) => want === "stop" ? Math.abs(m.fd) < 15 && Math.abs(m.dr) < 5
+      : want === "left" ? m.dr < -10 : want === "right" ? m.dr > 10 : want === "forward" ? m.fd > 50 && Math.abs(m.dr) < 15
+      : want === "back" ? m.fd < -50 && Math.abs(m.dr) < 15 : m.fd < -5 && Math.abs(m.dr) > 10;
+    const fails = [];
+    cases.forEach(([keys, want], i) => { const m = meas[i]; if (!m || !moveOk(m, want) || !ledOk(m)) fails.push([keys, want, m && moveOk(m, want)]); });
+    const pass = cases.length - fails.length;
+    if (pass > best.pass) best = { pass, fails };
+  }
+  if (movedAny < 20) return result(0, "The robot did not move when the Bumpers were pressed.", "Use a forever loop that checks the Bumpers over and over.");
+  const said = `The test pressed the Bumpers ${cases.length} ways. ${best.pass} of ${cases.length} did the right thing.`;
+  if (!best.fails.length) return result(4, said);
+  const f = best.fails[0], what = f[0].length ? "holding " + f[0].map(k => ({ L: "left", R: "right", B: "back" })[k]).join(" + ") : "holding nothing";
+  const hint = f[2] && leds ? `When ${what}, the motors moved right but the LED colors were wrong. Set each motor's LED: green = forward, red = stopped${back ? ", yellow = backward" : ""}.`
+    : `When ${what}, the robot should ${({ stop: "stop", left: "turn left", right: "turn right", forward: "drive forward", back: "drive backward", backturn: "back up while turning" })[f[1]]}. Check the order of your if blocks: test the combinations (both bumpers) first.`;
+  const frac = best.pass / cases.length;
+  return result(frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : 1, said, hint);
+}
+
+/* ---- the Check my work button and the score card ---- */
+const SCORES = LS.get("rfs.scores", {});   // best score per level in this browser
+async function checkWork() {
+  const fn = CHECKS[LEVEL]; if (!fn || CHECKING) return;
+  if (EDIT.on) setEdit(false);
+  stopProgram(false); clearLog();
+  CHECKING = true; renderTask();
+  let r;
+  const lvAt = LEVEL;
+  try { r = await fn(); }
+  catch (e) { console.error(e); r = result(0, "The check could not finish: " + e.message, "Try running your program first to look for errors."); }
+  finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; }
+  if (LEVEL !== lvAt) return;   // the level was changed while checking
+  const prev = SCORES[LEVEL];
+  SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now() };
+  LS.set("rfs.scores", SCORES);
+  CHECK_RESULT = { level: LEVEL, ...r };
+  renderTask(); draw();
+  if (typeof reportScore === "function") reportScore(LEVEL, r);
+}
+var CHECK_RESULT = null;
+function scoreCardHTML() {
+  if (!CHECKS[LEVEL]) return "";
+  if (CHECKING) return `<div class="score checking">Checking your program…</div>`;
+  const r = CHECK_RESULT && CHECK_RESULT.level === LEVEL ? CHECK_RESULT : null, best = SCORES[LEVEL];
+  let h = `<div class="checkrow"><button class="btn primary" type="button" id="btnCheck">Check my work</button>${best ? `<span class="best">Best: ${best.best} / 4</span>` : ""}</div>`;
+  if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${r.hint ? `<span class="hint2">Hint: ${esc(r.hint)}</span>` : ""}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}</div>`;
+  return h;
+}
+
 /* ---- level picker ---- */
 const lvlSel = document.getElementById("level");
 lvlSel.innerHTML = LEVELS.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
@@ -2423,9 +2813,11 @@ function renderTask() {
   box.hidden = !l.task;
   const task = LEVEL === "open" ? CUSTOM.task : l.task;
   box.hidden = !task;
-  if (task) box.innerHTML = `<b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><span>${esc(task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}`;
+  if (task) box.innerHTML = `<b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><span>${esc(task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${scoreCardHTML()}`;
+  const bc = document.getElementById("btnCheck"); if (bc) bc.onclick = checkWork;
 }
 function setLevel(id, quiet) {
+  CHECKING = false; CHECK_RESULT = null;
   stopProgram(false); if (EDIT.on) setEdit(false);
   LEVEL = id; LS.set("rfs.level", id);
   WALLS = copyWalls(id === "open" ? CUSTOM.walls : lvl().walls);
@@ -2437,7 +2829,7 @@ function setLevel(id, quiet) {
 lvlSel.onchange = () => setLevel(lvlSel.value);
 renderTask();
 
-updateWallButtons(); buildLeds(); buildPad();
+updateWallButtons(); buildLeds(); buildPad(); renderSignBtn();
 if (!DEVICES.length) log("Start by opening Devices and adding a Drivetrain or Motors.");
 draw();
 </script>
