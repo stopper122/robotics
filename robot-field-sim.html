@@ -138,6 +138,13 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .ready { font-size: 13px; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; }
 .ready.ok { background: #e6f5ea; color: #1d6b2f; border: 1px solid #a9dbb6; }
 .ready.bad { background: #fdecea; color: #8a1f17; border: 1px solid #f1b0aa; }
+.runs { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.run { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,.6); }
+.run.ok span { color: #1d6b2f; } .run.bad span { color: #8a1f17; }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.plan { font-size: 12.5px; margin-top: 6px; background: rgba(255,255,255,.65); border-radius: 6px; padding: 6px 8px; } .plan .pl { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; line-height: 1.5; }
+.run .btn { white-space: nowrap; flex: none; }
+#btnMoreHelp { align-self: flex-start; margin-top: 4px; }
 .score .saved { font-size: 12px; color: var(--muted); }
 .form1 { display: flex; flex-direction: column; gap: 10px; }
 .form1 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -1385,8 +1392,10 @@ function loop(ts) {
   let alive = true;
   while (RUN && RUN.acc >= DT) {
     RUN.acc -= DT;
+    if (RUN.events) while (RUN.events.length && W.t >= RUN.events[0].t) RUN.events.shift().fn();
     alive = tickScripts();
     physicsStep();
+    if (RUN.until && W.t >= RUN.until) alive = false;
     if (!alive) break;
     if (RUN.stepHit) { RUN.stepHit = false; setPaused(true); break; }
   }
@@ -1413,7 +1422,14 @@ function setPaused(p) {
   if (p) {
     const ids = [...RUN.current]; ws.highlightBlock(null); ids.forEach(id => ws.highlightBlock(id, true)); draw();
     const blk = ids.length && ws.getBlockById(ids[ids.length - 1]);
-    dbg.textContent = blk ? `Paused on "${blk.toString().slice(0, 80)}". Step runs to the next block. Resume keeps going.` : "Paused.";
+    let txt = blk ? `Paused on "${blk.toString().slice(0, 80)}". Step runs to the next block. Resume keeps going.` : "Paused.";
+    // show whether each running if/while/wait-until condition is true or false right now
+    const conds = ids.map(id => ws.getBlockById(id)).filter(b => b && b.getInput("CONDITION") && b.getInputTargetBlock("CONDITION")).map(b => {
+      const c = b.getInputTargetBlock("CONDITION"); let v; try { v = !!val(c); } catch (e) { v = null; }
+      return v === null ? "" : `"${c.toString().slice(0, 50)}" is ${v ? "TRUE" : "FALSE"} right now.`;
+    }).filter(Boolean);
+    if (conds.length) txt += " " + conds.join(" ");
+    dbg.textContent = txt;
     dbg.hidden = false;
   } else { dbg.hidden = true; RUN.last = 0; requestAnimationFrame(loop); }
 }
@@ -2359,9 +2375,9 @@ document.getElementById("fileIn").onchange = e => {
   e.target.value = "";
 };
 document.getElementById("btnNew").onclick = () => { stopProgram(); loadXml(STARTER); newWorld(); clearLog(); paintLeds(); draw(); };
-document.getElementById("btnRun").onclick = () => { if (CHECKING) return; if (EDIT.on) setEdit(false); startProgram(); };
+document.getElementById("btnRun").onclick = () => { if (CHECKING) return; if (EDIT.on) setEdit(false); undoReplay(); startProgram(); };
 document.getElementById("btnStop").onclick = () => stopProgram();
-document.getElementById("btnReset").onclick = () => { if (CHECKING) return; stopProgram(false); newWorld(); clearLog(); paintLeds(); draw(); };
+document.getElementById("btnReset").onclick = () => { if (CHECKING) return; stopProgram(false); undoReplay(); newWorld(); clearLog(); paintLeds(); draw(); };
 document.getElementById("showPath").onchange = draw;
 
 function textDialog(title, hint, text, onLoad, download) {
@@ -3136,7 +3152,10 @@ function nearestOnLine(pts, x, y) {   // distance to a polyline and how far alon
   best.total = acc; return best;
 }
 // one test run: start the program, feed scripted events, step fast, and collect what happened
-async function testRun({ secs, setup, events = [], each, settle = 0, full = false }) {
+var CHECK_RUNS = [];   // each test run of the last check, so a student can watch it again
+async function testRun({ secs, setup, events = [], each, settle = 0, full = false, label }) {
+  const rec = { label: label || "", secs, setup, events: events.slice(), forceColors: FORCE_COLORS, forceAngle: FORCE_ANGLE, ok: null, note: "" };
+  CHECK_RUNS.push(rec);
   stopProgram(false); newWorld(); if (setup) setup();
   startProgram();
   const st = { x0: W.x, y0: W.y, r0: W.rot, moved: 0, bumps: 0, wasBlocked: false, grabbed: false, maxHeldZ: 0, prints: [], lastMoveT: 0, ended: false, noProgram: !RUN };
@@ -3160,6 +3179,8 @@ async function testRun({ secs, setup, events = [], each, settle = 0, full = fals
   }
   st.still = W.t - st.lastMoveT >= 0.8 || st.ended;
   stopProgram(false);
+  rec.secs = Math.min(secs, W.t + 0.5);
+  st.rec = rec;
   return st;
 }
 const result = (score, said, hint) => ({ score, said, hint: score < 4 ? hint : "" });
@@ -3203,7 +3224,7 @@ const CHECKS = {
   stayaway: async () => {
     const lv = lvl(), base = copyWalls(lv.walls), at = y => () => { WALLS[0] = { ...WALLS[0], y1: y, y2: y }; };
     const readings = [];
-    const st = await testRun({ secs: 15, full: true, setup: () => { WALLS = copyWalls(base); },
+    const st = await testRun({ label: "The wall moves closer, then farther", secs: 15, full: true, setup: () => { WALLS = copyWalls(base); },
       events: [{ t: 4.9, fn: () => readings.push(frontAhead()) }, { t: 5, fn: at(150) }, { t: 9.9, fn: () => readings.push(frontAhead()) }, { t: 10, fn: at(700) }, { t: 14.9, fn: () => readings.push(frontAhead()) }] });
     WALLS = copyWalls(base); newWorld();
     if (st.moved < 20) return nothing(st);
@@ -3255,9 +3276,10 @@ const CHECKS = {
     let right = 0, grabbed = false, moved = 0, firstOnly = null;
     for (const order of [["red", "blue"], ["blue", "red"]]) {
       FORCE_COLORS = order;
-      const st = await testRun({ secs: 90, settle: 1 });
+      const st = await testRun({ label: `${order[0]} cube first`, secs: 90, settle: 1 });
       FORCE_COLORS = null;
-      const n = W.cubes.filter(cubeOnTile).length; right += n; grabbed = grabbed || st.grabbed; moved = Math.max(moved, st.moved);
+      const n = W.cubes.filter(cubeOnTile).length; right += n;
+      st.rec.ok = n === 2; st.rec.note = `${n} of 2 cubes on the right square`; grabbed = grabbed || st.grabbed; moved = Math.max(moved, st.moved);
       if (n === 2 && firstOnly === null) firstOnly = order[0]; else if (n === 2) firstOnly = false;
       if (st.noProgram) return nothing(st);
     }
@@ -3305,9 +3327,11 @@ async function counterCheck() {
     const ev = [], goT = 0.5 + 0.6 * n + 0.4; let early = 0;
     for (let i = 0; i < n; i++) { const t = 0.5 + 0.6 * i; ev.push({ t, fn: () => { W.bumps[bump.name] = true; } }, { t: t + 0.3, fn: () => { W.bumps[bump.name] = false; } }); }
     ev.push({ t: goT, fn: () => { W.leds[led.name].pressed = true; } }, { t: goT + 0.3, fn: () => { W.leds[led.name].pressed = false; } });
-    const st = await testRun({ secs: goT + 7, settle: 0.5, events: ev, each: s => { if (W.t < goT) early = Math.max(early, Math.hypot(W.x - s.x0, W.y - s.y0)); } });
+    const st = await testRun({ label: `Bumper pressed ${n} times`, secs: goT + 7, settle: 0.5, events: ev, each: s => { if (W.t < goT) early = Math.max(early, Math.hypot(W.x - s.x0, W.y - s.y0)); } });
     if (st.noProgram) return nothing(st);
     runs.push({ n, want: 200 * n, dist: W.y - st.y0, early });
+    const r = runs[runs.length - 1]; st.rec.ok = Math.abs(r.dist - r.want) <= 40 && early < 20;
+    st.rec.note = early > 20 ? "started driving before the Touch LED was pressed" : `drove ${r.dist.toFixed(0)} mm (goal ${r.want} mm)`;
   }
   newWorld();
   if (runs.every(r => Math.abs(r.dist) < 20 && r.early < 20)) return result(0, "The robot didn't drive after the Touch LED was pressed.", "After counting, wait until the Touch LED is pressed, then drive forward for (count × 200) mm.");
@@ -3344,15 +3368,17 @@ async function findCheck() {
   let good = 0, aimed = 0, pushed = 0, moved = 0;
   for (const a of [120, 250]) {
     FORCE_ANGLE = a;
-    const st = await testRun({ secs: 25, settle: 0.5 });
+    const st = await testRun({ label: a < 180 ? "Cube to the right" : "Cube behind, to the left", secs: 25, settle: 0.5 });
     FORCE_ANGLE = null;
     if (st.noProgram) return nothing(st);
     moved = Math.max(moved, st.moved);
     const c = W.cubes[0], shift = Math.hypot(c.x - 450 * Math.sin(a * DEG), c.y - 450 * Math.cos(a * DEG));
     const L = toLocal(c.x, c.y), gap = L.f - S.robotL / 2 - CUBE / 2, facing = L.f > 0 && Math.abs(L.r) < 60;
-    if (shift > 30) pushed++;
-    else if (facing && gap >= 0 && gap <= 120 && st.still) good++;
-    else if (facing) aimed++;
+    st.rec.ok = false;
+    if (shift > 30) { pushed++; st.rec.note = "pushed the cube"; }
+    else if (facing && gap >= 0 && gap <= 120 && st.still) { good++; st.rec.ok = true; st.rec.note = "stopped next to the cube"; }
+    else if (facing) { aimed++; st.rec.note = "turned to the cube but stopped too far away"; }
+    else st.rec.note = "didn't find the cube";
   }
   newWorld();
   if (moved < 20) return result(0, "The robot did not move.", 'Put your blocks under "when started".');
@@ -3467,7 +3493,7 @@ async function remoteCheck(back, leds) {
       events.push({ t: t0 + 0.5, fn: () => { meas[i] = { x: W.x, y: W.y, rot: W.rot, wl: 0, wr: 0 }; } });
       events.push({ t: t0 + 1.49, fn: () => { const m = meas[i]; m.fd = (W.x - m.x) * Math.sin(m.rot * DEG) + (W.y - m.y) * Math.cos(m.rot * DEG); m.dr = W.rot - m.rot; m.led = ledNames.map(n => W.leds[n] && W.leds[n].color); } });
     });
-    const st = await testRun({ secs: cases.length * 1.5 + 0.2, full: true, events, each: () => { meas.forEach(m => { if (m && m.fd === undefined) { m.wl += W.lastWL; m.wr += W.lastWR; } }); } });
+    const st = await testRun({ label: `Bumpers: ${order.slice(0, need).join(", ")}`, secs: cases.length * 1.5 + 0.2, full: true, events, each: () => { meas.forEach(m => { if (m && m.fd === undefined) { m.wl += W.lastWL; m.wr += W.lastWR; } }); } });
     if (st.noProgram) return nothing(st);
     movedAny = Math.max(movedAny, st.moved);
     const ledOk = m => {
@@ -3482,10 +3508,12 @@ async function remoteCheck(back, leds) {
     const fails = [];
     cases.forEach(([keys, want], i) => { const m = meas[i]; if (!m || !moveOk(m, want) || !ledOk(m)) fails.push([keys, want, m && moveOk(m, want)]); });
     const pass = cases.length - fails.length;
-    if (pass > best.pass) best = { pass, fails };
+    st.rec.hidden = true;
+    if (pass > best.pass) best = { pass, fails, rec: st.rec };
   }
   if (movedAny < 20) return result(0, "The robot did not move when the Bumpers were pressed.", "Use a forever loop that checks the Bumpers over and over.");
   const said = `The test pressed the Bumpers ${cases.length} ways. ${best.pass} of ${cases.length} did the right thing.`;
+  if (best.rec) { best.rec.hidden = false; best.rec.label = "Pressing the Bumpers " + cases.length + " ways"; best.rec.ok = !best.fails.length; best.rec.note = `${best.pass} of ${cases.length} right`; }
   if (!best.fails.length) return result(4, said);
   const f = best.fails[0], what = f[0].length ? "holding " + f[0].map(k => ({ L: "left", R: "right", B: "back" })[k]).join(" + ") : "holding nothing";
   const hint = f[2] && leds ? `When ${what}, the motors moved right but the LED colors were wrong. Set each motor's LED: green = forward, red = stopped${back ? ", yellow = backward" : ""}.`
@@ -3494,13 +3522,75 @@ async function remoteCheck(back, leds) {
   return result(frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : 1, said, hint);
 }
 
+/* ---- the hint ladder: 1st miss = what happened + watch the test, 2nd = the hint, 3rd+ = a step-by-step plan ---- */
+const PLANS = {
+  square: ["Repeat 4 times:", "  drive forward 600 mm", "  turn right 90 degrees"],
+  gyro: ["In Devices, set the Drivetrain's gyro to the Brain's gyro.", "Repeat 8 times (2 laps of 4 sides):", "  drive forward 600 mm", "  turn right 90 degrees", "With the gyro on, the turn blocks fix the slip for you."],
+  touch: ["Drive forward (don't use \"for\", so it keeps going).", "Wait until the Bumper is pressed.", "Stop driving."],
+  waittouch: ["Wait until the Bumper is pressed.", "Drive forward 500 mm."],
+  counter: ["Set count to 0.", "While the Touch LED is NOT pressed:", "  if the Bumper is pressed:", "    change count by 1", "    wait until the Bumper is NOT pressed", "Drive forward (count × 200) mm."],
+  distance: ["Drive forward.", "Wait until the distance is less than 200 mm.", "Stop driving.", "Too far past the line? Set a slower drive velocity first."],
+  stayaway: ["Forever:", "  if the distance is less than 280 mm: drive reverse", "  else if the distance is more than 320 mm: drive forward", "  else: stop driving"],
+  wallfollow: ["Put the Distance sensor on the right side.", "Forever (or until you reach the green tile):", "  if the distance is more than 150 mm: steer a little to the right", "  else: steer a little to the left", "Steer by giving the two wheels slightly different speeds."],
+  find: ["Turn right (don't use \"for\").", "Wait until the sensor finds an object closer than 700 mm.", "Stop, then drive forward.", "Wait until the distance is less than 50 mm.", "Stop driving."],
+  color: ["Drive forward.", "Forever: if the Color sensor sees your color, stop driving.", "Or: print the color name each time it changes."],
+  countlines: ["Set lines to 0. Drive forward.", "Repeat until lines = 3:", "  wait until the sensor sees dark", "  change lines by 1", "  wait until the sensor sees white again", "Stop driving."],
+  sumo: ["Drive forward.", "Forever:", "  if the Color sensor sees black:", "    drive reverse 150 mm", "    turn right 120 degrees", "    drive forward"],
+  line: ["Forever:", "  if the brightness is low (on the line): steer one way", "  else (off the line): steer the other way", "Use a slow speed so it doesn't lose the line."],
+  line2: ["Same as the oval, but slower.", "Turn harder: make the inside wheel go backward a little on each correction.", "Stop when the Color sensor sees green."],
+  maze: ["Drive forward.", "Forever:", "  if green: drive 190 mm, turn left 90, drive off the tile", "  if blue: drive 190 mm, turn right 90, drive off the tile", "  if yellow: stop and end the program"],
+  myblocks: ["Make a My Block \"step\": forward 400, turn right 90, forward 400, turn left 90.", "Use step 3 times.", "Drive forward 400 mm."],
+  maze2: ["Use your maze program. If it misses a turn, check the 190 mm number and drive off each tile before checking again."],
+  maze3: ["Set tiles to 0.", "On each green or blue tile, change tiles by 1.", "If tiles is 3 or less: green = left, blue = right.", "Else: green = right, blue = left.", "Yellow = stop."],
+  rc1: ["Forever:", "  if left AND right are pressed: drive forward", "  else if left is pressed: turn left", "  else if right is pressed: turn right", "  else: stop driving", "Check \"both\" first, or the single checks win."],
+  rc2: ["Forever:", "  if back AND left: back up turning left", "  else if back AND right: back up turning right", "  else if back: drive reverse", "  then the four checks from Remote control 1"],
+  crc1: ["Same if blocks as Remote control 1, with the two Motors.", "Inside each one, also set each motor's Touch LED: green if that motor spins forward, red if it is stopped."],
+  crc2: ["Same if blocks as Remote control 2.", "Inside each one, set each motor's LED: green = forward, red = stopped, yellow = backward."],
+  pincher: ["Open the pincher.", "Drive forward until the cube is between the fingers.", "Close the pincher.", "Drive and turn to the red square.", "Open the pincher. Drive reverse."],
+  lift: ["Lower the arm and open the claw.", "Drive to the cube and close the claw.", "Raise the arm about 45 degrees.", "Drive to the platform until the cube is over it.", "Open the claw and back away."],
+  sort: ["For each cube:", "  grab it", "  read its color with the Color sensor", "  if red: carry it to the red square, else carry it to the blue square", "  let go and come back"],
+};
+
+function runsHTML(r) {
+  if (!r.runs || !r.runs.length) return "";
+  const many = r.runs.length > 1;
+  return `<div class="runs">${r.runs.map((x, i) => `<div class="run ${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "✗"} ${esc(x.label || (many ? "Test " + (i + 1) : "The test run"))}${x.note && many ? `: ${esc(x.note)}` : ""}</span><button class="btn small" type="button" data-replay="${i}">▶ Watch</button></div>`).join("")}</div>`;
+}
+function hintHTML(r) {
+  if (!r.hint) return "";
+  const plan = PLANS[r.level], t = r.tier;
+  let h = "";
+  if (t <= 1) h += `<span class="hint2">Watch the test${r.runs && r.runs.length > 1 ? " that failed" : ""} to see what went wrong.</span>`;
+  if (t >= 2) h += `<span class="hint2">Hint: ${esc(r.hint)}</span>`;
+  if (t >= 3 && plan) h += `<div class="plan"><b>A plan you can follow:</b>${plan.map(l => `<div class="pl" style="padding-left:${(l.length - l.trimStart().length) * 9}px">${esc(l.trim())}</div>`).join("")}</div>`;
+  if (t < 2 || (t < 3 && plan)) h += `<button class="btn small" type="button" id="btnMoreHelp">${t < 2 ? "Show a hint" : "Show a plan"}</button>`;
+  return h;
+}
+/* watch a test run again: same setup and the same button presses at the same times, at normal speed */
+let REPLAY_UNDO = null;
+function undoReplay() { if (REPLAY_UNDO) { const u = REPLAY_UNDO; REPLAY_UNDO = null; u(); } }
+function replayRun(rec) {
+  if (!rec || CHECKING) return;
+  if (EDIT.on) setEdit(false);
+  undoReplay();
+  const saved = { walls: copyWalls(WALLS), cubes: CUBES.map(c => ({ ...c })) };
+  REPLAY_UNDO = () => { WALLS = saved.walls; CUBES = saved.cubes; };
+  startProgram();
+  if (!RUN) return;
+  FORCE_COLORS = rec.forceColors; FORCE_ANGLE = rec.forceAngle;
+  newWorld(); if (rec.setup) rec.setup();
+  FORCE_COLORS = null; FORCE_ANGLE = null;
+  RUN.events = rec.events.slice().sort((a, b) => a.t - b.t); RUN.until = rec.secs;
+  log(`Watching the test: ${rec.label || "the test run"}.`);
+}
+
 /* ---- the Check my work button and the score card ---- */
 const SCORES = LS.get("rfs.scores", {});   // best score per level in this browser
 async function checkWork() {
   const fn = CHECKS[LEVEL]; if (!fn || CHECKING) return;
   if (EDIT.on) setEdit(false);
   stopProgram(false); clearLog();
-  CHECKING = true; renderTask();
+  CHECKING = true; undoReplay(); CHECK_RUNS = []; renderTask();
   let r;
   const lvAt = LEVEL;
   try { r = await fn(); }
@@ -3508,10 +3598,12 @@ async function checkWork() {
   finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; FORCE_ANGLE = null; }
   if (LEVEL !== lvAt) return;   // the level was changed while checking
   const prev = SCORES[LEVEL], wasLocked = lockedIds();
-  SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now() };
+  SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now(), misses: r.score >= 4 ? 0 : (prev && prev.misses || 0) + 1 };
   LS.set("rfs.scores", SCORES);
   const opened = levelList().find(l => wasLocked.has(l.id) && !lockedIds().has(l.id));
-  CHECK_RESULT = { level: LEVEL, ...r, unlocked: opened ? opened.name : "" };
+  const runs = CHECK_RUNS.filter(x => !x.hidden);
+  if (runs.length === 1 && runs[0].ok === null) runs[0].ok = r.score >= 4;
+  CHECK_RESULT = { level: LEVEL, ...r, unlocked: opened ? opened.name : "", runs, tier: r.score >= 4 ? 0 : Math.min(3, SCORES[LEVEL].misses) };
   if (opened) fillLevels();
   renderTask(); draw();
   if (typeof reportScore === "function") reportScore(LEVEL, r);
@@ -3522,7 +3614,7 @@ function scoreCardHTML() {
   if (CHECKING) return `<div class="score checking">Checking your program…</div>`;
   const r = CHECK_RESULT && CHECK_RESULT.level === LEVEL ? CHECK_RESULT : null, best = SCORES[LEVEL];
   let h = `<div class="checkrow"><button class="btn primary" type="button" id="btnCheck">Check my work</button>${best ? `<span class="best">Best: ${best.best} / 4</span>` : ""}</div>`;
-  if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${r.hint ? `<span class="hint2">Hint: ${esc(r.hint)}</span>` : ""}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}${r.unlocked ? `<span class="unlocked">Unlocked: ${esc(r.unlocked)}. Pick it from the Level menu.</span>` : ""}</div>`;
+  if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${runsHTML(r)}${hintHTML(r)}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}${r.unlocked ? `<span class="unlocked">Unlocked: ${esc(r.unlocked)}. Pick it from the Level menu.</span>` : ""}</div>`;
   else if (S.lockOrder && CHECKS[LEVEL] && !(best && best.best >= 3)) { const nx = levelList()[levelList().findIndex(l => l.id === LEVEL) + 1]; if (nx && lockedIds().has(nx.id)) h += `<div class="lockhint">Score 3 or more to unlock the next level.</div>`; }
   return h;
 }
@@ -3561,9 +3653,11 @@ function renderTask() {
   box.hidden = !task;
   if (task) box.innerHTML = `<b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><span>${esc(task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${scoreCardHTML()}`;
   const bc = document.getElementById("btnCheck"); if (bc) bc.onclick = checkWork;
+  box.querySelectorAll("[data-replay]").forEach(b => b.onclick = () => replayRun(CHECK_RESULT.runs[+b.dataset.replay]));
+  const mh = document.getElementById("btnMoreHelp"); if (mh) mh.onclick = () => { CHECK_RESULT.tier++; renderTask(); };
 }
 function setLevel(id, quiet) {
-  CHECKING = false; CHECK_RESULT = null;
+  CHECKING = false; CHECK_RESULT = null; REPLAY_UNDO = null;
   stopProgram(false); if (EDIT.on) setEdit(false);
   LEVEL = id; LS.set("rfs.level", id);
   WALLS = copyWalls(id === "open" ? CUSTOM.walls : lvl().walls);
