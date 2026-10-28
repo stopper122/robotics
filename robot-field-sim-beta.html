@@ -629,8 +629,8 @@ for (const t of ["procedures_defnoreturn", "procedures_callnoreturn"]) {
 }
 const ws = Blockly.inject("blockly", {
   toolbox: buildToolbox(), renderer: "zelos", trashcan: false, sounds: false,
-  zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel does nothing, so code can't slide away by accident
-  move: { scrollbars: true, drag: true, wheel: false }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
+  zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel scrolls instead of zooming
+  move: { scrollbars: true, drag: true, wheel: true }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
 });
 /* zoom buttons on the workspace: bigger, smaller, and find my code */
 (function zoomBar() {
