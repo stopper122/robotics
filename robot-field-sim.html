@@ -3693,6 +3693,7 @@ async function squareCheck(laps) {
   }
   if (q.n === total) return result(3, `The robot drove ${sides} but ended ${home.toFixed(0)} mm from the start, facing ${off.toFixed(0)} degrees off.`,
     laps === 1 ? "Check that every turn is exactly 90 degrees and every side is 600 mm, and that the robot stops at the end." : gyroHint);
+  if (laps > 1 && q.n >= 4 && q.n < total && st.still && home <= 100) return result(3, "The robot drove 1 lap and stopped. This level needs 2 laps.", "Repeat 8 times instead of 4 (2 laps of 4 sides), or put your repeat 4 inside a repeat 2.");
   if (laps > 1 && q.n >= 4) return result(3, "The first lap was close, but the robot drifted off the square on the second lap.", gyroHint);
   const said = `The robot reached ${q.n} of the ${total} corners.`;
   if (q.n >= 2) return result(2, said, laps === 1 ? "Drive 600 mm, then turn 90 degrees, 4 times. A \"repeat 4\" loop around \"drive for\" and \"turn for\" does it." : gyroHint);
