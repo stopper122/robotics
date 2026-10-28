@@ -2093,12 +2093,19 @@ function iqProjectJSON() {
     sdkVersion: "20230818.11.00.00", appVersion: "4.68.0", fileFormat: "1.3.0", targetBrainGen: "Second", v5SoundsEnabled: false, downloadLanguage: "python",
     robotFieldSim: { robotConfig: DEVICES, level: LEVEL, ...(LEVEL === "open" ? { customLevel: CUSTOM } : {}) } }) };
 }
-function downloadText(name, text) {
+// in the Claude artifact viewer, files go through its downloads permission (it doesn't allow .iqblocks, so .json is added)
+async function downloadText(name, text) {
+  if (window.claude && window.claude.use) {
+    const d = await window.claude.use("downloads");
+    if (!d) return "blocked";
+    try { await d.save({ filename: name + ".json", data: text }); return "renamed"; }
+    catch (e) { return e && e.code === "declined" ? "declined" : "blocked"; }
+  }
   try {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "application/json" })); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    return true;
-  } catch (e) { return false; }
+    return "ok";
+  } catch (e) { return "blocked"; }
 }
 
 /* =====================================================================
@@ -2153,7 +2160,11 @@ document.getElementById("showPath").onchange = draw;
 
 function textDialog(title, hint, text, onLoad, download) {
   const dl = document.getElementById("xDownload"); dl.hidden = !download;
-  if (download) dl.onclick = () => { if (!downloadText(download.name, text)) document.getElementById("xErr").textContent = "Downloads are blocked here. Use Copy instead."; };
+  if (download) dl.onclick = async () => {
+    const r = await downloadText(download.name, text), msg = document.getElementById("xErr");
+    msg.textContent = r === "renamed" ? `Saved as ${download.name}.json. Rename it to ${download.name} (take off ".json") before opening it in VEXcode IQ.`
+      : r === "blocked" ? "Downloads are blocked here. Use Copy instead." : "";
+  };
   document.getElementById("xTitle").textContent = title;
   document.getElementById("xHint").textContent = hint;
   const ta = document.getElementById("xText"); ta.value = text; ta.readOnly = !onLoad;
