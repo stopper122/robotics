@@ -3795,7 +3795,7 @@ async function counterCheck() {
   const said = `The test pressed the Bumper 2 times, then 4 times. The robot drove ${runs[0].dist.toFixed(0)} mm, then ${runs[1].dist.toFixed(0)} mm. The goal is 400 mm, then 800 mm.`;
   if (ok === 2) return result(4, said);
   if (ok === 1) return result(3, said, "One count was right. Start count at 0. Add 1 for each press.");
-  if (runs.every(r => r.dist > r.want + 100)) return result(2, said, "It counted too many presses. While the Bumper is held down, the loop counts it again and again. After you add 1, wait until the Bumper is NOT pressed.");
+  if (runs.every(r => r.dist > r.want + 100)) return result(2, said + ` It counted each press more than once.`, 'It counted too many presses. While the Bumper is held down, the loop counts it again and again. After you add 1, use "wait until not Bumper pressed?". A wait for some seconds does not work, because a press can be short or long.');
   const per = runs.map(r => r.dist / r.n);
   if (per[0] > 20 && Math.abs(per[0] - per[1]) <= 0.15 * per[0]) return result(2, said + ` That is about ${per[0].toFixed(0)} mm for each press. It should be 200 mm for each press.`, "Check 2 things: count goes up by exactly 1 for each press, and the robot drives count × 200 mm.");
   if (Math.abs(runs[0].dist - runs[1].dist) < 30) return result(2, said, "The robot drove the same distance both times. Use your count: drive forward (count × 200) mm.");
