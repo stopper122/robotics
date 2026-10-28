@@ -34,8 +34,12 @@ body { background: var(--bg); color: var(--ink); font-family: var(--body); font-
 .btn.go { background: var(--go); color: #fff; border-color: var(--go); }
 .btn.stop { background: var(--stop); color: #fff; border-color: var(--stop); }
 .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 460px); }
-.main.withcode { grid-template-columns: minmax(0, 1fr) minmax(240px, 32%) minmax(320px, 420px); }
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 8px var(--sidew, 460px); }
+.main.withcode { grid-template-columns: minmax(0, 1fr) minmax(240px, 32%) 8px var(--sidew, 420px); }
+.splitter { cursor: col-resize; background: var(--line); position: relative; touch-action: none; }
+.splitter::after { content: ""; position: absolute; left: 2px; right: 2px; top: 50%; height: 44px; margin-top: -22px; border-radius: 3px; background: #9aa3b2; }
+.splitter:hover, .splitter.drag { background: #4C97FF; }
+.splitter:focus-visible { outline: 2px solid #4C97FF; outline-offset: -2px; }
 #codeview { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: #1b1f27; }
 #codeview[hidden] { display: none; }
 .codebar { display: flex; gap: 6px; padding: 6px 8px; background: #252a34; align-items: center; } .codebar .sp { flex: 1; }
@@ -43,8 +47,13 @@ body { background: var(--bg); color: var(--ink); font-family: var(--body); font-
 #codeText { margin: 0; padding: 10px 12px; overflow: auto; flex: 1; color: #e6e9ef; font: 12.5px/1.5 var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre; tab-size: 4; }
 #btnCode[aria-pressed="true"] { background: #4C97FF; color: #fff; }
 #blockly { min-height: 0; min-width: 0; position: relative; }
+.zoombar { position: absolute; top: 10px; right: 22px; z-index: 5; display: flex; gap: 6px; }
+.zoombar .zb { font: 600 18px/1 var(--body); min-width: 38px; height: 38px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: #1f2633; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.zoombar .zb.wide { font-size: 14px; }
+.zoombar .zb:hover { border-color: #4C97FF; color: #1f6fd1; }
 .side { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow: auto; min-width: 0; }
-.fieldwrap { position: relative; width: 100%; aspect-ratio: 1; max-width: 100%; }
+.fieldwrap { position: relative; width: 100%; aspect-ratio: 1; max-width: max(300px, calc(100vh - 230px)); margin: 0 auto; }
+#btnBig[aria-pressed="true"] { background: #4C97FF; color: #fff; border-color: #4C97FF; }
 #field { width: 100%; height: 100%; display: block; border-radius: 6px; background: #8a8f98; touch-action: none; }
 .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .controls .btn:disabled { opacity: .45; cursor: default; }
@@ -76,6 +85,8 @@ h2.sec { font: 600 12px var(--body); text-transform: uppercase; letter-spacing: 
 @media (max-width: 860px) {
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: 55vh auto; overflow: auto; }
   .side { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .splitter, #btnBig { display: none; }
+  .fieldwrap { max-width: 100%; }
 }
 /* dialogs */
 [hidden] { display: none !important; }
@@ -192,6 +203,7 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
   <div class="main">
     <div id="blockly"></div>
     <section id="codeview" hidden aria-label="Program as text"><div class="codebar"><button class="btn small" type="button" data-lang="py">Python</button><button class="btn small" type="button" data-lang="cpp">C++</button><span class="sp"></span><button class="btn small" type="button" id="codeCopy">Copy</button></div><pre id="codeText"></pre></section>
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Drag to make the field bigger or smaller" tabindex="0" title="Drag to make the field bigger or smaller"></div>
     <aside class="side">
       <div class="controls">
         <button class="btn go" id="btnRun" type="button">▶ Start</button>
@@ -212,6 +224,7 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
         <button class="btn" type="button" data-view="top" aria-pressed="true">Top</button>
         <button class="btn" type="button" data-view="chase" aria-pressed="false">Behind robot</button>
         <button class="btn" type="button" data-view="field3d" aria-pressed="false">3D field</button>
+        <button class="btn" type="button" id="btnBig" aria-pressed="false" title="Make the field as big as the screen allows">⤢ Bigger field</button>
       </div>
       <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas><canvas id="field3d" hidden aria-label="3D field view"></canvas></div>
       <div class="controls">
@@ -567,9 +580,23 @@ for (const t of ["procedures_defnoreturn", "procedures_callnoreturn"]) {
 }
 const ws = Blockly.inject("blockly", {
   toolbox: buildToolbox(), renderer: "zelos", trashcan: false, sounds: false,
-  zoom: { controls: false, wheel: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
+  zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel does nothing, so code can't slide away by accident
   move: { scrollbars: true, drag: true, wheel: false }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
 });
+/* zoom buttons on the workspace: bigger, smaller, and find my code */
+(function zoomBar() {
+  const bar = document.createElement("div"); bar.className = "zoombar";
+  bar.innerHTML = `<button type="button" class="zb" id="zoomIn" title="Make the blocks bigger" aria-label="Zoom in">+</button><button type="button" class="zb" id="zoomOut" title="Make the blocks smaller" aria-label="Zoom out">−</button><button type="button" class="zb wide" id="zoomFind" title="Bring all your blocks back into view">⌖ Find my code</button>`;
+  document.getElementById("blockly").appendChild(bar);
+  document.getElementById("zoomIn").onclick = () => ws.zoomCenter(1);
+  document.getElementById("zoomOut").onclick = () => ws.zoomCenter(-1);
+  document.getElementById("zoomFind").onclick = () => {
+    if (!ws.getTopBlocks(false).length) { ws.setScale(0.8); ws.scrollCenter(); return; }
+    ws.zoomToFit();
+    if (ws.scale > 1) ws.setScale(1); else if (ws.scale < 0.5) ws.setScale(0.5);
+    ws.scrollCenter();
+  };
+})();
 ws.registerToolboxCategoryCallback("MYBLOCKS", w => {
   const items = Blockly.Procedures.flyoutCategory(w).filter(x => !/procedures_(defreturn|ifreturn|callreturn)/.test(x.getAttribute ? x.getAttribute("type") || "" : ""));
   const tip = Blockly.utils.xml.createElement("label");
@@ -4133,6 +4160,40 @@ function viewBanner(info) {
     viewBanner(j);
     log(`Opened ${j.name}'s attempt from ${j.time}. ${j.said || ""}`);
   } catch (e) { log("Couldn't open that program: " + e.message, "err"); }
+})();
+
+/* ---- bigger field: drag the divider, or press Bigger field ---- */
+(function sizeSide() {
+  const main = document.querySelector(".main"), sp = document.getElementById("splitter"), big = document.getElementById("btnBig");
+  const minW = 320;
+  // never wider than the field can use (it is capped by the screen height), and always leave room for the blocks
+  const maxW = () => Math.max(minW, Math.min(window.innerWidth - 300, Math.max(300, window.innerHeight - 230) + 26));
+  let w = LS.get("rfs.sidew", 0), before = 0;
+  const apply = () => {
+    if (w) { w = Math.round(Math.min(maxW(), Math.max(minW, w))); main.style.setProperty("--sidew", w + "px"); } else main.style.removeProperty("--sidew");
+    big.setAttribute("aria-pressed", String(!!w && w >= maxW() - 4));
+    Blockly.svgResize(ws);
+  };
+  const save = () => LS.set("rfs.sidew", w);
+  sp.addEventListener("pointerdown", e => {
+    e.preventDefault(); sp.setPointerCapture(e.pointerId); sp.classList.add("drag");
+    const move = ev => { w = window.innerWidth - ev.clientX - 4; apply(); };
+    const up = () => { sp.classList.remove("drag"); sp.removeEventListener("pointermove", move); sp.removeEventListener("pointerup", up); sp.removeEventListener("pointercancel", up); save(); };
+    sp.addEventListener("pointermove", move); sp.addEventListener("pointerup", up); sp.addEventListener("pointercancel", up);
+  });
+  sp.addEventListener("keydown", e => {
+    const cur = document.querySelector(".side").getBoundingClientRect().width;
+    if (e.key === "ArrowLeft") w = cur + 40; else if (e.key === "ArrowRight") w = cur - 40; else return;
+    e.preventDefault(); apply(); save();
+  });
+  sp.addEventListener("dblclick", () => { w = 0; apply(); save(); });
+  big.onclick = () => {
+    if (big.getAttribute("aria-pressed") === "true") w = before || 0;
+    else { before = w; w = maxW(); }
+    apply(); save();
+  };
+  window.addEventListener("resize", apply);
+  apply();
 })();
 
 /* ---- level picker ---- */
