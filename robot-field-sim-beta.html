@@ -141,6 +141,13 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .lvl select { font: 600 13px var(--body); background: #2b3446; color: #fff; border: 1px solid #3b465c; border-radius: 6px; padding: 6px 8px; }
 .task { background: #eaf2fd; border: 1px solid #c4dbf7; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 .task .needs { color: var(--muted); font-size: 12px; }
+.task { font-size: 14px; line-height: 1.45; }
+.taskhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.task .goal { font-weight: 600; }
+.task ol.steps { margin: 2px 0 2px 0; padding-left: 22px; } .task ol.steps li { margin: 2px 0; }
+.task .tip { font-size: 13px; }
+.btn.speak.on { background: #ffe9a8; }
+.lbl { font-weight: 700; }
 .checkrow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
 .checkrow .best { font-size: 12px; color: var(--muted); }
 .score { margin-top: 6px; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid #c4dbf7; }
@@ -160,7 +167,7 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .run { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,.6); }
 .run.ok span { color: #1d6b2f; } .run.bad span { color: #8a1f17; }
 .btn.small { padding: 3px 8px; font-size: 12px; }
-.plan { font-size: 12.5px; margin-top: 6px; background: rgba(255,255,255,.65); border-radius: 6px; padding: 6px 8px; } .plan .pl { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; line-height: 1.5; }
+.plan { font-size: 12.5px; margin-top: 6px; background: rgba(255,255,255,.65); border-radius: 6px; padding: 6px 8px; } .plan .pl { font-size: 13px; line-height: 1.5; }
 .run .btn { white-space: nowrap; flex: none; }
 #btnMoreHelp { align-self: flex-start; margin-top: 4px; }
 .notes { margin-top: 8px; font-size: 12.5px; } .notes summary { cursor: pointer; color: var(--muted); } .notes label { display: block; margin-top: 6px; } .notes textarea { width: 100%; height: 46px; min-height: 0; resize: vertical; box-sizing: border-box; font: 13px var(--body); margin-top: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
@@ -855,6 +862,73 @@ for (const f of [...FIXES, ...EXTRAS]) { const base = LEVELS.find(l => l.id === 
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
 const lvl = () => LEVELS.find(l => l.id === LEVEL);
+/* Task text in short steps: one idea per line, everyday words (many students read below grade level).
+   goal = one sentence, steps = numbered, tip = optional help, keys = how to press things in the sim. */
+const TASK_STEPS = {
+  square: { goal: "Drive in a square. End where you started.", steps: ["Drive forward 600 mm.", "Turn right 90 degrees.", "Do steps 1 and 2 four times."], tip: 'Put the 2 blocks inside a "repeat 4" block.' },
+  hexagon: { goal: "Draw a shape with 6 sides (a hexagon).", steps: ['Start with "move pen down".', "Drive forward 300 mm.", "Turn right 60 degrees.", "Do steps 2 and 3 six times.", "End where you started."], tip: "360 ÷ 6 = 60. You can let a math block do the dividing." },
+  gyro: { goal: "Drive the square 2 times. End where you started.", steps: ["This floor is slippery, so turns come up short.", "Run your square program. Watch the robot slide off the square.", "Open Devices. Click the Drivetrain. Set the gyro to the Brain's gyro.", 'Use "repeat 8" to go around 2 times (8 sides).', "Run it again."], tip: "The gyro helps the robot turn the right amount." },
+  touch: { goal: "Drive to the wall. Stop when the Bumper touches it.", steps: ["Drive forward.", "Keep going until the Bumper is pressed.", "Stop."] },
+  waittouch: { goal: "Wait for the Bumper. Then drive 500 mm.", steps: ["The robot waits. It does not move yet.", "Someone presses the Bumper.", "The robot drives forward 500 mm."], keys: "To press the Bumper, hold the Bumper button below the field." },
+  counter: { goal: "Press the Bumper a few times. The robot drives 200 mm for each press.", steps: ["Count each Bumper press.", "When the Touch LED is pressed, stop counting.", "Drive 200 mm for each press. Example: 3 presses = 600 mm."], tip: "Make a variable called count. Add 1 for each press. Then wait until the Bumper is let go.", keys: "Hold Z to press the Bumper. Click the Touch LED below the field." },
+  fixcount: { goal: "Fix the program. The robot drives too far.", steps: ['Click "Load the broken program".', "Click Step. Press the Bumper 1 time.", "Watch the number for count. Does it go up by more than 1?", "Fix the program."], keys: "Hold Z to press the Bumper." },
+  modemenu: { goal: "Use the Touch LED like a menu button.", steps: ["At the start: robot stopped, LED red. This is mode 0.", "Press 1 time: drive forward, LED green. This is mode 1.", "Press again: turn right, LED blue. This is mode 2.", "Press again: go back to mode 0."], tip: "Keep the mode in a variable. After each press, wait until the Touch LED is let go." },
+  distance: { goal: "Drive to the wall. Stop 200 mm away (at the dashed line).", steps: ["Drive forward.", "Watch the Distance sensor.", "Stop when the distance is less than 200 mm."] },
+  fixloop: { goal: "Fix the program. The robot crashes into the wall.", steps: ['Click "Load the broken program".', "Run it. Click Pause when the robot is near the wall.", "Look at the while block. Is it TRUE or FALSE?", "Fix it so the robot stops 200 mm from the wall."] },
+  timeout: { goal: "Stop 150 mm from the wall. Never drive more than 4 seconds.", steps: ["Drive forward.", "Stop when the wall is less than 150 mm away.", "Also stop if 4 seconds go by.", "The test runs one time with no wall."], tip: '"wait until (distance < 150) or (timer > 4)"' },
+  stayaway: { goal: "Stay 300 mm away from the wall. The wall will move.", steps: ["Too close to the wall? Back up.", "Too far from the wall? Drive forward.", "Keep checking forever."], tip: "While it runs, drag the wall closer and farther to test it." },
+  garage: { goal: "Park in the garage. Do not touch anything.", steps: ["Drive forward until the far wall is 200 mm away.", "Turn left 90 degrees.", "Drive into the garage.", "Stop 100 mm from the back wall."], tip: "The robot starts in 2 different spots. Use the Distance sensor, not a set number of mm." },
+  wallfollow: { goal: "Follow the wall on your right to the green tile.", steps: ["Put the Distance sensor on the right side.", "Too far from the wall (more than 150 mm)? Steer right, toward it.", "Too close? Steer left, away from it.", "Keep doing this until you reach green.", "Do not touch the wall."], tip: 'Two Motors with "set velocity" steer smoothly.' },
+  patrol: { goal: "Drive around for 30 seconds. Do not touch any wall.", steps: ["Drive forward.", "Wall close ahead? Turn away.", "Drive forward again.", "Keep doing this forever."], tip: "Keep moving. Spinning in place does not count." },
+  find: { goal: "Find the cube. Stop next to it.", steps: ["Turn in place.", "Stop turning when the Distance sensor sees something closer than 700 mm.", "Drive forward to the cube.", "Stop about 50 mm away. Do not push it."], tip: "The cube moves every run. The walls are farther than 700 mm, so they will not fool you." },
+  fixfind: { goal: "Fix the program so it finds the cube every time.", steps: ['Click "Load the broken program".', "Click Check my work. See which test fails.", "The cube moves every run.", "Use the Distance sensor to find it. Do not use a set turn."] },
+  color: { goal: "Drive over the color tiles. Use the Color sensor.", steps: ["Drive forward over the tiles.", "Print each color you see. OR stop on the color you pick."] },
+  countlines: { goal: "Stop on the 3rd black line.", steps: ["Drive forward.", "Count each black line you cross.", "Stop on line 3."], tip: "Make a variable. When the sensor sees dark, add 1. Then wait until it sees white again." },
+  sumo: { goal: "Stay inside the black ring for 20 seconds.", steps: ["Drive forward.", "See the black edge? Back up.", "Turn.", "Drive forward again.", "Keep doing this forever."] },
+  line: { goal: "Follow the black line all the way around.", steps: ["Read the Color sensor's brightness.", "Dark? You are on the line. Turn one way.", "Bright? You are off the line. Turn the other way.", "Keep doing this forever."], tip: "Go slow." },
+  smoothline: { goal: "Follow the oval smoothly, with no wobble, in under 40 seconds.", steps: ["Use two Motors.", "Brightness 50 means you are on the edge of the line.", "Left speed = 30 + (brightness − 50) × 0.5", "Right speed = 30 − (brightness − 50) × 0.5", "Keep setting the speeds forever."], tip: "Far off the line = steer a lot. Close = steer a little. This is called proportional control." },
+  line2: { goal: "Follow the tricky line. Stop on the green tile.", steps: ["Follow the line like on the oval.", "Go slower.", "Turn harder.", "Stop when you see green."] },
+  maze: { goal: "Drive through the maze. The colors tell you where to turn.", steps: ["Green = turn left.", "Blue = turn right.", "Yellow = stop. You are done."], tip: "When you see a tile, drive 190 mm more. Turn 90 degrees. Drive off the tile before you check again." },
+  myblocks: { goal: "Climb the stairs to the yellow tile.", steps: ['Make a My Block called "step".', "Inside it: forward 400 mm, turn right 90, forward 400 mm, turn left 90.", 'Use "step" 3 times.', "Then drive forward 400 mm."], tip: "My Blocks make long programs short." },
+  maze2: { goal: "Drive through a longer maze. Same color rules.", steps: ["Green = turn left.", "Blue = turn right.", "Yellow = stop."] },
+  maze3: { goal: "Drive through the maze. The colors change after 3 tiles!", steps: ["Tiles 1, 2 and 3: green = left, blue = right.", "Tile 4 and after: green = right, blue = left.", "Yellow = stop."], tip: "Make a variable to count the tiles." },
+  rc1: { goal: "Use 2 Bumpers as a remote control.", steps: ["Hold left: turn left.", "Hold right: turn right.", "Hold both: drive forward.", "Hold none: stop."], tip: 'Use a forever loop. Check "both" first.', keys: "Hold Z and X (or the buttons below the field)." },
+  fixifs: { goal: "Fix the remote. Holding both Bumpers should drive forward.", steps: ['Click "Load the broken program".', "Hold Z and X (both Bumpers).", "Click Step. Watch which block runs last.", "Fix the program."] },
+  rc2: { goal: "Add a 3rd Bumper to drive backward.", steps: ["Hold back + left: back up turning left.", "Hold back + right: back up turning right.", "Hold back only: drive backward.", "Everything from Remote control 1 still works."], keys: "Keys: Z, X, C." },
+  crc1: { goal: "Remote control 1, with lights.", steps: ["Use 2 Motors and 2 Touch LEDs, one for each motor.", "Motor going forward: its LED is green.", "Motor stopped: its LED is red.", "The remote works like Remote control 1."], keys: "Hold Z and X." },
+  crc2: { goal: "Remote control 2, with lights.", steps: ["Motor going forward: green.", "Motor stopped: red.", "Motor going backward: yellow."], keys: "Keys: Z, X, C." },
+  pincher: { goal: "Move the cube to the red square.", steps: ["Open the pincher.", "Drive up so the cube is between the fingers.", "Close the pincher.", "Drive to the red square.", "Open the pincher. Back away."], tip: "In Devices, start from the Pincher bot build." },
+  lift: { goal: "Put the cube on top of the brown platform.", steps: ["Arm down. Open the claw.", "Drive to the cube. Close the claw.", "Raise the arm about 45 degrees.", "Drive to the platform.", "Open the claw. Back away."], tip: "In Devices, start from the Clawbot build." },
+  sort: { goal: "Put each cube on the square of its own color.", steps: ["The colors switch every run.", "Read each cube with the Color sensor (facing forward).", "Red cube: take it to red. Blue cube: take it to blue."], tip: "In Devices, start from the Sorter bot build." },
+  skills: { goal: "Score as many points as you can in 60 seconds.", steps: ["Cube in the zone of its own color: 3 points.", "Cube in the other zone: 1 point.", "Parked on green at the end: 2 points.", "The best score is 14."] },
+  driving: { goal: "Drive through the gates in order, as fast as you can.", steps: ["In Devices, add a Controller. Pick a drive mode.", "Press Start.", "Drive through the gates in order, then the finish.", "Each wall touch adds 2 seconds."], tip: "No program needed. Use the sticks on screen or a real controller." },
+};
+const SCORE_WORDS = ["Not yet.", "Good start.", "Getting closer.", "Almost there!", "You did it!"];
+
+/* read aloud (text-to-speech) */
+function speakable(t) {
+  return String(t).replace(/(\d)\s*mm\b/g, "$1 millimeters").replace(/×/g, " times ").replace(/÷/g, " divided by ").replace(/−/g, " minus ")
+    .replace(/</g, " less than ").replace(/>/g, " greater than ").replace(/=/g, " equals ").replace(/[✓✗▶🎯💡⌨️🔊]/gu, "").replace(/\s+/g, " ").trim();
+}
+let SPEAK_BTN = null;
+function readAloud(parts, btn) {
+  const sy = window.speechSynthesis;
+  if (!sy) { log("Read aloud doesn't work in this browser."); return; }
+  const was = SPEAK_BTN; sy.cancel();
+  if (was) { was.classList.remove("on"); SPEAK_BTN = null; if (was === btn) return; }
+  const u = new SpeechSynthesisUtterance(speakable(parts.filter(Boolean).join(". ").replace(/\.\s*\./g, ".")));
+  u.rate = 0.9; u.lang = "en-US";
+  u.onend = u.onerror = () => { btn.classList.remove("on"); if (SPEAK_BTN === btn) SPEAK_BTN = null; };
+  SPEAK_BTN = btn; btn.classList.add("on"); sy.speak(u);
+}
+function taskParts(l) {
+  const t = TASK_STEPS[l.id];
+  if (!t) return [l.name, LEVEL === "open" ? CUSTOM.task : l.task];
+  return [l.name, "Goal: " + t.goal, ...t.steps.map((s, i) => `Step ${i + 1}: ${s}`), t.tip && "Tip: " + t.tip, t.keys];
+}
+function taskStepsHTML(t) {
+  return `<div class="goal">🎯 ${esc(t.goal)}</div><ol class="steps">${t.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol>${t.tip ? `<div class="tip">💡 ${esc(t.tip)}</div>` : ""}${t.keys ? `<div class="tip">⌨️ ${esc(t.keys)}</div>` : ""}`;
+}
 const copyWalls = ws => (ws || []).map(w => ({ ...w }));
 function startPose() {
   return START ? { x: START[0], y: START[1], h: START[2] } : { x: S.startX, y: S.startY, h: S.startH };
@@ -3440,7 +3514,7 @@ async function testRun({ secs, setup, events = [], each, settle = 0, full = fals
 }
 const result = (score, said, hint) => ({ score, said, hint: score < 4 ? hint : "" });
 const nothing = st => st.noProgram ? result(0, "No program ran.", 'Put your blocks under "when started".')
-  : result(0, "The robot did not move.", "Check your Devices setup and that your drive blocks are under \"when started\".");
+  : result(0, "The robot did not move.", "Check Devices. Then check that your drive blocks are under \"when started\".");
 
 const CHECKS = {
   touch: async () => {
@@ -3451,8 +3525,8 @@ const CHECKS = {
       if (touchT !== null && W.blocked && Math.abs(W.lastWL) + Math.abs(W.lastWR) > 0.01) push += DT;
     } });
     if (st.moved < 20) return nothing(st);
-    if (touchT === null) return result(2, "The robot stopped before it reached the wall.", 'Drive forward and use "wait until Bumper pressed?" before you stop, so the robot keeps going until it touches.');
-    if (push > 0.5) return result(3, `The robot touched the wall but kept pushing for ${push.toFixed(1)} s.`, 'Stop driving right after the Bumper is pressed: "drive forward", "wait until Bumper pressed?", then "stop driving".');
+    if (touchT === null) return result(2, "The robot stopped before it reached the wall.", 'Drive forward. Then "wait until Bumper pressed?". Then stop.');
+    if (push > 0.5) return result(3, `The robot touched the wall but kept pushing for ${push.toFixed(1)} seconds.`, 'Stop right after the Bumper is pressed. Use "drive forward", then "wait until Bumper pressed?", then "stop driving".');
     return result(4, "The robot drove to the wall and stopped when the Bumper touched it.");
   },
   waittouch: async () => {
@@ -3460,7 +3534,7 @@ const CHECKS = {
     const press = on => () => devOf("bumper").forEach(b => W.bumps[b.name] = on);
     const st = await testRun({ secs: 12, full: true, events: [{ t: 2, fn: () => { press(true)(); pressPos = [W.x, W.y]; } }, { t: 2.5, fn: press(false) }],
       each: s => { if (W.t < 2) early = Math.max(early, Math.hypot(W.x - s.x0, W.y - s.y0)); } });
-    if (!devOf("bumper").length) return result(st.moved > 20 ? 1 : 0, "There is no Bumper in Devices.", "Add a Bumper in Devices, then wait for it to be pressed before driving.");
+    if (!devOf("bumper").length) return result(st.moved > 20 ? 1 : 0, "There is no Bumper in Devices.", "Add a Bumper in Devices. Wait for it to be pressed. Then drive.");
     if (st.moved < 20) return nothing(st);
     if (early > 20) return result(2, "The robot started driving before the Bumper was pressed.", 'Put "wait until Bumper pressed?" before your drive blocks.');
     const dist = Math.hypot(W.x - pressPos[0], W.y - pressPos[1]);
@@ -3471,10 +3545,10 @@ const CHECKS = {
     const st = await testRun({ secs: 20 });
     if (st.moved < 20) return nothing(st);
     const d = frontAhead();
-    if (!st.still) return result(2, "The robot never stopped.", 'Stop driving when the Distance sensor reads 200 mm or less: "wait until Distance found an object and distance < 200".');
+    if (!st.still) return result(2, "The robot never stopped.", 'Use "wait until" with distance < 200 mm. Then "stop driving".');
     if (Math.abs(d - 200) <= 30) return result(4, `The robot stopped ${d.toFixed(0)} mm from the wall.`);
-    if (Math.abs(d - 200) <= 75) return result(3, `The robot stopped ${d.toFixed(0)} mm from the wall. The goal is 200 mm.`, "Close! Try a slower drive velocity so the robot doesn't roll past, or check the number in your comparison.");
-    return result(2, `The robot stopped ${d.toFixed(0)} mm from the wall. The goal is 200 mm.`, "Compare the Distance sensor reading with 200 in a wait-until or if block, and stop driving when it is close enough.");
+    if (Math.abs(d - 200) <= 75) return result(3, `The robot stopped ${d.toFixed(0)} mm from the wall. The goal is 200 mm.`, "Close! Set a slower drive velocity (speed), so the robot does not roll past. Also check your number.");
+    return result(2, `The robot stopped ${d.toFixed(0)} mm from the wall. The goal is 200 mm.`, 'Use "wait until" with distance < 200 mm. Then "stop driving".');
   },
   stayaway: async () => {
     const lv = lvl(), base = copyWalls(lv.walls), at = y => () => { WALLS[0] = { ...WALLS[0], y1: y, y2: y }; };
@@ -3484,21 +3558,21 @@ const CHECKS = {
     WALLS = copyWalls(base); newWorld();
     if (st.moved < 20) return nothing(st);
     const ok = readings.filter(d => Math.abs(d - 300) <= 60).length;
-    const said = `The test moved the wall twice. The robot ended ${readings.map(d => d.toFixed(0) + " mm").join(", ")} away (goal 300 mm).`;
+    const said = `The test moved the wall 2 times. The robot ended ${readings.map(d => d.toFixed(0) + " mm").join(", ")} away. The goal is 300 mm.`;
     if (ok === 3) return result(4, said);
-    return result(ok + 1, said, readings[1] < 240 ? "When the wall comes closer, the robot needs to back up. Use an if/else inside a forever loop: too close means drive reverse, too far means drive forward." : "Keep checking the distance in a forever loop so the robot reacts every time the wall moves.");
+    return result(ok + 1, said, readings[1] < 240 ? "When the wall comes closer, back up. Use if/else inside a forever loop. Too close: drive reverse. Too far: drive forward." : "Check the distance inside a forever loop. Then the robot reacts every time the wall moves.");
   },
   color: async () => {
     const crossed = new Set();
     const st = await testRun({ secs: 30, each: () => { const c = downColor(); if (!c) return; const p = mountWorld(c), f = floorAt(p.x, p.y); if (f !== "white" && f !== "black") crossed.add(f); } });
-    if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+    if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices. Set it to point down.");
     if (st.moved < 20) return nothing(st);
     const said = new Set(st.prints.map(p => String(p).toLowerCase().trim()));
     const right = [...crossed].filter(c => said.has(c)).length, c = downColor(), p = mountWorld(c), on = floorReading(p.x, p.y).name;
     if (right >= Math.min(3, crossed.size) && crossed.size >= 2 || st.still && on !== "white" && on !== "none" && st.ended) return result(4, right ? `The robot printed ${right} of the colors it drove over.` : `The robot stopped on the ${on} tile.`);
-    if (right >= 1) return result(3, `The robot printed ${right} of the ${crossed.size} colors it drove over.`, "Check the color in a loop as the robot drives, and print it each time it changes.");
-    if (crossed.size) return result(2, "The robot drove over the tiles but didn't print or stop on a color.", 'Use "Color detects ___?" in an if block to print the color or stop on it.');
-    return result(1, "The robot didn't reach the tiles.", "Drive forward over the colored tiles while checking the Color sensor.");
+    if (right >= 1) return result(3, `The robot printed ${right} of the ${crossed.size} colors it drove over.`, "Check the color inside a loop while the robot drives. Print it each time it changes.");
+    if (crossed.size) return result(2, "The robot drove over the tiles. It did not print or stop on a color.", 'Put "Color detects ___?" in an if block. Then print the color, or stop.');
+    return result(1, "The robot didn't reach the tiles.", "Drive forward over the tiles. Check the Color sensor while you drive.");
   },
   square: () => squareCheck(1), gyro: () => squareCheck(2),
   counter: counterCheck, wallfollow: wallCheck, find: findCheck, countlines: linesCheck, sumo: sumoCheck, myblocks: stairCheck,
@@ -3513,9 +3587,9 @@ const CHECKS = {
     const c = W.cubes[0], tile = lvl().floor[0].rect, near = Math.hypot(c.x - (tile[0] + tile[2] / 2), c.y - (tile[1] + tile[3] / 2)) < 200;
     if (cubeOnTile(c)) return result(4, "The cube is on the red square and the claw let go.");
     if (c.held && floorAt(c.x, c.y) === c.color) return result(3, "The cube reached the red square but the claw never let go.", "Open the claw at the end and back away.");
-    if (near) return result(3, "The cube ended near the red square but not on it.", "Measure the drive and turn again, or drive a little farther before you open the claw.");
-    if (st.grabbed) return result(2, "The robot grabbed the cube but didn't get it to the square.", "After closing the claw, turn toward the red square and drive to it.");
-    return result(1, "The robot never grabbed the cube.", "Open the claw first, drive until the cube is between the fingers, then close it.");
+    if (near) return result(3, "The cube ended near the red square but not on it.", "Check your drive and turn numbers. Or drive a little farther before you open the claw.");
+    if (st.grabbed) return result(2, "The robot grabbed the cube but didn't get it to the square.", "After you close the claw, turn toward the red square. Drive to it.");
+    return result(1, "The robot never grabbed the cube.", "Open the claw. Drive until the cube is between the fingers. Close the claw.");
   },
   lift: async () => {
     const st = await testRun({ secs: 60, settle: 1 });
@@ -3523,9 +3597,9 @@ const CHECKS = {
     if (st.moved < 20) return nothing(st);
     const c = W.cubes[0];
     if (!c.held && c.z >= 150) return result(4, "The cube is on top of the platform.");
-    if (st.maxHeldZ >= 150) return result(3, "The robot lifted the cube high enough but didn't set it on the platform.", "Drive up to the platform with the arm raised, then open the claw.");
-    if (st.grabbed) return result(2, "The robot grabbed the cube but didn't lift it high enough.", "Spin ArmMotor forward about 225 degrees (the arm goes up about 45 degrees) before driving to the platform.");
-    return result(1, "The robot never grabbed the cube.", "Keep the arm down, open the claw, drive up to the cube, then close the claw.");
+    if (st.maxHeldZ >= 150) return result(3, "The robot lifted the cube high enough but didn't set it on the platform.", "Keep the arm up. Drive to the platform. Open the claw.");
+    if (st.grabbed) return result(2, "The robot grabbed the cube but didn't lift it high enough.", "Spin ArmMotor forward 225 degrees (the arm goes up about 45 degrees). Then drive to the platform.");
+    return result(1, "The robot never grabbed the cube.", "Arm down. Open the claw. Drive to the cube. Close the claw.");
   },
   sort: async () => {
     let right = 0, grabbed = false, moved = 0, firstOnly = null;
@@ -3542,10 +3616,10 @@ const CHECKS = {
     if (moved < 20) return result(0, "The robot did not move.", 'Put your blocks under "when started".');
     const said = `The test ran twice with the colors swapped. ${right} of 4 cubes ended on the right square.`;
     if (right === 4) return result(4, said);
-    if (right === 3) return result(3, said, "Almost! Watch which cube ends up wrong and check the color reading for it.");
-    if (right === 2 && firstOnly) return result(2, said, "It only works for one color order. Read the cube with the Color sensor and decide where to take it, instead of always going the same way.");
-    if (right >= 1) return result(2, said, "Check each cube's color with the Color sensor facing forward, then carry it to the square of that color.");
-    return result(grabbed ? 1 : moved > 20 ? 1 : 0, said, "Start with one cube: grab it, read its color, and take it to the matching square.");
+    if (right === 3) return result(3, said, "Almost! Watch which cube ends up wrong. Check the color reading for it.");
+    if (right === 2 && firstOnly) return result(2, said, "It only works when the colors are in one order. Read the cube's color first. Then pick where to take it.");
+    if (right >= 1) return result(2, said, "Read each cube with the Color sensor. Carry it to the square of that color.");
+    return result(grabbed ? 1 : moved > 20 ? 1 : 0, said, "Start with one cube. Grab it. Read its color. Take it to that color's square.");
   },
 };
 LEVELS.filter(l => l.base).forEach(l => { CHECKS[l.id] = CHECKS[l.base]; });
@@ -3577,8 +3651,8 @@ async function hexCheck() {
   const q = seqs[0].n >= seqs[1].n ? seqs[0] : seqs[1], home = Math.hypot(W.x, W.y + 400), off = turnDiff(W.rot, 0);
   const pen = W.trails.reduce((n, t) => n + t.pts.length, 0) > 20;
   if (q.n === 6 && home <= 60 && off <= 8 && st.still) return pen ? result(4, "The robot drew the hexagon and ended where it started.") : result(3, "The robot drove the hexagon, but the pen was up, so nothing was drawn.", 'Put "move pen down" at the start.');
-  if (q.n === 6) return result(3, `The robot went around but ended ${home.toFixed(0)} mm from the start, facing ${off.toFixed(0)} degrees off.`, "Each turn is 360 ÷ 6 = 60 degrees, and each side is 300 mm. Turn the gyro on for the Drivetrain so the turns are exact.");
-  return result(q.n >= 2 ? 2 : 1, `The robot reached ${q.n} of the 6 corners.`, "Repeat 6 times: drive forward 300 mm, then turn right (360 ÷ 6) degrees.");
+  if (q.n === 6) return result(3, `The robot went around but ended ${home.toFixed(0)} mm from the start, facing ${off.toFixed(0)} degrees off.`, "Each turn is 360 ÷ 6 = 60 degrees. Each side is 300 mm. Turn on the gyro for the Drivetrain.");
+  return result(q.n >= 2 ? 2 : 1, `The robot reached ${q.n} of the 6 corners.`, "Repeat 6 times: drive forward 300 mm, turn right 60 degrees.");
 }
 async function modeCheck() {
   const led = devOf("touchled")[0];
@@ -3613,9 +3687,9 @@ async function timeoutCheck() {
   b.rec.ok = okB; b.rec.note = b.moved <= 300 ? "barely moved" : `stopped after ${b.lastMoveT.toFixed(1)} s (goal: about 4 s)`;
   if (Math.max(a.moved, b.moved) < 20) return nothing(a);
   if (okA && okB) return result(4, "The robot stopped 150 mm from the wall, and stopped after 4 seconds when the wall was gone.");
-  if (okA) return result(2, `With the wall gone, the robot ${b.lastMoveT > 4.9 ? `kept going for ${b.lastMoveT.toFixed(1)} s` : `stopped after ${b.lastMoveT.toFixed(1)} s`}.`, 'Stop when the distance is less than 150 OR the timer is more than 4: "wait until (distance < 150) or (timer > 4)", then stop driving.');
-  if (okB) return result(2, `With the wall there, the robot stopped ${d.toFixed(0)} mm away instead of 150 mm.`, "Check the distance part of your condition: distance less than 150 mm.");
-  return result(1, "The robot didn't stop at 150 mm or after 4 seconds.", 'Drive forward, then "wait until (distance < 150) or (timer > 4)", then stop driving.');
+  if (okA) return result(2, `With the wall gone, the robot ${b.lastMoveT > 4.9 ? `kept going for ${b.lastMoveT.toFixed(1)} s` : `stopped after ${b.lastMoveT.toFixed(1)} s`}.`, 'Use "wait until (distance < 150) or (timer > 4)". Then stop driving.');
+  if (okB) return result(2, `With the wall there, the robot stopped ${d.toFixed(0)} mm away instead of 150 mm.`, "Check the distance part: it should be distance < 150.");
+  return result(1, "The robot didn't stop at 150 mm or after 4 seconds.", 'Drive forward. Then "wait until (distance < 150) or (timer > 4)". Then stop driving.');
 }
 async function garageCheck() {
   if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
@@ -3636,8 +3710,8 @@ async function garageCheck() {
   if (moved < 20) return nothing({});
   const said = `The test started the robot in 2 spots. It parked ${parked} of 2 times (${notes.join("; ")}).`;
   if (parked === 2) return result(4, said);
-  if (parked === 1) return result(3, said, "It only works from one start spot. Drive until the distance to the far wall is 200 mm, instead of driving a set number of mm.");
-  return result(moved > 300 ? 2 : 1, said, "Drive forward until the distance is less than 200 mm, turn left 90 degrees, then drive until the distance is less than 100 mm and stop.");
+  if (parked === 1) return result(3, said, "It only works from one start spot. Drive until the far wall is 200 mm away. Do not use a set number of mm.");
+  return result(moved > 300 ? 2 : 1, said, "Drive until the distance is less than 200 mm. Turn left 90 degrees. Drive until the distance is less than 100 mm. Stop.");
 }
 async function patrolCheck() {
   if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
@@ -3647,9 +3721,9 @@ async function patrolCheck() {
   const said = `In 30 seconds the robot drove ${(path / 1000).toFixed(1)} m and touched a wall ${st.bumps} time${st.bumps === 1 ? "" : "s"}.`;
   st.rec.note = said;
   if (!st.bumps && path >= 2500) return result(4, said);
-  if (!st.bumps) return result(3, said, "Keep moving: after turning away from a wall, drive forward again. Use a forever loop.");
-  if (st.bumps <= 1 && path >= 2500) return result(3, said, "Turn away a little earlier: check for a wall closer than about 300 mm.");
-  return result(path >= 1000 ? 2 : 1, said, "In a forever loop: if the distance is less than 300 mm, turn right; else drive forward.");
+  if (!st.bumps) return result(3, said, "Keep moving. After you turn away from a wall, drive forward again. Use a forever loop.");
+  if (st.bumps <= 1 && path >= 2500) return result(3, said, "Turn away a little earlier, when the wall is closer than 300 mm.");
+  return result(path >= 1000 ? 2 : 1, said, "In a forever loop: distance less than 300 mm? Turn right. Else drive forward.");
 }
 var WOBBLE_OK = 20;
 async function smoothCheck() {
@@ -3665,7 +3739,7 @@ async function smoothCheck() {
     if (pr !== null) { const raw = (W.rot - pr) / DT; rate += (raw - rate) * Math.min(1, DT / 0.3); jit += Math.abs(raw - rate); nj++; }
     pr = W.rot;
   } });
-  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices. Set it to point down.");
   if (st.moved < 20) return nothing(st);
   const wob = nj ? jit / nj : 99, done = lapT !== null && lapT <= 40;
   const said = done ? `The robot finished a lap in ${lapT.toFixed(0)} s. Wobble: ${wob.toFixed(0)} (smooth is under ${WOBBLE_OK}).` : `The robot followed ${Math.round(bins.size / 50 * 100)}% of the oval in 40 s.`;
@@ -3685,20 +3759,20 @@ async function squareCheck(laps) {
   const home = Math.hypot(W.x - SQ_START[0], W.y - SQ_START[1]), off = turnDiff(W.rot, SQ_START[2]);
   const hasGyro = !!gyroDevice() || devOf("gyro").length > 0;
   const gyroHint = gyroDevice()
-    ? "Turn with the gyro: use \"turn to heading\" (90, 180, 270, 0), or check the heading in a loop."
-    : "Without a gyro the turns slip and come up short. In Devices, set the Drivetrain's gyro to the Brain's built-in gyro.";
+    ? 'Use "turn to heading" with 90, then 180, then 270, then 0.'
+    : "The turns slip. Open Devices, click the Drivetrain, and set the gyro to the Brain's gyro.";
   const sides = laps === 1 ? "all 4 sides" : "both laps";
   if (q.n === total && home <= (laps > 1 ? 100 : 60) && off <= (laps > 1 ? 10 : 8) && st.still) {
-    if (laps > 1 && !hasGyro) return result(3, "The robot made it around, but without a gyro.", "Guessing a bigger turn works on this floor only. A real robot slips a different amount each time, so turn the Brain's gyro on for the Drivetrain in Devices.");
+    if (laps > 1 && !hasGyro) return result(3, "The robot made it around, but without a gyro.", "A bigger turn only works on this floor. A real robot slips a different amount each time. In Devices, turn on the Brain's gyro for the Drivetrain.");
     return result(4, laps === 1 ? "The robot drove the square and ended where it started." : "The robot drove 2 laps and ended back at the start.");
   }
-  if (q.n === total) return result(3, `The robot drove ${sides} but ended ${home.toFixed(0)} mm from the start, facing ${off.toFixed(0)} degrees off.`,
-    laps === 1 ? "Check that every turn is exactly 90 degrees and every side is 600 mm, and that the robot stops at the end." : gyroHint);
-  if (laps > 1 && q.n >= 4 && q.n < total && st.still && home <= 100) return result(3, "The robot drove 1 lap and stopped. This level needs 2 laps.", "Repeat 8 times instead of 4 (2 laps of 4 sides), or put your repeat 4 inside a repeat 2.");
-  if (laps > 1 && q.n >= 4) return result(3, "The first lap was close, but the robot drifted off the square on the second lap.", gyroHint);
+  if (q.n === total) return result(3, `The robot drove ${sides}. But it ended ${home.toFixed(0)} mm from the start, turned ${off.toFixed(0)} degrees the wrong way.`,
+    laps === 1 ? "Check that each turn is 90 degrees and each side is 600 mm." : gyroHint);
+  if (laps > 1 && q.n >= 4 && q.n < total && st.still && home <= 100) return result(3, "The robot drove 1 lap and stopped. This level needs 2 laps.", 'Change "repeat 4" to "repeat 8".');
+  if (laps > 1 && q.n >= 4) return result(3, "Lap 1 was close. On lap 2 the robot slid off the square.", gyroHint);
   const said = `The robot reached ${q.n} of the ${total} corners.`;
-  if (q.n >= 2) return result(2, said, laps === 1 ? "Drive 600 mm, then turn 90 degrees, 4 times. A \"repeat 4\" loop around \"drive for\" and \"turn for\" does it." : gyroHint);
-  return result(1, said, "Start at the corner: drive forward 600 mm, turn right 90 degrees, and repeat that 4 times.");
+  if (q.n >= 2) return result(2, said, laps === 1 ? 'Drive 600 mm. Turn 90 degrees. Put both blocks in a "repeat 4".' : gyroHint);
+  return result(1, said, "Drive forward 600 mm. Turn right 90 degrees. Do that 4 times.");
 }
 async function counterCheck() {
   const bump = devOf("bumper")[0], led = devOf("touchled")[0];
@@ -3715,15 +3789,15 @@ async function counterCheck() {
     st.rec.note = early > 20 ? "started driving before the Touch LED was pressed" : `drove ${r.dist.toFixed(0)} mm (goal ${r.want} mm)`;
   }
   newWorld();
-  if (runs.every(r => Math.abs(r.dist) < 20 && r.early < 20)) return result(0, "The robot didn't drive after the Touch LED was pressed.", "After counting, wait until the Touch LED is pressed, then drive forward for (count × 200) mm.");
-  if (runs.some(r => r.early > 20)) return result(1, "The robot started driving before the Touch LED was pressed.", "Count the presses in a loop that keeps going until the Touch LED is pressed (\"while not TouchLED pressed?\"), and drive after the loop.");
+  if (runs.every(r => Math.abs(r.dist) < 20 && r.early < 20)) return result(0, "The robot didn't drive after the Touch LED was pressed.", "After counting, wait until the Touch LED is pressed. Then drive forward (count × 200) mm.");
+  if (runs.some(r => r.early > 20)) return result(1, "The robot started driving before the Touch LED was pressed.", 'Count inside a loop: "while not TouchLED pressed?". Drive after the loop.');
   const ok = runs.filter(r => Math.abs(r.dist - r.want) <= 40).length;
-  const said = `The test pressed the Bumper 2 times, then 4 times. The robot drove ${runs[0].dist.toFixed(0)} mm and ${runs[1].dist.toFixed(0)} mm (goal 400 and 800 mm).`;
+  const said = `The test pressed the Bumper 2 times, then 4 times. The robot drove ${runs[0].dist.toFixed(0)} mm, then ${runs[1].dist.toFixed(0)} mm. The goal is 400 mm, then 800 mm.`;
   if (ok === 2) return result(4, said);
-  if (ok === 1) return result(3, said, "One count was right. Make sure the counter starts at 0 and adds exactly 1 for each press.");
-  if (runs.every(r => r.dist > r.want + 100)) return result(2, said, "The robot counted too many presses. While the Bumper is held down, the loop counts it again and again. After adding 1, wait until the Bumper is not pressed.");
-  if (Math.abs(runs[0].dist - runs[1].dist) < 30) return result(2, said, "The robot drove the same distance both times. Use your counter: drive forward for (count × 200) mm.");
-  return result(2, said, "Add 1 to a variable for each press, then drive forward for (count × 200) mm.");
+  if (ok === 1) return result(3, said, "One count was right. Start count at 0. Add 1 for each press.");
+  if (runs.every(r => r.dist > r.want + 100)) return result(2, said, "It counted too many presses. While the Bumper is held down, the loop counts it again and again. After you add 1, wait until the Bumper is NOT pressed.");
+  if (Math.abs(runs[0].dist - runs[1].dist) < 30) return result(2, said, "The robot drove the same distance both times. Use your count: drive forward (count × 200) mm.");
+  return result(2, said, "Add 1 to a variable for each press. Then drive forward (count × 200) mm.");
 }
 async function wallCheck() {
   if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor and mount it on the right side.");
@@ -3741,8 +3815,8 @@ async function wallCheck() {
   if (fin && !touches && pct >= 85) return result(4, `The robot followed the wall around the corner to the green tile and stayed close ${pct}% of the time.`);
   if (fin) return result(3, touches ? `The robot reached the green tile but touched the wall ${touches} time${touches > 1 ? "s" : ""}.` : `The robot reached the green tile but was only near the wall ${pct}% of the time.`,
     "Steer gently: when the distance is a bit too far, turn slightly toward the wall, and when it is too close, turn slightly away. Smaller corrections and a slower speed help.");
-  if (far >= 600) return result(2, "The robot followed the wall for a while but didn't make it around the corner.", "At the corner the wall turns away, so the sensor sees far. Keep steering toward the wall (to the right) until it sees the wall again.");
-  return result(1, "The robot didn't follow the wall.", "Mount the Distance sensor on the right side. In a forever loop: if the distance is more than 150 mm, steer right; otherwise steer left.");
+  if (far >= 600) return result(2, "The robot followed the wall for a while but didn't make it around the corner.", "At the corner the wall goes away, so the sensor reads far. Keep steering right until it sees the wall again.");
+  return result(1, "The robot didn't follow the wall.", "Put the Distance sensor on the right side. In a forever loop: distance more than 150 mm? Steer right. Else steer left.");
 }
 async function findCheck() {
   if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
@@ -3765,10 +3839,10 @@ async function findCheck() {
   if (moved < 20) return result(0, "The robot did not move.", 'Put your blocks under "when started".');
   const said = `The test hid the cube in 2 places. The robot found it and stopped next to it ${good} of 2 times.`;
   if (good === 2) return result(4, said);
-  if (good === 1) return result(3, said, "Make sure it works wherever the cube is: keep turning until the sensor sees something closer than 700 mm, then drive.");
-  if (pushed) return result(2, said + " It pushed the cube.", "Stop driving when the Distance sensor reads about 50 mm, so the robot doesn't bump the cube.");
-  if (aimed) return result(2, said + " It turned to the cube but stopped too far away.", "After you find the cube, drive forward until the distance is less than 50 mm, then stop.");
-  return result(1, said, "Turn (don't drive) until \"Distance found an object\" and the distance is less than 700 mm. Then drive toward it.");
+  if (good === 1) return result(3, said, "It has to work wherever the cube is. Keep turning until the sensor sees something closer than 700 mm. Then drive.");
+  if (pushed) return result(2, said + " It pushed the cube.", "Stop when the distance is about 50 mm, so you do not bump the cube.");
+  if (aimed) return result(2, said + " It turned to the cube but stopped too far away.", "After you find the cube, drive forward until the distance is less than 50 mm. Then stop.");
+  return result(1, said, "Turn in place until the distance is less than 700 mm. Then drive toward it.");
 }
 async function linesCheck() {
   let crossed = 0, onPrev = false;
@@ -3777,17 +3851,17 @@ async function linesCheck() {
     const p = mountWorld(c), on = floorAt(p.x, p.y) === "black";
     if (on && !onPrev) crossed++; onPrev = on;
   } });
-  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices. Set it to point down.");
   if (st.moved < 20) return nothing(st);
   const p = mountWorld(downColor()), idx = COUNT_LINES.findIndex(y => Math.abs(p.y - y) <= 40);
   if (!st.still) return result(1, `The robot crossed ${crossed} lines and never stopped.`, "Stop driving when your count reaches 3.");
   if (idx === 2) return result(4, "The robot stopped on the 3rd line.");
-  if (Math.abs(p.y - COUNT_LINES[2]) <= 110) return result(3, "The robot stopped close to the 3rd line but not on it.", "Stop driving as soon as you count the 3rd line, before waiting for white.");
-  if (idx >= 0) return result(2, `The robot stopped on line ${idx + 1} instead of line 3.`, idx < 2 ? "It counted a line more than once. After adding 1, wait until the sensor sees white (bright) again before checking for the next line." : "It counted too few lines. Add 1 every time the sensor goes from white to dark, and stop when the count equals 3.");
-  return result(2, `The robot stopped between lines after crossing ${crossed}.`, "Stop right when the sensor sees the 3rd line: check the count as soon as you add 1.");
+  if (Math.abs(p.y - COUNT_LINES[2]) <= 110) return result(3, "The robot stopped close to the 3rd line but not on it.", "Stop as soon as you count line 3. Do not wait for white first.");
+  if (idx >= 0) return result(2, `The robot stopped on line ${idx + 1} instead of line 3.`, idx < 2 ? "It counted a line more than once. After you add 1, wait until the sensor sees white again." : "It counted too few lines. Add 1 each time the sensor sees dark. Stop when count = 3.");
+  return result(2, `The robot stopped between lines after crossing ${crossed}.`, "Check the count right after you add 1. Stop when it is 3.");
 }
 async function sumoCheck() {
-  if (!downColor()) return result(0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (!downColor()) return result(0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices. Set it to point down.");
   let out = false, bounces = 0, onPrev = false, path = 0, px = null, py = null;
   const st = await testRun({ secs: 20, full: true, each: () => {
     if (px !== null) path += Math.hypot(W.x - px, W.y - py); px = W.x; py = W.y;
@@ -3797,11 +3871,11 @@ async function sumoCheck() {
     if (on && !onPrev && !out) bounces++; onPrev = on;
   } });
   if (st.noProgram || st.moved < 20) return nothing(st);
-  if (out) return bounces ? result(2, `The robot saw the edge ${bounces} time${bounces > 1 ? "s" : ""} but then left the ring.`, "Every time the sensor sees the dark edge, back up first and then turn. Keep checking in a forever loop.")
-    : result(1, "The robot drove out of the ring.", "Check the Color sensor while you drive: when the brightness is low (dark), back up and turn.");
-  if (path < 1000) return result(2, "The robot stayed in the ring but hardly moved around.", "Keep driving forward between edges so the robot crosses the ring.");
-  if (st.lastMoveT < 17) return result(3, "The robot stayed in the ring but stopped moving before the 20 seconds were up.", "Put your drive and edge check in a forever loop so the robot keeps going.");
-  if (bounces < 3) return result(3, `The robot stayed in the ring but only reached the edge ${bounces} time${bounces === 1 ? "" : "s"}.`, "Drive forward until you see the edge, then back up and turn. Repeat it in a forever loop.");
+  if (out) return bounces ? result(2, `The robot saw the edge ${bounces} time${bounces > 1 ? "s" : ""} but then left the ring.`, "Each time the sensor sees the dark edge: back up, then turn. Check inside a forever loop.")
+    : result(1, "The robot drove out of the ring.", "Check the Color sensor while you drive. Dark? Back up and turn.");
+  if (path < 1000) return result(2, "The robot stayed in the ring but hardly moved around.", "Drive forward between edges so the robot crosses the ring.");
+  if (st.lastMoveT < 17) return result(3, "The robot stayed in the ring but stopped moving before the 20 seconds were up.", "Put your blocks in a forever loop so the robot keeps going.");
+  if (bounces < 3) return result(3, `The robot stayed in the ring but only reached the edge ${bounces} time${bounces === 1 ? "" : "s"}.`, "Drive forward until you see the edge. Back up and turn. Put it in a forever loop.");
   return result(4, `The robot stayed in the ring for 20 seconds and turned back from the edge ${bounces} times.`);
 }
 async function stairCheck() {
@@ -3830,15 +3904,15 @@ async function lineCheck(tricky) {
     const p = mountWorld(c), r = nearestOnLine(line, p.x, p.y); total = r.total; n++;
     if (r.d < 40) { on++; bins.add(Math.min(49, Math.floor(r.s / r.total * 50))); }
   } });
-  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices. Set it to point down.");
   if (st.moved < 20) return nothing(st);
   const cov = bins.size / 50, pct = Math.round(cov * 100);
   const g = lvl().floor[1] && lvl().floor[1].rect, c = downColor(), p = mountWorld(c);
   const finished = tricky && st.still && floorReading(p.x, p.y).name === "green";   // what the sensor itself sees
-  const hint = "Follow one edge of the line: when the sensor sees dark, turn one way; when it sees bright, turn the other way. Go slower if the robot loses the line on curves.";
+  const hint = "Dark? Turn one way. Bright? Turn the other way. Go slower if the robot loses the line on curves.";
   if (tricky) {
     if (finished && cov >= 0.8) return result(4, `The robot followed ${pct}% of the line and stopped on green.`);
-    if (finished || cov >= 0.7) return result(3, finished ? "The robot stopped on green but skipped parts of the line." : `The robot followed ${pct}% of the line but didn't stop on green.`, finished ? hint : 'Use "repeat until Color detects green" around your line following, then stop.');
+    if (finished || cov >= 0.7) return result(3, finished ? "The robot stopped on green but skipped parts of the line." : `The robot followed ${pct}% of the line but didn't stop on green.`, finished ? hint : 'Put your line following inside "repeat until Color detects green". Then stop.');
     return result(cov >= 0.3 ? 2 : 1, `The robot followed ${pct}% of the line.`, hint);
   }
   if (cov >= 0.95) return result(4, "The robot followed the whole oval.");
@@ -3851,10 +3925,10 @@ async function mazeCheck(path) {
   const fin = FLOOR.find(f => f.color === "yellow").rect, inFin = (x, y) => x >= fin[0] - 60 && x <= fin[0] + fin[2] + 60 && y >= fin[1] - 60 && y <= fin[1] + fin[3] + 60;
   const fr = toWorld(W.x, W.y, W.rot, S.robotL / 2, 0), done = reached === corners.length && (inFin(W.x, W.y) || inFin(fr.x, fr.y));
   if (done && st.still && st.bumps <= 2) return result(4, "The robot made it through the maze and stopped on yellow.");
-  if (done) return result(3, st.still ? `The robot finished but bumped the walls ${st.bumps} times.` : "The robot reached yellow but didn't stop.", st.still ? "Drive about 190 mm onto each tile before turning so the robot turns in the middle of the corridor." : "When the Color sensor sees yellow, stop driving and stop the project.");
+  if (done) return result(3, st.still ? `The robot finished but bumped the walls ${st.bumps} times.` : "The robot reached yellow but didn't stop.", st.still ? "Drive about 190 mm onto each tile before you turn. Then you turn in the middle." : "When the Color sensor sees yellow, stop driving.");
   const said = `The robot got through ${reached} of ${corners.length} turns.`;
-  if (reached * 2 >= corners.length) return result(2, said, lvl().id === "maze3" ? "Count each tile with a variable. After the 3rd tile, swap what green and blue mean." : "Check each color: green = turn left, blue = turn right. Then drive off the tile before checking again.");
-  return result(1, said, "Drive forward until the Color sensor sees a tile, then turn the way that color means.");
+  if (reached * 2 >= corners.length) return result(2, said, lvl().id === "maze3" ? "Count each tile with a variable. After tile 3, green and blue swap." : "Green = turn left. Blue = turn right. Drive off the tile before you check again.");
+  return result(1, said, "Drive forward until the Color sensor sees a tile. Then turn the way that color says.");
 }
 async function remoteCheck(back, leds) {
   const bumpers = devOf("bumper"), need = back ? 3 : 2;
@@ -3892,8 +3966,8 @@ async function remoteCheck(back, leds) {
     st.rec.hidden = true;
     if (pass > best.pass) best = { pass, fails, rec: st.rec };
   }
-  if (movedAny < 20) return result(0, "The robot did not move when the Bumpers were pressed.", "Use a forever loop that checks the Bumpers over and over.");
-  const said = `The test pressed the Bumpers ${cases.length} ways. ${best.pass} of ${cases.length} did the right thing.`;
+  if (movedAny < 20) return result(0, "The robot did not move when the Bumpers were pressed.", "Use a forever loop. Check the Bumpers inside it.");
+  const said = `The test pressed the Bumpers ${cases.length} ways. ${best.pass} of ${cases.length} were right.`;
   if (best.rec) { best.rec.hidden = false; best.rec.label = "Pressing the Bumpers " + cases.length + " ways"; best.rec.ok = !best.fails.length; best.rec.note = `${best.pass} of ${cases.length} right`; }
   if (!best.fails.length) return result(4, said);
   const f = best.fails[0], what = f[0].length ? "holding " + f[0].map(k => ({ L: "left", R: "right", B: "back" })[k]).join(" + ") : "holding nothing";
@@ -3906,7 +3980,7 @@ async function remoteCheck(back, leds) {
 /* ---- the hint ladder: 1st miss = what happened + watch the test, 2nd = the hint, 3rd+ = a step-by-step plan ---- */
 const PLANS = {
   square: ["Repeat 4 times:", "  drive forward 600 mm", "  turn right 90 degrees"],
-  gyro: ["In Devices, set the Drivetrain's gyro to the Brain's gyro.", "Repeat 8 times (2 laps of 4 sides):", "  drive forward 600 mm", "  turn right 90 degrees", "With the gyro on, the turn blocks fix the slip for you."],
+  gyro: ["In Devices, set the Drivetrain's gyro to the Brain's gyro.", "Repeat 8 times (2 laps):", "  drive forward 600 mm", "  turn right 90 degrees", "The gyro fixes the slip for you."],
   touch: ["Drive forward (don't use \"for\", so it keeps going).", "Wait until the Bumper is pressed.", "Stop driving."],
   waittouch: ["Wait until the Bumper is pressed.", "Drive forward 500 mm."],
   counter: ["Set count to 0.", "While the Touch LED is NOT pressed:", "  if the Bumper is pressed:", "    change count by 1", "    wait until the Bumper is NOT pressed", "Drive forward (count × 200) mm."],
@@ -3959,10 +4033,10 @@ function hintHTML(r) {
   if (!r.hint) return "";
   const plan = PLANS[r.level], t = r.tier;
   let h = "";
-  if (t <= 1) h += `<span class="hint2">Watch the test${r.runs && r.runs.length > 1 ? " that failed" : ""} to see what went wrong.</span>`;
-  if (t >= 2) h += `<span class="hint2">Hint: ${esc(r.hint)}</span>`;
-  if (t >= 3 && plan) h += `<div class="plan"><b>A plan you can follow:</b>${plan.map(l => `<div class="pl" style="padding-left:${(l.length - l.trimStart().length) * 9}px">${esc(l.trim())}</div>`).join("")}</div>`;
-  if (t < 2 || (t < 3 && plan)) h += `<button class="btn small" type="button" id="btnMoreHelp">${t < 2 ? "Show a hint" : "Show a plan"}</button>`;
+  if (t <= 1) h += `<span class="hint2">Click ▶ Watch to see what went wrong${r.runs && r.runs.length > 1 ? " in the ✗ test" : ""}.</span>`;
+  if (t >= 2) h += `<span class="hint2"><b class="lbl">Try this:</b> ${esc(r.hint)}</span>`;
+  if (t >= 3 && plan) h += `<div class="plan"><b>Steps you can follow:</b>${plan.map(l => `<div class="pl" style="padding-left:${(l.length - l.trimStart().length) * 9}px">${esc(l.trim())}</div>`).join("")}</div>`;
+  if (t < 2 || (t < 3 && plan)) h += `<button class="btn small" type="button" id="btnMoreHelp">${t < 2 ? "Give me a hint" : "Show me the steps"}</button>`;
   return h;
 }
 /* watch a test run again: same setup and the same button presses at the same times, at normal speed */
@@ -4015,7 +4089,7 @@ function scoreCardHTML() {
   if (CHECKING) return `<div class="score checking">Checking your program…</div>`;
   const r = CHECK_RESULT && CHECK_RESULT.level === LEVEL ? CHECK_RESULT : null, best = SCORES[LEVEL];
   let h = `<div class="checkrow"><button class="btn primary" type="button" id="btnCheck">Check my work</button>${best ? `<span class="best">Best: ${best.best} / 4${best.points !== undefined ? ` · ${best.points} points` : ""}</span>` : ""}</div>`;
-  if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${runsHTML(r)}${hintHTML(r)}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}${r.unlocked ? `<span class="unlocked">Unlocked: ${esc(r.unlocked)}. Pick it from the Level menu.</span>` : ""}</div>`;
+  if (r) h += `<div class="score s${r.score}"><div class="taskhead"><b>Score: ${r.score} / 4 · ${SCORE_WORDS[r.score]}</b><button class="btn small speak" type="button" id="btnSpeakScore" title="Read the score out loud">🔊 Read to me</button></div><span><b class="lbl">What happened:</b> ${esc(r.said)}</span>${runsHTML(r)}${hintHTML(r)}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}${r.unlocked ? `<span class="unlocked">Unlocked: ${esc(r.unlocked)}. Pick it from the Level menu.</span>` : ""}</div>`;
   else if (S.lockOrder && CHECKS[LEVEL] && !(best && best.best >= 3)) { const nx = levelList()[levelList().findIndex(l => l.id === LEVEL) + 1]; if (nx && lockedIds().has(nx.id)) h += `<div class="lockhint">Score 3 or more to unlock the next level.</div>`; }
   return h;
 }
@@ -5368,7 +5442,7 @@ function renderTask() {
   box.hidden = !l.task;
   const task = LEVEL === "open" ? CUSTOM.task : l.task;
   box.hidden = !task;
-  if (task) box.innerHTML = `<b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><span>${esc(task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
+  if (task) box.innerHTML = `<div class="taskhead"><b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><button class="btn small speak" type="button" id="btnSpeakTask" title="Read the task out loud">🔊 Read to me</button></div>${TASK_STEPS[LEVEL] ? taskStepsHTML(TASK_STEPS[LEVEL]) : `<span>${esc(task)}</span>`}${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
   box.querySelectorAll("[data-note]").forEach(t => t.oninput = () => { const n = LS.get("rfs.notes", {}); n[LEVEL] = n[LEVEL] || {}; n[LEVEL][t.dataset.note] = t.value.slice(0, 600); LS.set("rfs.notes", n); });
   const bs = document.getElementById("btnStarter");
   if (bs) bs.onclick = () => {
@@ -5377,6 +5451,8 @@ function renderTask() {
     loadXml(l.starter()); bs.textContent = "Load the broken program"; delete bs.dataset.sure;
     log("Loaded the broken program. Find the bug and fix it.");
   };
+  const sp = document.getElementById("btnSpeakTask"); if (sp) sp.onclick = () => readAloud(taskParts(l), sp);
+  const ss = document.getElementById("btnSpeakScore"); if (ss) ss.onclick = () => { const r = CHECK_RESULT; readAloud([`Score: ${r.score} out of 4`, SCORE_WORDS[r.score], "What happened: " + r.said, r.hint && r.tier >= 2 && "Try this: " + r.hint, r.hint && r.tier >= 3 && PLANS[r.level] && "Steps you can follow: " + PLANS[r.level].join(". ")], ss); };
   const bc = document.getElementById("btnCheck"); if (bc) bc.onclick = checkWork;
   box.querySelectorAll("[data-replay]").forEach(b => b.onclick = () => replayRun(CHECK_RESULT.runs[+b.dataset.replay]));
   const mh = document.getElementById("btnMoreHelp"); if (mh) mh.onclick = () => { CHECK_RESULT.tier++; renderTask(); };
