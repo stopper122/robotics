@@ -181,6 +181,32 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 .views .btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); position: relative; }
 .blocklyToolboxDiv { font-family: var(--body) !important; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* test page: coding modes and the C++ editor */
+.modebar .btn { padding: 6px 12px; }
+#cppPane { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #1b1f27; }
+#cppPane[hidden] { display: none; }
+.cppbar { display: flex; gap: 6px; padding: 6px 8px; background: #252a34; align-items: center; } .cppbar .sp { flex: 1; }
+.cppbody { flex: 1; min-height: 0; display: flex; }
+.cpped { flex: 1; min-width: 0; display: flex; position: relative; overflow: hidden; --lh: 21px; font: 14px/var(--lh) var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+.cppgut { width: 44px; flex: none; overflow: hidden; background: #20242d; color: #6c7686; text-align: right; padding: 10px 8px 0 0; box-sizing: border-box; user-select: none; }
+.cppgut div div { height: var(--lh); } .cppgut .run { color: #ffd166; font-weight: 700; } .cppgut .bad { color: #ff6b6b; font-weight: 700; }
+.cppwrap { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+#cppHi, #cppText { position: absolute; inset: 0; margin: 0; padding: 10px 12px; box-sizing: border-box; font: inherit; line-height: var(--lh); white-space: pre; tab-size: 2; letter-spacing: normal; }
+#cppHi { color: #e6e9ef; pointer-events: none; right: auto; bottom: auto; min-width: 100%; }
+#cppHi .cl { height: var(--lh); } #cppHi .cl.run { background: rgba(255, 209, 102, .18); box-shadow: inset 3px 0 #ffd166; } #cppHi .cl.bad { background: rgba(255, 107, 107, .18); box-shadow: inset 3px 0 #ff6b6b; }
+#cppText { background: transparent; color: transparent; caret-color: #fff; border: 0; outline: none; resize: none; overflow: auto; }
+#cppText::selection { background: rgba(76, 151, 255, .45); color: transparent; }
+.tk { color: #c792ea; } .tn { color: #f78c6c; } .ts { color: #c3e88d; } .tc { color: #697098; font-style: italic; } .tp { color: #89ddff; } .td { color: #82aaff; } .tf { color: #ffcb6b; }
+.cppsnips { width: 250px; flex: none; overflow: auto; background: #f5f7fa; border-left: 1px solid var(--line); padding: 8px; font-size: 13px; }
+.cppsnips[hidden] { display: none; }
+.cppsnips summary { font-weight: 600; cursor: pointer; margin: 6px 0 4px; }
+.cppsnips .snip { display: block; width: 100%; text-align: left; font: 12px/1.35 var(--mono, monospace); background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; margin: 0 0 4px; cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1f2633; }
+.cppsnips .snip:hover { border-color: #4C97FF; }
+.cppstatus { padding: 6px 12px; font: 13px var(--mono, monospace); background: #252a34; color: #c9d1dc; min-height: 18px; }
+.cppstatus.ok { color: #7ee2a8; } .cppstatus.bad { color: #ff8a80; }
+.blocklyEditableText > text, .blocklyHtmlInput { font-family: var(--mono, monospace) !important; }
+@media (max-width: 860px) { .cppsnips { display: none; } }
+.pindlg { max-width: 380px; } #pinForm label { display: block; margin-bottom: 10px; } #pinForm input { font-size: 18px; letter-spacing: .2em; width: 100%; box-sizing: border-box; } #pinErr { color: #c62828; min-height: 1.2em; margin: 8px 0 0; }
 .namerow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 </style>
 </head>
@@ -192,7 +218,8 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
     <button class="btn" id="btnOpen" type="button">Open</button>
     <button class="btn" id="btnSave" type="button">Save</button>
     <button class="btn" id="btnNew" type="button">New</button>
-    <input type="file" id="fileIn" accept=".vrblocks,.iqblocks,.json,.txt" hidden>
+    <input type="file" id="fileIn" accept=".vrblocks,.iqblocks,.json,.txt,.cpp" hidden>
+    <div class="views modebar" id="modeBar" role="group" aria-label="How you program" hidden></div>
     <label class="lvl" for="level">Level <select id="level"></select></label>
     <span class="sp"></span>
     <button class="btn" id="btnSign" type="button" hidden>Sign in</button>
@@ -202,6 +229,14 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
   <div class="viewbar" id="viewBar" hidden></div>
   <div class="main">
     <div id="blockly"></div>
+    <section id="cppPane" hidden aria-label="C++ program">
+      <div class="cppbar"><button class="btn small" type="button" id="cppFromBlocks" title="Turn your blocks program into C++">Start from my blocks</button><button class="btn small" type="button" id="cppNew">New</button><span class="sp"></span><button class="btn small" type="button" id="cppSnipToggle">Commands</button></div>
+      <div class="cppbody">
+        <div class="cpped"><div class="cppgut"><div id="cppGutter"></div></div><div class="cppwrap"><pre id="cppHi" aria-hidden="true"></pre><textarea id="cppText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="C++ code"></textarea></div></div>
+        <div class="cppsnips" id="cppSnips"></div>
+      </div>
+      <div class="cppstatus" id="cppStatus"></div>
+    </section>
     <section id="codeview" hidden aria-label="Program as text"><div class="codebar"><button class="btn small" type="button" data-lang="py">Python</button><button class="btn small" type="button" data-lang="cpp">C++</button><span class="sp"></span><button class="btn small" type="button" id="codeCopy">Copy</button></div><pre id="codeText"></pre></section>
     <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Drag to make the field bigger or smaller" tabindex="0" title="Drag to make the field bigger or smaller"></div>
     <aside class="side">
@@ -265,6 +300,12 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
     <div class="body" id="devBody"></div>
   </div>
 </div>
+<div class="modal" id="mPin" hidden>
+  <div class="dlg pindlg" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <header><h2 id="pinTitle">Teacher settings</h2><button class="btn" type="button" data-close>Cancel</button></header>
+    <div class="body"><form id="pinForm"><label>Teacher PIN<input type="password" id="pinIn" inputmode="numeric" autocomplete="off" maxlength="20"></label> <button class="btn primary" type="submit">Open</button><p class="err" id="pinErr" role="alert"></p></form></div>
+  </div>
+</div>
 <div class="modal" id="mTeacher" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="tTitle">
     <header><h2 id="tTitle">Teacher settings</h2><button class="btn" type="button" data-close>Cancel</button></header>
@@ -318,7 +359,7 @@ function defaultSettings() {
     robotL: 230, robotW: 200,
     wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
     rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false, realChecks: false,
-    assigned: null, lockOrder: false,   // levels students see (null = all), and unlock in order at a score of 3+
+    assigned: null, lockOrder: false, modes: null,   // modes: coding modes on the test page (null = all)   // levels students see (null = all), and unlock in order at a score of 3+
     ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8, bumper2: 9, bumper3: 11, touchled2: 12 },
     distanceMax: 1000,
   };
@@ -1456,11 +1497,22 @@ function* runStack(b) {
   }
 }
 
+/* the workspace a run uses: the blocks themselves, or (test page) C++ turned into blocks */
+var RUN_WS = null;
+function progWs() { return typeof cppProgWs === "function" ? cppProgWs() : ws; }
+function showCurrent(ids) {
+  if (typeof cppShowCurrent === "function" && cppShowCurrent(ids)) return;
+  ws.highlightBlock(null);
+  const seen = new Set();
+  ids.forEach(id => { const o = String(id).split("__")[0]; if (!seen.has(o) && ws.getBlockById(o)) { seen.add(o); ws.highlightBlock(o, true); } });
+}
 function startProgram() {
   stopProgram(false);
   newWorld(); clearLog(); paintLeds();
   ledBox.querySelectorAll("[data-bump].down").forEach(b => { W.bumps[b.dataset.bump] = true; });   // still held from before Start
-  const all = ws.getTopBlocks(true).filter(b => b.isEnabled());
+  const PW = progWs(); if (!PW) { draw(); return; }
+  RUN_WS = PW;
+  const all = PW.getTopBlocks(true).filter(b => b.isEnabled());
   const tops = all.filter(b => b.type === "pg_events_when_started");
   const hats = controllerDev() ? all.filter(b => b.type === "iq_controller_when_button" || b.type === "iq_controller_when_axis") : [];
   const cd = controllerDev(), hasActions = !!cd && (cd.drive && cd.drive !== "none" && !!drivetrain() || Object.values(cd.buttons || {}).some(Boolean));
@@ -1479,7 +1531,7 @@ function stopProgram(redraw = true) {
   if (RUN) { RUN.scripts = []; LAST_VARS = RUN.vars; }
   RUN = null;
   if (W) { W.mode = "idle"; W.cmd = null; Object.values(W.motors).forEach(m => m.mode = "idle"); }
-  ws.highlightBlock(null);
+  showCurrent([]);
   setRunning(false);
   if (redraw) draw();
 }
@@ -1517,9 +1569,9 @@ function loop(ts) {
     if (!alive) break;
     if (RUN.stepHit) { RUN.stepHit = false; setPaused(true); break; }
   }
-  if (RUN) { const ids = [...RUN.current]; ws.highlightBlock(null); ids.forEach(id => ws.highlightBlock(id, true)); }
+  if (RUN) showCurrent([...RUN.current]);
   draw();
-  if (!alive) { if (RUN) { LAST_VARS = RUN.vars; RUN = null; ws.highlightBlock(null); setRunning(false); } return; }
+  if (!alive) { if (RUN) { LAST_VARS = RUN.vars; RUN = null; showCurrent([]); setRunning(false); } return; }
   if (RUN && !RUN.paused) requestAnimationFrame(loop);
 }
 /* driving practice: gates in order, a clock that starts when the robot first moves, +2 s per wall touch */
@@ -1557,11 +1609,12 @@ function setPaused(p) {
   btnPause.textContent = p ? "▶ Resume" : "⏸ Pause";
   const dbg = document.getElementById("dbg");
   if (p) {
-    const ids = [...RUN.current]; ws.highlightBlock(null); ids.forEach(id => ws.highlightBlock(id, true)); draw();
-    const blk = ids.length && ws.getBlockById(ids[ids.length - 1]);
-    let txt = blk ? `Paused on "${blk.toString().slice(0, 80)}". Step runs to the next block. Resume keeps going.` : "Paused.";
+    const ids = [...RUN.current]; showCurrent(ids); draw();
+    const PW = RUN_WS || ws, blk = ids.length && PW.getBlockById(ids[ids.length - 1]);
+    const lineOf = id => (String(id).match(/^L(\d+)_/) || [])[1];
+    let txt = blk ? (lineOf(blk.id) ? `Paused on line ${lineOf(blk.id)}. Step runs to the next command. Resume keeps going.` : `Paused on "${blk.toString().slice(0, 80)}". Step runs to the next block. Resume keeps going.`) : "Paused.";
     // show whether each running if/while/wait-until condition is true or false right now
-    const conds = ids.map(id => ws.getBlockById(id)).filter(b => b && b.getInput("CONDITION") && b.getInputTargetBlock("CONDITION")).map(b => {
+    const conds = ids.map(id => PW.getBlockById(id)).filter(b => b && b.getInput("CONDITION") && b.getInputTargetBlock("CONDITION")).map(b => {
       const c = b.getInputTargetBlock("CONDITION"); let v; try { v = !!val(c); } catch (e) { v = null; }
       return v === null ? "" : `"${c.toString().slice(0, 50)}" is ${v ? "TRUE" : "FALSE"} right now.`;
     }).filter(Boolean);
@@ -1604,7 +1657,7 @@ function readouts() {
   }
   if (LEVEL === "skills") { const sp = skillPoints(); items.push(["Points", `${sp.total} (time ${Math.max(0, 60 - W.t).toFixed(0)} s)`]); }
   const vars = RUN ? RUN.vars : LAST_VARS;
-  ws.getAllVariables().forEach(m => { if (m.type === "") { const val = vars[m.name]; items.push(["var", m.name, val === undefined ? "–" : typeof val === "number" ? +val.toFixed(3) + "" : String(val)]); } });
+  (RUN_WS || ws).getAllVariables().forEach(m => { if (m.type === "") { const val = vars[m.name]; items.push(["var", m.name, val === undefined ? "–" : typeof val === "number" ? +val.toFixed(3) + "" : String(val)]); } });
   if (hasPart("claw")) { const hc = heldCube(); items.push(["Claw", hc ? `holding ${hc.color} cube` : clawOpen() > 0.45 ? "open" : "closed"]); }
   const html = items.map(it => it[0] === "var" ? `<div class="ro var"><div class="k">${esc(it[1])} (variable)</div><div class="v">${esc(it[2])}</div></div>` : `<div class="ro"><div class="k">${esc(it[0])}</div><div class="v">${esc(it[1])}</div></div>`).join("");
   if (ro.innerHTML !== html) ro.innerHTML = html;
@@ -2038,6 +2091,10 @@ function renderTeacher() {
     <div class="form"><label class="chk full"><input type="checkbox" id="t_lockOrder" ${s.lockOrder ? "checked" : ""}> Unlock in order (score 3 or more to open the next level)</label></div>
     <p><button class="btn" type="button" id="tLevelLink">Copy student link</button> <span class="hint">Post this link (for example in Google Classroom). Opening it sets up the student's browser with these levels.</span></p>
   </fieldset>
+  ${typeof BETA !== "undefined" && BETA ? `<fieldset><legend>Coding modes (test page)</legend>
+    <p class="hint">Pick how students can program. Students switch between the modes you turn on. The student link carries this choice, so you can give different links to different classes or groups.</p>
+    <div class="form">${CODE_MODES.map(([k, l]) => `<label class="chk"><input type="checkbox" data-mode-opt="${k}" ${!s.modes || s.modes.includes(k) ? "checked" : ""}> ${l}</label>`).join("")}</div>
+  </fieldset>` : ""}
   <fieldset><legend>Score sheet (roster and scores)</legend>
     <p class="hint">Students sign in with a class code, and every Check my work score goes to a Google Sheet in your Drive. Student names stay in your Sheet, not on this website.</p>
     <ol class="steps">
@@ -2074,6 +2131,8 @@ function readTeacher() {
   const picked = [...tBody.querySelectorAll("[data-lv]")].filter(c => c.checked).map(c => c.dataset.lv);
   s.assigned = picked.length && picked.length < LEVELS.length ? picked : null;
   s.lockOrder = g("t_lockOrder").checked;
+  const modeOpts = [...tBody.querySelectorAll("[data-mode-opt]")];
+  if (modeOpts.length) { const on = modeOpts.filter(c => c.checked).map(c => c.dataset.modeOpt); s.modes = on.length && on.length < modeOpts.length ? on : on.length ? null : ["blocks"]; }
   s.grid = Math.max(50, s.grid); s.gear = s.gear || 1; s.fieldW = Math.max(500, s.fieldW); s.fieldH = Math.max(500, s.fieldH);
 }
 function studentLink(s) {
@@ -2081,12 +2140,14 @@ function studentLink(s) {
   if (validSheet(s.sheetUrl)) q.set("sheet", s.sheetUrl.trim());
   q.set("levels", s.assigned ? s.assigned.join(",") : "all");
   if (s.lockOrder) q.set("lock", "1");
+  if (typeof BETA !== "undefined" && BETA && s.modes) q.set("modes", s.modes.join(","));
   return location.origin + location.pathname + "?" + q.toString();
 }
 function applySettings(ns) {
   S = ns; LS.set("rfs.settings", S); renderSignBtn(); fillLevels();
   if (!levelOpen(LEVEL)) setLevel(firstOpenLevel(), true);
   stopProgram(false); newWorld(); ws.updateToolbox(buildToolbox()); buildLeds(); draw();
+  if (window.redrawModes) window.redrawModes();
 }
 
 /* =====================================================================
@@ -2469,7 +2530,28 @@ document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e =
 document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => { m.hidden = true; editing = null; }); });
 
 document.getElementById("btnDevices").onclick = () => { editing = null; renderDevices(); show("mDevices"); };
-document.getElementById("btnTeacher").onclick = () => { tDraft = JSON.parse(JSON.stringify(S)); renderTeacher(); show("mTeacher"); };
+// Teacher settings sit behind a PIN so students don't change them. Only a hash of the PIN is in the page.
+// It is a speed bump for students, not real security: settings live in each browser.
+const TEACHER_PIN_HASH = "0959d4765b65c0282cda1bacde3633da65cc12dfbef853cb13f5700b156c8612";
+async function pinHash(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function openTeacher() { tDraft = JSON.parse(JSON.stringify(S)); renderTeacher(); show("mTeacher"); }
+document.getElementById("btnTeacher").onclick = () => {
+  let ok = false; try { ok = sessionStorage.getItem("rfs.teacher") === "1"; } catch (e) {}
+  if (ok) return openTeacher();
+  document.getElementById("pinIn").value = ""; document.getElementById("pinErr").textContent = "";
+  show("mPin"); setTimeout(() => document.getElementById("pinIn").focus(), 0);
+};
+document.getElementById("pinForm").onsubmit = async e => {
+  e.preventDefault();
+  const pin = document.getElementById("pinIn").value.trim();
+  let good = false; try { good = (await pinHash(pin)) === TEACHER_PIN_HASH; } catch (err) { good = false; }
+  if (!good) { document.getElementById("pinErr").textContent = "That PIN isn't right."; document.getElementById("pinIn").select(); return; }
+  try { sessionStorage.setItem("rfs.teacher", "1"); } catch (err) {}   // stays unlocked until this tab is closed
+  hide("mPin"); openTeacher();
+};
 document.getElementById("tSave").onclick = () => { readTeacher(); applySettings(tDraft); hide("mTeacher"); log("Teacher settings saved."); };
 document.getElementById("tDefaults").onclick = () => { tDraft = defaultSettings(); renderTeacher(); };
 document.getElementById("tExport").onclick = () => { readTeacher(); textDialog("Settings code", "Copy this code and paste it into Teacher settings on another computer.", btoa(JSON.stringify(tDraft)), null); };
@@ -2544,7 +2626,7 @@ function textDialog(title, hint, text, onLoad, download) {
       const first = document.getElementById("xFirst").value.trim(), last = document.getElementById("xLast").value.trim(), msg = document.getElementById("xErr");
       if (!first || !last) { msg.textContent = "Type your last and first name first."; return; }
       LS.set("rfs.myname", { first, last });
-      const name = [camel(last), camel(first), download.program].filter(Boolean).join("_") + ".iqblocks";
+      const name = [camel(last), camel(first), download.program].filter(Boolean).join("_") + (download.ext || ".iqblocks");
       const r = await downloadText(name, text);
       msg.textContent = r === "renamed" ? `Saved as ${name}.json. Rename it to ${name} (take off ".json") before opening it in VEXcode IQ.`
         : r === "blocked" ? "Downloads are blocked here. Use Copy instead." : "";
@@ -3708,7 +3790,7 @@ async function stairCheck() {
   if (st.moved < 20) return nothing(st);
   const inFin = (x, y) => x >= 340 && x <= 660 && y >= 560 && y <= 880;
   const done = reached === corners.length && inFin(W.x, W.y) && st.still;
-  const all = ws.getAllBlocks(false).filter(b => b.isEnabled());
+  const all = (RUN_WS || ws).getAllBlocks(false).filter(b => b.isEnabled());
   const defs = all.filter(b => b.type === "procedures_defnoreturn" && b.getInputTargetBlock("STACK"));
   const calls = all.filter(b => b.type === "procedures_callnoreturn" && defs.some(d => d.getFieldValue("NAME") === b.getFieldValue("NAME")));
   const inLoop = calls.some(b => { for (let p = b.getSurroundParent(); p; p = p.getSurroundParent()) if (/repeat|forever|while/.test(p.type)) return true; return false; });
@@ -3923,7 +4005,7 @@ function scoreCardHTML() {
    can see what their blocks look like as text. Close to VEXcode's own
    output, but not guaranteed to match it line for line.
    ===================================================================== */
-function genCode(lang) {
+function genCode(lang, opts = {}) {
   const py = lang === "py", IND = py ? "    " : "  ";
   const id = n => String(n).replace(/[^A-Za-z0-9_]/g, "_").replace(/^(\d)/, "_$1");
   const dev = n => py ? id(n).replace(/(\D)(\d+)$/, "$1_$2").toLowerCase() : id(n);
@@ -3998,6 +4080,7 @@ function genCode(lang) {
       case "pg_sensing_bumper_pressed": return call(d(), "pressing", "");
       case "iq_controller_axis": return py ? `controller.axis${f(b, "AXIS")}.position()` : `Controller.Axis${f(b, "AXIS")}.position()`;
       case "iq_controller_pressed": return py ? `controller.button${f(b, "BUTTON")}.pressing()` : `Controller.Button${f(b, "BUTTON")}.pressing()`;
+      case "cpp_bool": case "cpp_num": return py ? `None  # C++: ${f(b, "CODE")}` : `(${f(b, "CODE")})`;
     }
     return py ? `None  # ${t}` : `0 /* ${t} */`;
   }
@@ -4065,12 +4148,38 @@ function genCode(lang) {
       case "iq_gyro_set_heading": return L(call(d(), "set_heading", `${v("HEADING")}, ${DEGS}`));
       case "iq_gyro_set_rotation": return L(call(d(), "set_rotation", `${v("ROTATION")}, ${DEGS}`));
       case "iq_controller_actions": return [ind + (py ? "# " : "// ") + `${f(b, "STATE")} Controller configured actions`];
+      case "cpp_stmt": return py ? [ind + "# C++: " + f(b, "CODE")] : [ind + f(b, "CODE")];
+      case "cpp_if": return block(py ? `if None  # C++: ${f(b, "CODE")}` : `if (${f(b, "CODE")})`, b, "DO", ind);
+      case "cpp_while": return block(py ? `while None  # C++: ${f(b, "CODE")}` : `while (${f(b, "CODE")})`, b, "DO", ind);
+      case "cpp_repeat": { const i = "ijk"[loopDepth % 3]; loopDepth++; const r = block(py ? `for ${i} in range(0)  # C++: ${f(b, "CODE")}` : `for (int ${i} = 0; ${i} < ${f(b, "CODE")}; ${i}++)`, b, "DO", ind); loopDepth--; return r; }
+      case "cpp_ifelse": {
+        const a = block(py ? `if None  # C++: ${f(b, "CODE")}` : `if (${f(b, "CODE")})`, b, "DO", ind);
+        if (py) return [...a, ind + "else:", ...body(b, "ELSE", ind)];
+        a[a.length - 1] = ind + "} else {"; return [...a, ...body(b, "ELSE", ind), ind + "}"];
+      }
       case "procedures_callnoreturn": {
         const name = id(b.getFieldValue("NAME")), args = (b.arguments_ || []).map((a, i) => val(b, "ARG" + i));
         return L(`${py ? name.toLowerCase() : name}(${args.join(", ")})`);
       }
     }
     return [ind + (py ? "# " : "// ") + `"${b.toString().slice(0, 40)}" has no text version here`];
+  }
+  if (opts.block) {   // one block as C++ (used by "Turn into C++")
+    const b = opts.block;
+    const bare = t => { t = String(t).trim(); if (t[0] !== "(" || t[t.length - 1] !== ")") return t; let d = 0; for (let i = 0; i < t.length; i++) { if (t[i] === "(") d++; if (t[i] === ")") d--; if (d === 0 && i < t.length - 1) return t; } return t.slice(1, -1); };
+    if (b.outputConnection) { const ck = b.outputConnection.getCheck(); return { kind: "value", text: bare(expr(b)), bool: !!(ck && ck.includes("Boolean")) }; }
+    const cond = n => bare(val(b, n, "false"));
+    switch (b.type) {
+      case "pg_control_if": return { kind: "stmt", type: "cpp_if", text: cond("CONDITION"), moves: [["SUBSTACK", "DO"]] };
+      case "pg_control_ifelse": return { kind: "stmt", type: "cpp_ifelse", text: cond("CONDITION"), moves: [["SUBSTACK", "DO"], ["SUBSTACK2", "ELSE"]] };
+      case "pg_control_while": return { kind: "stmt", type: "cpp_while", text: cond("CONDITION"), moves: [["SUBSTACK", "DO"]] };
+      case "pg_control_repeat_until": return { kind: "stmt", type: "cpp_while", text: "!(" + cond("CONDITION") + ")", moves: [["SUBSTACK", "DO"]] };
+      case "pg_control_forever": return { kind: "stmt", type: "cpp_while", text: "true", moves: [["SUBSTACK", "DO"]] };
+      case "pg_control_repeat": return { kind: "stmt", type: "cpp_repeat", text: bare(val(b, "TIMES", "1")), moves: [["SUBSTACK", "DO"]] };
+    }
+    const lines = stmt(b, "").map(x => x.trim()).filter(x => x && !/^\/\/ ".*has no text version/.test(x));
+    if (!lines.length) return null;
+    return { kind: "stmt", type: "cpp_stmt", text: lines.join(" ") };
   }
   // events and My Blocks
   const tops = ws.getTopBlocks(true).filter(b => b.isEnabled());
@@ -4134,6 +4243,1017 @@ document.getElementById("codeCopy").onclick = async () => { try { await navigato
 let codeTimer = 0;
 ws.addChangeListener(e => { if (e.isUiEvent || codeView.hidden) return; clearTimeout(codeTimer); codeTimer = setTimeout(showCode, 150); });
 if (LS.get("rfs.codeview", false)) document.getElementById("btnCode").onclick();
+
+/* =====================================================================
+   C++ (test page only). Students can write VEXcode IQ style C++ two ways:
+   "Text blocks" (C++ typed inside blocks) and the "C++" editor.
+   Both are turned into the sim's own blocks before the program runs,
+   so running, stepping, checks and scores all work the same way.
+   ===================================================================== */
+const CPP = (() => {
+  class CppError extends Error { constructor(msg, line) { super(msg); this.line = line; } }
+  const TYPES = new Set(["int", "float", "double", "bool", "long", "short", "unsigned", "auto", "const", "void", "char", "std::string", "string"]);
+  const VEX_CLASSES = new Set(["brain", "motor", "drivetrain", "smartdrive", "bumper", "touchled", "distance", "colorsensor", "optical", "gyro", "inertial", "controller", "competition", "motor_group", "sonar"]);
+
+  /* ---- tokens ---- */
+  function tokenize(src, line0 = 1) {
+    const out = []; let i = 0, line = line0;
+    const ops = ["<<=", ">>=", "&&", "||", "==", "!=", "<=", ">=", "++", "--", "+=", "-=", "*=", "/=", "%=", "::", "->", "<<", ">>"];
+    while (i < src.length) {
+      const c = src[i];
+      if (c === "\n") { line++; i++; continue; }
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === "/" && src[i + 1] === "/") { while (i < src.length && src[i] !== "\n") i++; continue; }
+      if (c === "/" && src[i + 1] === "*") { i += 2; while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) { if (src[i] === "\n") line++; i++; } i += 2; continue; }
+      if (c === "#") { while (i < src.length && src[i] !== "\n") i++; continue; }   // #include, #define: not needed in the sim
+      if (/[0-9]/.test(c) || (c === "." && /[0-9]/.test(src[i + 1]))) {
+        let j = i; while (j < src.length && /[0-9.eE]/.test(src[j])) { if ((src[j] === "e" || src[j] === "E") && /[+-]/.test(src[j + 1])) j++; j++; }
+        let v = src.slice(i, j); while (/[fFlLuU]/.test(src[j] || "")) j++;
+        out.push({ t: "num", v: Number(v), line }); i = j; continue;
+      }
+      if (/[A-Za-z_]/.test(c)) { let j = i; while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++; out.push({ t: "id", v: src.slice(i, j), line }); i = j; continue; }
+      if (c === '"' || c === "'") {
+        let j = i + 1, s = "";
+        while (j < src.length && src[j] !== c) { if (src[j] === "\\") { j++; s += { n: "\n", t: "\t" }[src[j]] || src[j]; } else s += src[j]; if (src[j] === "\n") line++; j++; }
+        if (j >= src.length) throw new CppError("This text is missing its closing quote mark.", line);
+        out.push({ t: "str", v: s, line }); i = j + 1; continue;
+      }
+      const op = ops.find(o => src.startsWith(o, i)) || c;
+      if (!/[-+*/%<>=!(){}\[\];,.?:&|^~]/.test(op[0])) throw new CppError(`The sim doesn't understand "${c}".`, line);
+      out.push({ t: "op", v: op, line }); i += op.length;
+    }
+    out.push({ t: "eof", v: "", line });
+    return out;
+  }
+
+  /* ---- parser: a small part of C++, enough for VEX robot programs ---- */
+  function parser(toks) {
+    let p = 0;
+    const peek = (k = 0) => toks[Math.min(p + k, toks.length - 1)];
+    const next = () => toks[p++];
+    const is = (v, k = 0) => peek(k).v === v && peek(k).t !== "str";
+    const near = t => t.t === "eof" ? "the end" : t.t === "str" ? `"${t.v}"` : `"${t.v}"`;
+    function expect(v, what) {
+      const t = next();
+      if (t.v !== v || t.t === "str") {
+        const hint = v === ";" ? "Each command needs a semicolon ; at the end." : v === ")" ? "Check that every ( has a matching )." : v === "}" ? "Check that every { has a matching }." : "";
+        throw new CppError(`Expected ${what || `"${v}"`} but found ${near(t)}. ${hint}`.trim(), v === ";" ? (toks[p - 2] || t).line : t.line);
+      }
+      return t;
+    }
+    // a type name like int, float, const double, unsigned int, std::string
+    function typeAhead() {
+      let k = 0, seen = false;
+      while (peek(k).t === "id" && (TYPES.has(peek(k).v) || peek(k).v === "std" && is("::", k + 1))) { if (peek(k).v === "std") k += 2; else k++; seen = true; }
+      return seen && peek(k).t === "id" ? k : 0;
+    }
+    function program() {
+      const items = [];
+      while (peek().t !== "eof") {
+        const t = peek();
+        if (t.t === "id" && t.v === "using") { while (!is(";") && peek().t !== "eof") next(); expect(";"); continue; }
+        if (is(";")) { next(); continue; }
+        if (t.t === "id" && VEX_CLASSES.has(t.v) && peek(1).t === "id") { skipStatement(); items.push({ k: "skip", line: t.line, what: t.v }); continue; }
+        const k = typeAhead();
+        if (!k) throw new CppError(`Expected a function like "int main() {" or a variable like "int count = 0;" but found ${near(t)}.`, t.line);
+        const type = toks.slice(p, p + k).map(x => x.v).join(" "); p += k;
+        const name = next();
+        if (is("(")) items.push(func(type, name));
+        else { p--; items.push({ k: "decl", line: name.line, type, vars: declList() }); expect(";"); }
+      }
+      return items;
+    }
+    function skipStatement() { let depth = 0; while (peek().t !== "eof") { const t = next(); if (t.v === "(") depth++; if (t.v === ")") depth--; if (t.v === ";" && depth <= 0) return; } }
+    function func(type, name) {
+      expect("(");
+      const params = [];
+      while (!is(")")) {
+        const k = typeAhead(); if (!k) throw new CppError(`Each input of "${name.v}" needs a type, like "float distance".`, peek().line);
+        p += k; while (is("&")) next();
+        params.push(next().v);
+        if (!is(")")) expect(",");
+      }
+      expect(")");
+      if (is(";")) { next(); return { k: "proto", name: name.v, line: name.line }; }
+      return { k: "func", type, name: name.v, params, body: blockBody(), line: name.line };
+    }
+    function blockBody() { expect("{"); const list = []; while (!is("}")) { if (peek().t === "eof") throw new CppError('A { is missing its closing }.', peek().line); list.push(statement()); } next(); return list; }
+    function declList() {
+      const vars = [];
+      do {
+        const n = next(); if (n.t !== "id") throw new CppError(`Expected a variable name but found ${near(n)}.`, n.line);
+        let init = null;
+        if (is("=")) { next(); init = expr(); }
+        else if (is("(")) { next(); init = expr(); expect(")"); }
+        vars.push({ name: n.v, init, line: n.line });
+      } while (is(",") && next());
+      return vars;
+    }
+    function statement() {
+      const t = peek();
+      if (is("{")) return { k: "block", body: blockBody(), line: t.line };
+      if (is(";")) { next(); return { k: "block", body: [], line: t.line }; }
+      if (t.t === "id") {
+        switch (t.v) {
+          case "if": {
+            next(); expect("("); const cond = expr(); expect(")");
+            const then = statement(); let els = null;
+            if (is("else")) { next(); els = statement(); }
+            return { k: "if", cond, then, els, line: t.line };
+          }
+          case "while": { next(); expect("("); const cond = expr(); expect(")"); return { k: "while", cond, body: statement(), line: t.line }; }
+          case "do": { next(); const body = statement(); expect("while"); expect("("); const cond = expr(); expect(")"); expect(";"); return { k: "dowhile", cond, body, line: t.line }; }
+          case "for": {
+            next(); expect("(");
+            let init = null;
+            if (!is(";")) { const k = typeAhead(); if (k) { p += k; init = { k: "decl", vars: declList(), line: t.line }; } else init = { k: "expr", e: expr(), line: t.line }; }
+            expect(";");
+            const cond = is(";") ? null : expr(); expect(";");
+            const step = is(")") ? null : expr(); expect(")");
+            return { k: "for", init, cond, step, body: statement(), line: t.line };
+          }
+          case "break": next(); expect(";"); return { k: "break", line: t.line };
+          case "continue": throw new CppError('"continue" isn\'t supported in the sim yet. Use an if around the rest of the loop instead.', t.line);
+          case "return": { next(); const e = is(";") ? null : expr(); expect(";"); return { k: "return", e, line: t.line }; }
+          case "thread": case "vex": if (t.v === "thread" || (is("::", 1) && peek(2).v === "thread")) {
+            if (t.v === "vex") { next(); next(); }
+            next(); const n = next();   // thread myThread(fn);  or  thread myThread = thread(fn);
+            let fn;
+            if (is("(")) { next(); fn = next().v; expect(")"); }
+            else { expect("="); if (is("thread")) next(); else if (is("vex")) { next(); next(); next(); } expect("("); fn = next().v; expect(")"); }
+            expect(";");
+            return { k: "thread", fn, line: t.line, name: n.v };
+          } break;
+        }
+        if (VEX_CLASSES.has(t.v) && peek(1).t === "id") throw new CppError(`Set up ${t.v} devices in the Devices window, not in code.`, t.line);
+        const k = typeAhead();
+        if (k) { const type = toks.slice(p, p + k).map(x => x.v).join(" "); p += k; const s = { k: "decl", type, vars: declList(), line: t.line }; expect(";"); return s; }
+      }
+      const e = expr(); expect(";");
+      return { k: "expr", e, line: t.line };
+    }
+    // expressions, lowest to highest precedence
+    function expr() { return assign(); }
+    function assign() {
+      const left = ternary();
+      if (peek().t === "op" && ["=", "+=", "-=", "*=", "/=", "%="].includes(peek().v)) {
+        const op = next().v, right = assign();
+        if (left.k !== "id") throw new CppError("Only a variable can go on the left of =.", left.line);
+        return { k: "assign", op, name: left.v, e: right, line: left.line };
+      }
+      return left;
+    }
+    function ternary() {
+      const c = bin(0);
+      if (is("?")) throw new CppError("The ? : shortcut isn't supported in the sim. Use if and else.", peek().line);
+      return c;
+    }
+    const LEVELS = [["||"], ["&&"], ["==", "!="], ["<", ">", "<=", ">="], ["+", "-"], ["*", "/", "%"]];
+    function bin(lv) {
+      if (lv >= LEVELS.length) return unary();
+      let left = bin(lv + 1);
+      while (peek().t === "op" && LEVELS[lv].includes(peek().v)) { const op = next(); left = { k: "bin", op: op.v, a: left, b: bin(lv + 1), line: op.line }; }
+      return left;
+    }
+    function unary() {
+      const t = peek();
+      if (t.t === "op" && (t.v === "!" || t.v === "-" || t.v === "+")) { next(); return { k: "un", op: t.v, e: unary(), line: t.line }; }
+      if (t.t === "op" && (t.v === "++" || t.v === "--")) { next(); const e = unary(); if (e.k !== "id") throw new CppError(`${t.v} needs a variable.`, t.line); return { k: "assign", op: t.v === "++" ? "+=" : "-=", name: e.v, e: { k: "num", v: 1, line: t.line }, line: t.line }; }
+      if (t.t === "op" && t.v === "(" && typeAhead.call(null) === 0 && peek(1).t === "id" && TYPES.has(peek(1).v) && is(")", 2)) { next(); next(); next(); return unary(); }   // (int) x: casts are ignored
+      return postfix();
+    }
+    function postfix() {
+      let e = primary();
+      for (;;) {
+        if (is(".") || is("->")) { next(); const n = next(); if (n.t !== "id") throw new CppError(`Expected a name after "." but found ${near(n)}.`, n.line); e = { k: "member", obj: e, name: n.v, line: n.line }; continue; }
+        if (is("::")) { next(); const n = next(); e = { k: "id", v: n.v, line: n.line, ns: true }; continue; }   // vex::forward -> forward
+        if (is("(")) {
+          next(); const args = [];
+          while (!is(")")) { args.push(expr()); if (!is(")")) expect(",", '"," or ")"'); }
+          next(); e = { k: "call", fn: e, args, line: e.line }; continue;
+        }
+        if (is("++") || is("--")) { const op = next().v; if (e.k !== "id") throw new CppError(`${op} needs a variable.`, e.line); e = { k: "assign", op: op === "++" ? "+=" : "-=", name: e.v, e: { k: "num", v: 1, line: e.line }, line: e.line }; continue; }
+        if (is("[")) throw new CppError("Arrays aren't supported in the sim yet.", peek().line);
+        return e;
+      }
+    }
+    function primary() {
+      const t = next();
+      if (t.t === "num") return { k: "num", v: t.v, line: t.line };
+      if (t.t === "str") return { k: "str", v: t.v, line: t.line };
+      if (t.t === "id") {
+        if (t.v === "true" || t.v === "false") return { k: "bool", v: t.v === "true", line: t.line };
+        return { k: "id", v: t.v, line: t.line };
+      }
+      if (t.v === "(") { const e = expr(); expect(")"); return e; }
+      throw new CppError(`Expected a number, a variable or a command but found ${near(t)}.`, t.line);
+    }
+    return { program, statements() { const l = []; while (peek().t !== "eof") l.push(statement()); return l; }, expression() { const e = expr(); if (peek().t !== "eof") throw new CppError(`Unexpected ${near(peek())} after the end of this expression.`, peek().line); return e; } };
+  }
+
+  /* ---- turning C++ into the sim's blocks (as Blockly XML) ---- */
+  const X = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const camelToSnake = s => s.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  function makeCompiler(opts) {
+    let n = 0;
+    const idFor = line => opts.idFor ? opts.idFor(line, n++) : "cpp" + (n++);
+    const vars = new Set(), funcs = opts.funcs || new Map();
+    const fail = (msg, node) => { throw new CppError(msg, node && node.line); };
+    const B = (type, line, inner = "") => ({ xml: `<block type="${type}" id="${X(idFor(line))}">${inner}</block>` });
+    const F = (name, v) => `<field name="${name}">${X(v)}</field>`;
+    const V = (name, e) => `<value name="${name}">${e.xml}</value>`;
+    const ST = (name, chain) => chain ? `<statement name="${name}">${chain}</statement>` : "";
+    const numB = (v, line) => ({ ...B("math_number", line, F("NUM", v)), type: "num" });
+    const varField = name => { vars.add(name); return `<field name="VAR">${X(name)}</field>`; };
+    const nameOf = e => e.k === "id" ? e.v : e.k === "member" ? nameOf(e.obj) + "." + e.name : "?";
+    const lastName = e => e.k === "id" ? e.v : e.k === "member" ? e.name : "";
+
+    // devices the student set up, by the name they have in VEX C++
+    const cid = s => String(s).replace(/[^A-Za-z0-9_]/g, "_").replace(/^(\d)/, "_$1");
+    function device(name, node, want) {
+      const d = DEVICES.find(x => cid(x.name) === name && x.type !== "drivetrain" && x.type !== "controller");
+      if (!d) {
+        const known = DEVICES.filter(x => x.type !== "drivetrain" && x.type !== "controller").map(x => cid(x.name));
+        fail(`There's no device called "${name}". ${known.length ? "Your devices are: " + known.join(", ") + "." : "Add it in Devices first."}`, node);
+      }
+      if (want && !want.includes(d.type)) fail(`"${name}" is a ${DEVICE_TYPES[d.type].label}, so it can't do that.`, node);
+      return d;
+    }
+    const enumVal = (e, map, what, node) => {
+      const raw = lastName(e); const v = map[raw] || map[camelToSnake(raw)];
+      if (v === undefined) fail(`Expected ${what} here (${Object.keys(map).filter((k, i, a) => a.findIndex(x => map[x] === map[k]) === i).join(", ")}).`, node || e);
+      return v;
+    };
+    const DIR = { forward: "fwd", fwd: "fwd", reverse: "rev", rev: "rev" };
+    const TURN = { right: "right", left: "left" };
+    const DUNIT = { mm: "mm", inches: "in", in: "in" };
+    const RUNIT = { degrees: "degrees", deg: "degrees", turns: "turns", rev: "turns" };
+    const STOPM = { brake: "brake", coast: "coast", hold: "hold" };
+    const LEDC = Object.fromEntries(LED_COLORS.map(([, v]) => [v, v]).concat([["transparent", "none"], ["black", "none"]]));
+    const IQC = Object.fromEntries(IQ_COLORS.map(([, v]) => [v, v]));
+    const FADE = { slow: "slow", fast: "fast", off: "off" };
+    const argN = (call, n, min = n) => { if (call.args.length < min || call.args.length > n) fail(`"${nameOf(call.fn)}" needs ${min === n ? n : min + " to " + n} input${n === 1 ? "" : "s"} but got ${call.args.length}.`, call); };
+
+    /* expressions: return {xml, type} with type "num", "bool", "str" or "any" */
+    function toNum(e, node) {
+      const r = ex(e);
+      if (r.type === "bool") fail("A true/false value can't go where a number is needed.", node || e);
+      return r;
+    }
+    function toBool(e) {
+      const r = ex(e);
+      if (r.type === "bool") return r;
+      if (r.type === "str") fail("Text can't be used as true/false here.", e);
+      // a number or variable: true when it isn't 0, like C++
+      return { xml: B("pg_operators_not", e.line, V("BOOL", B("pg_operators_equal", e.line, V("NUM1", r) + V("NUM2", numB(0, e.line))))).xml, type: "bool" };
+    }
+    const ops2 = { "+": "pg_operators_add", "-": "pg_operators_subtract", "*": "pg_operators_multiply", "/": "pg_operators_divide" };
+    function ex(e) {
+      switch (e.k) {
+        case "num": return numB(e.v, e.line);
+        case "bool": return { xml: B("logic_boolean", e.line, F("BOOL", e.v ? "TRUE" : "FALSE")).xml, type: "bool" };
+        case "str": return { xml: B("text", e.line, F("TEXT", e.v)).xml, type: "str" };
+        case "id": {
+          if (e.v === "M_PI") return numB(Math.PI, e.line);
+          if (!opts.known(e.v) && !vars.has(e.v)) {
+            if (DIR[e.v] || TURN[e.v] || DUNIT[e.v] || RUNIT[e.v]) fail(`"${e.v}" only makes sense as an input to a command, like Drivetrain.driveFor(forward, 200, mm).`, e);
+            fail(`"${e.v}" hasn't been made yet. Make a variable first, like "float ${e.v} = 0;".`, e);
+          }
+          return { xml: B("variables_get", e.line, varField(e.v)).xml, type: "any" };
+        }
+        case "un": {
+          if (e.op === "!") return { xml: B("pg_operators_not", e.line, V("BOOL", toBool(e.e))).xml, type: "bool" };
+          if (e.op === "+") return toNum(e.e);
+          if (e.e.k === "num") return numB(-e.e.v, e.line);
+          return { xml: B("pg_operators_subtract", e.line, V("NUM1", numB(0, e.line)) + V("NUM2", toNum(e.e))).xml, type: "num" };
+        }
+        case "bin": return binary(e);
+        case "call": return callExpr(e);
+        case "member": fail(`"${nameOf(e)}" needs ( ) after it, like ${nameOf(e)}().`, e);
+        case "assign": fail("Change variables on their own line, not inside another command.", e);
+      }
+      fail("The sim can't read this part yet.", e);
+    }
+    function binary(e) {
+      const { op, a, b, line } = e;
+      if (ops2[op]) {
+        const ra = ex(a), rb = ex(b);
+        if (op === "+" && (ra.type === "str" || rb.type === "str")) return { xml: B("pg_operators_join", line, V("STRING1", ra) + V("STRING2", rb)).xml, type: "str" };
+        if (ra.type === "bool" || rb.type === "bool") fail(`True/false values can't be used with ${op}.`, e);
+        return { xml: B(ops2[op], line, V("NUM1", ra) + V("NUM2", rb)).xml, type: "num" };
+      }
+      if (op === "%") {
+        if (a.k === "call" && lastName(a.fn) === "rand" && !a.args.length) return { xml: B("pg_operators_random", line, V("FROM", numB(0, line)) + V("TO", B("pg_operators_subtract", line, V("NUM1", toNum(b)) + V("NUM2", numB(1, line))))).xml, type: "num" };
+        return { xml: B("iq_operator_remainder", line, V("NUM1", toNum(a)) + V("NUM2", toNum(b))).xml, type: "num" };
+      }
+      if (op === "&&" || op === "||") return { xml: B(op === "&&" ? "pg_operators_and" : "pg_operators_or", line, V("BOOL1", toBool(a)) + V("BOOL2", toBool(b))).xml, type: "bool" };
+      // Color3.color() == red
+      const isColorCall = x => x.k === "call" && x.fn.k === "member" && x.fn.name === "color" && !x.args.length;
+      if ((op === "==" || op === "!=") && (isColorCall(a) || isColorCall(b))) {
+        const c = isColorCall(a) ? a : b, other = c === a ? b : a;
+        const d = device(nameOf(c.fn.obj), c, ["color"]);
+        const col = enumVal(other, IQC, "a color name like red or green", other);
+        const det = { xml: B("iq_color_detects", line, F("DEVICE", d.name) + F("COLORS", col)).xml, type: "bool" };
+        return op === "==" ? det : { xml: B("pg_operators_not", line, V("BOOL", det)).xml, type: "bool" };
+      }
+      const cmp = (t, x, y) => ({ xml: B(t, line, V("NUM1", toNum(x)) + V("NUM2", toNum(y))).xml, type: "bool" });
+      const not = r => ({ xml: B("pg_operators_not", line, V("BOOL", r)).xml, type: "bool" });
+      if (op === "<") return cmp("pg_operators_less_than", a, b);
+      if (op === ">") return cmp("pg_operators_greater_than", a, b);
+      if (op === "<=") return not(cmp("pg_operators_greater_than", a, b));
+      if (op === ">=") return not(cmp("pg_operators_less_than", a, b));
+      if (op === "==") return cmp("pg_operators_equal", a, b);
+      if (op === "!=") return not(cmp("pg_operators_equal", a, b));
+      fail(`The sim doesn't support ${op} yet.`, e);
+    }
+    const MATH1 = { abs: "abs", fabs: "abs", floor: "floor", ceil: "ceiling", sqrt: "sqrt", log: "ln", log10: "log", exp: "e ^" };
+    function callExpr(c) {
+      const path = nameOf(c.fn), parts = path.split("."), fn = lastName(c.fn), line = c.line;
+      if (c.fn.k === "id") {
+        if (MATH1[fn]) { argN(c, 1); return { xml: B("iq_operator_function", line, F("OPERATOR", MATH1[fn]) + V("NUM", toNum(c.args[0]))).xml, type: "num" }; }
+        if (fn === "round") { argN(c, 1); return { xml: B("pg_operators_round", line, V("NUM", toNum(c.args[0]))).xml, type: "num" }; }
+        if (["sin", "cos", "tan"].includes(fn)) {   // C++ uses radians; the block uses degrees
+          argN(c, 1); const deg = B("pg_operators_multiply", line, V("NUM1", toNum(c.args[0])) + V("NUM2", numB(180 / Math.PI, line)));
+          return { xml: B("iq_operator_function", line, F("OPERATOR", fn) + V("NUM", deg)).xml, type: "num" };
+        }
+        if (fn === "fmod") { argN(c, 2); return { xml: B("iq_operator_remainder", line, V("NUM1", toNum(c.args[0])) + V("NUM2", toNum(c.args[1]))).xml, type: "num" }; }
+        if (fn === "pow") { argN(c, 2); if (c.args[1].k === "num" && c.args[1].v === 2) { const a = toNum(c.args[0]); return { xml: B("pg_operators_multiply", line, V("NUM1", a) + V("NUM2", toNum(c.args[0]))).xml, type: "num" }; } fail("pow only works with 2 in the sim, like pow(x, 2).", c); }
+        if (fn === "rand") fail("Use rand() with %, like rand() % 10 for 0 to 9.", c);
+        if (funcs.has(fn)) fail(`"${fn}" is a void function, so it can't give back a value. Call it on its own line.`, c);
+        fail(`The sim doesn't know a function called "${fn}".`, c);
+      }
+      const obj = parts.slice(0, -1).join(".");
+      if (obj === "Brain.Timer") {
+        if (fn === "time" || fn === "value") { return fn === "time" && c.args[0] && lastName(c.args[0]) === "msec" ? { xml: B("pg_operators_multiply", line, V("NUM1", { xml: B("pg_sensing_timer", line).xml }) + V("NUM2", numB(1000, line))).xml, type: "num" } : { xml: B("pg_sensing_timer", line).xml, type: "num" }; }
+      }
+      if (obj === "Drivetrain") {
+        need("drivetrain", c);
+        const m = { isDone: "pg_sensing_drivetrain_is_done", isMoving: "pg_sensing_drivetrain_is_moving", heading: "pg_sensing_drivetrain_heading", rotation: "pg_sensing_drivetrain_rotation", velocity: "pg_sensing_drivetrain_velocity" }[fn];
+        if (m) return { xml: B(m, line).xml, type: /^is/.test(fn) ? "bool" : "num" };
+      }
+      if (obj === "BrainInertial") {
+        if (fn === "heading") return { xml: B("iq_brain_heading", line).xml, type: "num" };
+        if (fn === "rotation") return { xml: B("iq_brain_rotation", line).xml, type: "num" };
+      }
+      if (/^Controller\.Axis[A-D]$/.test(obj) && fn === "position") { need("controller", c); return { xml: B("iq_controller_axis", line, F("AXIS", obj.slice(-1))).xml, type: "num" }; }
+      const btn = obj.match(/^Controller\.Button(EUp|EDown|FUp|FDown|LUp|LDown|RUp|RDown)$/);
+      if (btn && fn === "pressing") { need("controller", c); return { xml: B("iq_controller_pressed", line, F("BUTTON", btn[1])).xml, type: "bool" }; }
+      if (parts.length === 2) {
+        const d = device(obj, c), D = F("DEVICE", d.name), t = d.type;
+        const R = (type, ty, extra = "") => ({ xml: B(type, line, D + extra).xml, type: ty });
+        if (t === "motor") {
+          if (fn === "isDone") return R("iq_motor_is_done", "bool");
+          if (fn === "isSpinning") return R("iq_motor_is_spinning", "bool");
+          if (fn === "position") return R("iq_motor_position", "num", F("UNITS", c.args[0] ? enumVal(c.args[0], RUNIT, "degrees or turns") : "degrees"));
+          if (fn === "velocity") return R("iq_motor_velocity", "num");
+        }
+        if (t === "touchled" && fn === "pressing") return R("iq_touchled_pressed", "bool");
+        if (t === "bumper" && fn === "pressing") return R("pg_sensing_bumper_pressed", "bool");
+        if (t === "gyro") {
+          if (fn === "heading") return R("iq_gyro_heading", "num");
+          if (fn === "rotation") return R("iq_gyro_rotation", "num");
+          if (fn === "rate") return R("iq_gyro_rate", "num");
+        }
+        if (t === "distance") {
+          if (fn === "isObjectDetected" || fn === "foundObject") return R("pg_sensing_distance_found", "bool");
+          if (fn === "distance" || fn === "objectDistance") return R("pg_sensing_distance_from", "num", F("UNITS", c.args[0] ? enumVal(c.args[0], DUNIT, "mm or inches") : "mm"));
+        }
+        if (t === "color") {
+          if (fn === "isNearObject") return R("iq_color_found", "bool");
+          if (fn === "brightness") return R("iq_color_brightness", "num");
+          if (fn === "hue") return R("iq_color_hue", "num");
+          if (fn === "colorname" || fn === "color") return R("iq_color_name", "str");
+        }
+        fail(`${DEVICE_TYPES[t].label} "${obj}" doesn't have ${fn}() in the sim.`, c);
+      }
+      fail(`The sim doesn't know "${path}()".`, c);
+    }
+    function need(type, node) {
+      if (type === "drivetrain" && !drivetrain()) fail("Add a Drivetrain in Devices to use Drivetrain commands.", node);
+      if (type === "controller" && !controllerDev()) fail("Add a Controller in Devices to use Controller commands.", node);
+    }
+
+    /* statements: return a list of block XML strings (chained later) */
+    const chain = list => list.reduceRight((acc, x) => acc ? x.replace(/<\/block>$/, `<next>${acc}</next></block>`) : x, "");
+    function stmts(list, ctx) { const out = []; for (const s of list) out.push(...stmt(s, ctx)); return out; }
+    function body(s, ctx) { return chain(stmts(s.k === "block" ? s.body : [s], ctx)); }
+    function cmd(c) {   // a command on its own line
+      const path = nameOf(c.fn), parts = path.split("."), fn = lastName(c.fn), line = c.line, a = c.args;
+      const one = (type, inner = "") => [B(type, line, inner).xml];
+      if (c.fn.k === "id") {
+        if (fn === "vexcodeInit") return [];
+        if (fn === "wait" || fn === "task::sleep" || fn === "sleep") {
+          argN(c, 2, 1);
+          const unit = a[1] ? lastName(a[1]) : fn === "wait" ? "msec" : "msec";
+          let t = toNum(a[0]);
+          if (unit === "msec") t = a[0].k === "num" ? numB(a[0].v / 1000, line) : { xml: B("pg_operators_divide", line, V("NUM1", t) + V("NUM2", numB(1000, line))).xml };
+          else if (unit !== "seconds" && unit !== "sec") fail("Use seconds or msec in wait, like wait(1, seconds).", c);
+          return one("pg_control_wait", V("TIME", t));
+        }
+        if (fn === "waitUntil") { argN(c, 1); return one("pg_control_wait_until", V("CONDITION", toBool(a[0]))); }
+        if (funcs.has(fn)) {
+          const f = funcs.get(fn);
+          if (a.length !== f.params.length) fail(`"${fn}" needs ${f.params.length} input${f.params.length === 1 ? "" : "s"} but got ${a.length}.`, c);
+          return one("procedures_callnoreturn", `<mutation name="${X(fn)}">${f.params.map(p => `<arg name="${X(p)}"></arg>`).join("")}</mutation>` + a.map((x, i) => V("ARG" + i, toNum(x))).join(""));
+        }
+        if (fn === "printf") fail('Use Brain.Screen.print( ) to show text in the sim.', c);
+        fail(`The sim doesn't know a command called "${fn}". If it's your own function, write it above main.`, c);
+      }
+      const obj = parts.slice(0, -1).join(".");
+      if (obj === "Brain.Screen") {
+        if (fn === "print") {
+          if (!a.length) fail("Brain.Screen.print needs something to print.", c);
+          let v = ex(a[0]);
+          if (a.length > 1 && a[0].k === "str") {   // printf style: "x = %d", x
+            const pieces = a[0].v.split(/%[-+ 0#]*\d*(?:\.\d+)?[dfisgx]/); let i = 0;
+            let acc = null;
+            pieces.forEach((txt, k) => {
+              const add = r => acc = acc ? { xml: B("pg_operators_join", line, V("STRING1", acc) + V("STRING2", r)).xml, type: "str" } : r;
+              if (txt) add({ xml: B("text", line, F("TEXT", txt)).xml, type: "str" });
+              if (k < pieces.length - 1) { if (!a[1 + i]) fail("There are more % codes than values in this print.", c); add(ex(a[1 + i++])); }
+            });
+            v = acc || { xml: B("text", line, F("TEXT", "")).xml };
+          }
+          return one("pg_looks_print", V("VALUE", v));
+        }
+        if (fn === "newLine" || fn === "setCursor" || fn === "setFont" || fn === "setPenColor") return [];
+        if (fn === "clearScreen" || fn === "clearLine") return one("pg_looks_clear_all_rows");
+      }
+      if (obj === "Brain.Timer" && (fn === "clear" || fn === "reset")) return one("pg_sensing_reset_timer");
+      if (obj === "Brain" && fn === "programStop") return one("pg_control_stop_project");
+      if (obj === "BrainInertial") {
+        if (fn === "calibrate") return one("iq_sensing_inertial_calibrate");
+        if (fn === "setHeading") { argN(c, 2, 1); return one("iq_brain_set_heading", V("HEADING", toNum(a[0]))); }
+        if (fn === "setRotation") { argN(c, 2, 1); return one("iq_brain_set_rotation", V("ROTATION", toNum(a[0]))); }
+      }
+      if (obj === "Drivetrain") {
+        need("drivetrain", c);
+        switch (fn) {
+          case "drive": argN(c, 1); return one("pg_drivetrain_drive", F("DIRECTION", enumVal(a[0], DIR, "forward or reverse")));
+          case "driveFor": {
+            argN(c, 4, 3);
+            if (a[3] && a[3].k === "bool" && !a[3].v) fail("The sim always waits for driveFor to finish. Remove the false.", c);
+            return one("pg_drivetrain_drive_for", F("DIRECTION", enumVal(a[0], DIR, "forward or reverse")) + V("AMOUNT", toNum(a[1])) + F("UNITS", enumVal(a[2], DUNIT, "mm or inches")));
+          }
+          case "turn": argN(c, 1); return one("pg_drivetrain_turn", F("TURNDIRECTION", enumVal(a[0], TURN, "right or left")));
+          case "turnFor": {
+            argN(c, 4, 3);
+            if (a[3] && a[3].k === "bool" && !a[3].v) fail("The sim always waits for turnFor to finish. Remove the false.", c);
+            return one("pg_drivetrain_turn_for", F("TURNDIRECTION", enumVal(a[0], TURN, "right or left")) + V("AMOUNT", toNum(a[1])));
+          }
+          case "turnToHeading": argN(c, 3, 2); return one("pg_drivetrain_turn_to_heading", V("HEADING", toNum(a[0])));
+          case "turnToRotation": argN(c, 3, 2); return one("pg_drivetrain_turn_to_rotation", V("ROTATION", toNum(a[0])));
+          case "stop": return one("pg_drivetrain_stop_driving");
+          case "setDriveVelocity": argN(c, 2); return one("pg_drivetrain_set_drive_velocity", V("VELOCITY", toNum(a[0])));
+          case "setTurnVelocity": argN(c, 2); return one("pg_drivetrain_set_turn_velocity", V("VELOCITY", toNum(a[0])));
+          case "setHeading": argN(c, 2); return one("pg_drivetrain_set_drive_heading", V("HEADING", toNum(a[0])));
+          case "setRotation": argN(c, 2); return one("pg_drivetrain_set_drive_rotation", V("ROTATION", toNum(a[0])));
+          case "setTimeout": argN(c, 2); return one("pg_drivetrain_set_drive_timeout", V("TIME", toNum(a[0])));
+          case "setStopping": argN(c, 1); return one("iq_drivetrain_set_drive_stopping", F("MODE", enumVal(a[0], STOPM, "brake, coast or hold")));
+        }
+        fail(`Drivetrain doesn't have ${fn}() in the sim.`, c);
+      }
+      if (obj === "Controller" && (fn === "Screen")) return [];
+      if (parts.length === 2) {
+        const d = device(obj, c), D = F("DEVICE", d.name), t = d.type;
+        if (t === "motor") switch (fn) {
+          case "spin": argN(c, 3, 1); return one("iq_motor_spin", D + F("DIRECTION", enumVal(a[0], DIR, "forward or reverse")));
+          case "spinFor": {
+            argN(c, 4, 3);
+            if (a[3] && a[3].k === "bool" && !a[3].v) fail("The sim always waits for spinFor to finish. Remove the false.", c);
+            return one("iq_motor_spin_for", D + F("DIRECTION", enumVal(a[0], DIR, "forward or reverse")) + V("AMOUNT", toNum(a[1])) + F("UNITS", enumVal(a[2], RUNIT, "degrees or turns")));
+          }
+          case "spinToPosition": argN(c, 3, 2); return one("iq_motor_spin_to_position", D + V("POSITION", toNum(a[0])) + F("UNITS", enumVal(a[1], RUNIT, "degrees or turns")));
+          case "stop": return one("iq_motor_stop", D);
+          case "setPosition": argN(c, 2); return one("iq_motor_set_position", D + V("POSITION", toNum(a[0])) + F("UNITS", enumVal(a[1], RUNIT, "degrees or turns")));
+          case "setVelocity": argN(c, 2); return one("iq_motor_set_velocity", D + V("VELOCITY", toNum(a[0])));
+          case "setTimeout": argN(c, 2); return one("iq_motor_set_timeout", D + V("TIME", toNum(a[0])));
+          case "setMaxTorque": argN(c, 2); return one("iq_motion_set_motor_torque", D + V("TORQUE", toNum(a[0])));
+          case "setStopping": return [];
+        }
+        if (t === "touchled") switch (fn) {
+          case "setColor": argN(c, 1); return one("iq_touchled_set_color", D + F("COLOR", enumVal(a[0], LEDC, "a color name like red or green")));
+          case "setBrightness": argN(c, 1); return one("iq_touchled_set_brightness", D + V("BRIGHTNESS", toNum(a[0])));
+          case "setFade": argN(c, 1); return one("iq_looks_set_touchled_fade", D + F("setting", enumVal(a[0], FADE, "slow, fast or off")));
+          case "on": argN(c, 2, 1); return one("iq_touchled_set_color", D + F("COLOR", enumVal(a[0], LEDC, "a color name like red or green")));
+          case "off": return one("iq_touchled_set_color", D + F("COLOR", "none"));
+        }
+        if (t === "gyro") switch (fn) {
+          case "calibrate": return one("iq_gyro_calibrate", D);
+          case "setHeading": argN(c, 2); return one("iq_gyro_set_heading", D + V("HEADING", toNum(a[0])));
+          case "setRotation": argN(c, 2); return one("iq_gyro_set_rotation", D + V("ROTATION", toNum(a[0])));
+        }
+        if (t === "color" && fn === "setLight") { argN(c, 2, 1); return one("iq_looks_set_color_sensor_brightness", D + V("LEVEL", toNum(a[0]))); }
+        fail(`${DEVICE_TYPES[t].label} "${obj}" doesn't have ${fn}() in the sim.`, c);
+      }
+      fail(`The sim doesn't know "${path}()".`, c);
+    }
+    const isTrue = e => e && (e.k === "bool" && e.v || e.k === "num" && e.v === 1);
+    const usesName = (node, name) => JSON.stringify(node).includes(`"v":"${name}"`) || JSON.stringify(node).includes(`"name":"${name}"`);
+    function stmt(s, ctx) {
+      const line = s.line;
+      switch (s.k) {
+        case "block": return stmts(s.body, ctx);
+        case "expr": {
+          const e = s.e;
+          if (e.k === "call") return cmd(e);
+          if (e.k === "assign") return assignStmt(e);
+          fail("This line doesn't do anything. Did you mean to call a command or change a variable?", s);
+        }
+        case "decl": {
+          const out = [];
+          for (const v of s.vars) {
+            vars.add(v.name);
+            out.push(B("variables_set", v.line, varField(v.name) + V("VALUE", v.init ? ex(v.init) : numB(0, v.line))).xml);
+          }
+          return out;
+        }
+        case "if": {
+          if (s.els) return [B("pg_control_ifelse", line, V("CONDITION", toBool(s.cond)) + ST("SUBSTACK", body(s.then, ctx)) + ST("SUBSTACK2", body(s.els, ctx))).xml];
+          return [B("pg_control_if", line, V("CONDITION", toBool(s.cond)) + ST("SUBSTACK", body(s.then, ctx))).xml];
+        }
+        case "while":
+          if (isTrue(s.cond)) return [B("pg_control_forever", line, ST("SUBSTACK", body(s.body, ctx))).xml];
+          return [B("pg_control_while", line, V("CONDITION", toBool(s.cond)) + ST("SUBSTACK", body(s.body, ctx))).xml];
+        case "dowhile":
+          return [...stmts(s.body.k === "block" ? s.body.body : [s.body], ctx), B("pg_control_while", line, V("CONDITION", toBool(s.cond)) + ST("SUBSTACK", body(s.body, ctx))).xml];
+        case "for": {
+          // for (int i = 0; i < N; i++) with i not used inside -> repeat N
+          const iv = s.init && s.init.k === "decl" && s.init.vars.length === 1 ? s.init.vars[0] : null;
+          const simple = iv && iv.init && iv.init.k === "num" && iv.init.v === 0 && s.cond && s.cond.k === "bin" && s.cond.op === "<" && s.cond.a.k === "id" && s.cond.a.v === iv.name
+            && s.step && s.step.k === "assign" && s.step.name === iv.name && s.step.op === "+=" && s.step.e.k === "num" && s.step.e.v === 1 && !usesName(s.body, iv.name) && !usesName(s.cond.b, iv.name);
+          if (simple) return [B("pg_control_repeat", line, V("TIMES", toNum(s.cond.b)) + ST("SUBSTACK", body(s.body, ctx))).xml];
+          const pre = s.init ? stmt(s.init.k === "decl" ? s.init : { k: "expr", e: s.init.e, line }, ctx) : [];
+          const bodyList = [...stmts(s.body.k === "block" ? s.body.body : [s.body], ctx), ...(s.step ? stmt({ k: "expr", e: s.step, line }, ctx) : [])];
+          const loop = s.cond ? B("pg_control_while", line, V("CONDITION", toBool(s.cond)) + ST("SUBSTACK", chain(bodyList))).xml : B("pg_control_forever", line, ST("SUBSTACK", chain(bodyList))).xml;
+          return [...pre, loop];
+        }
+        case "break": return [B("pg_control_break", line).xml];
+        case "return":
+          if (ctx && ctx.inFunc && s === ctx.last) return [];
+          if (ctx && ctx.inMain && s === ctx.last) return [];
+          fail('"return" only works as the last line of a function in the sim.', s);
+        case "thread": fail("Start threads inside main.", s);
+      }
+      fail("The sim can't run this line yet.", s);
+    }
+    function assignStmt(e) {
+      const line = e.line, name = e.name;
+      if (!opts.known(name) && !vars.has(name)) fail(`"${name}" hasn't been made yet. Make it first, like "float ${name} = 0;".`, e);
+      vars.add(name);
+      if (e.op === "=") return [B("variables_set", line, varField(name) + V("VALUE", ex(e.e))).xml];
+      if (e.op === "+=") return [B("math_change", line, varField(name) + V("DELTA", toNum(e.e))).xml];
+      if (e.op === "-=") return [B("math_change", line, varField(name) + V("DELTA", e.e.k === "num" ? numB(-e.e.v, line) : B("pg_operators_subtract", line, V("NUM1", numB(0, line)) + V("NUM2", toNum(e.e))))).xml];
+      const t = { "*=": "pg_operators_multiply", "/=": "pg_operators_divide", "%=": "iq_operator_remainder" }[e.op];
+      return [B("variables_set", line, varField(name) + V("VALUE", B(t, line, V("NUM1", { xml: B("variables_get", line, varField(name)).xml }) + V("NUM2", toNum(e.e))))).xml];
+    }
+    return { ex, toBool, toNum, stmts, stmt, chain, vars, B, F, V, ST, funcs, fail, idFor };
+  }
+
+  /* ---- a whole C++ program -> XML for a hidden workspace ---- */
+  function compileProgram(src) {
+    const items = parser(tokenize(src)).program();
+    const funcs = new Map(), globals = new Set();
+    for (const it of items) {
+      if (it.k === "func" && it.name !== "main") {
+        if (funcs.has(it.name)) throw new CppError(`There are two functions called "${it.name}".`, it.line);
+        funcs.set(it.name, it);
+      }
+      if (it.k === "decl") it.vars.forEach(v => globals.add(v.name));
+    }
+    const main = items.find(it => it.k === "func" && it.name === "main");
+    if (!main) throw new CppError('The program needs "int main() {". That\'s where the robot starts.', 1);
+    const params = new Set([...funcs.values()].flatMap(f => f.params));
+    const cc = makeCompiler({ funcs, known: n => globals.has(n) || params.has(n), idFor: (line, k) => `L${line}_${k}` });
+    const tops = [], x0 = 20; let y = 20;
+    const place = xml => { tops.push(xml.replace(/^<block /, `<block x="${x0}" y="${y}" `)); y += 400; };
+    // globals are set when the program starts
+    const pre = items.filter(it => it.k === "decl").flatMap(d => cc.stmt(d));
+    const extraStarts = [], hats = [];
+    const mainBody = [];
+    const last = main.body[main.body.length - 1];
+    for (const s of main.body) {
+      if (s.k === "thread") { if (!funcs.has(s.fn)) throw new CppError(`There's no function called "${s.fn}" to start.`, s.line); extraStarts.push(s); continue; }
+      // Controller.ButtonEUp.pressed(onEUp);  Controller.AxisA.changed(onAxisA);
+      if (s.k === "expr" && s.e.k === "call" && s.e.fn.k === "member" && (s.e.fn.name === "pressed" || s.e.fn.name === "released" || s.e.fn.name === "changed")) {
+        const on = s.e.fn.obj, path = on.k === "member" ? (on.obj.k === "id" ? on.obj.v : "") + "." + on.name : "";
+        const fnName = s.e.args[0] && s.e.args[0].k === "id" ? s.e.args[0].v : null;
+        if (!fnName || !funcs.has(fnName)) throw new CppError("Give the name of a void function to run, like Controller.ButtonEUp.pressed(onEUp);", s.line);
+        if (!controllerDev()) throw new CppError("Add a Controller in Devices to use Controller events.", s.line);
+        const b = path.match(/^Controller\.Button(EUp|EDown|FUp|FDown|LUp|LDown|RUp|RDown)$/), a = path.match(/^Controller\.Axis([A-D])$/);
+        if (b && s.e.fn.name !== "changed") hats.push({ type: "iq_controller_when_button", fields: cc.F("BUTTON", b[1]) + cc.F("ACTION", s.e.fn.name), fn: fnName, line: s.line });
+        else if (a && s.e.fn.name === "changed") hats.push({ type: "iq_controller_when_axis", fields: cc.F("AXIS", a[1]), fn: fnName, line: s.line });
+        else throw new CppError("The sim knows Controller.ButtonEUp.pressed(fn), .released(fn) and Controller.AxisA.changed(fn).", s.line);
+        continue;
+      }
+      mainBody.push(s);
+    }
+    const mainList = [...pre, ...cc.stmts(mainBody, { inMain: true, last })];
+    place(cc.B("pg_events_when_started", main.line, mainList.length ? `<next>${cc.chain(mainList)}</next>` : "").xml);
+    const callXml = (fn, line) => cc.B("procedures_callnoreturn", line, `<mutation name="${X(fn)}">${funcs.get(fn).params.map(p => `<arg name="${X(p)}"></arg>`).join("")}</mutation>`).xml;
+    for (const t of extraStarts) place(cc.B("pg_events_when_started", t.line, `<next>${callXml(t.fn, t.line)}</next>`).xml);
+    for (const h of hats) place(cc.B(h.type, h.line, h.fields + `<next>${callXml(h.fn, h.line)}</next>`).xml);
+    for (const f of funcs.values()) {
+      if (f.type !== "void" && !(f.type === "int" && f.body.length && f.body[f.body.length - 1].k === "return")) throw new CppError(`"${f.name}" gives back a ${f.type}. In the sim, functions must be void (they can't give back a value yet).`, f.line);
+      const lastF = f.body[f.body.length - 1];
+      const inner = cc.chain(cc.stmts(f.body, { inFunc: true, last: lastF }));
+      place(cc.B("procedures_defnoreturn", f.line, `<mutation>${f.params.map(p => `<arg name="${X(p)}"></arg>`).join("")}</mutation>` + cc.F("NAME", f.name) + (inner ? `<statement name="STACK">${inner}</statement>` : "")).xml);
+    }
+    return `<xml xmlns="https://developers.google.com/blockly/xml">${tops.join("")}</xml>`;
+  }
+
+  /* ---- text blocks: expand the C++ inside blocks into regular blocks ---- */
+  function expandTextBlocks(dom, wsVarNames) {
+    const funcs = new Map();
+    dom.querySelectorAll('block[type="procedures_defnoreturn"]').forEach(d => {
+      const name = (d.querySelector(':scope > field[name="NAME"]') || {}).textContent;
+      if (name) funcs.set(name, { params: [...d.querySelectorAll(":scope > mutation > arg")].map(a => a.getAttribute("name")) });
+    });
+    const cc = makeCompiler({ funcs, known: n => wsVarNames.has(n), idFor: () => "" });
+    const parse = (txt, id) => { try { return parser(tokenize(txt)); } catch (e) { e.blockId = id; throw e; } };
+    const wrap = (id, fn) => { try { return fn(); } catch (e) { if (e instanceof CppError) e.blockId = id; throw e; } };
+    let k = 0;
+    const retag = (xml, id) => xml.replace(/ id="[^"]*"/g, () => ` id="${X(id)}__${k++}"`);
+    const toDom = xml => new DOMParser().parseFromString(`<xml xmlns="https://developers.google.com/blockly/xml">${xml}</xml>`, "text/xml").documentElement;
+    // work from the inside out so nested text blocks are done first
+    const all = [...dom.querySelectorAll('block[type^="cpp_"]')].reverse();
+    for (const b of all) {
+      const id = b.getAttribute("id"), type = b.getAttribute("type");
+      const code = (b.querySelector(':scope > field[name="CODE"]') || {}).textContent || "";
+      const nextEl = b.querySelector(":scope > next");
+      const kids = name => { const s = b.querySelector(`:scope > statement[name="${name}"]`); return s ? [...s.children] : []; };
+      let xml;
+      wrap(id, () => {
+        if (type === "cpp_bool" || type === "cpp_num") {
+          const e = parse(code, id).expression();
+          xml = retag(type === "cpp_bool" ? cc.toBool(e).xml : cc.ex(e).xml, id);
+          b.replaceWith(...toDom(xml).children);
+          return;
+        }
+        if (type === "cpp_stmt") {
+          const list = parse(code, id).statements();
+          const out = cc.stmts(list);
+          xml = out.length ? retag(cc.chain(out), id) : "";
+        } else {
+          const e = code.trim() === "" ? null : parse(code, id).expression();
+          const cond = () => { if (!e) throw new CppError("Type a condition in this block.", 1); return cc.toBool(e).xml; };
+          const sub = n => { const ks = kids(n); return ks.length ? `<statement name="${n === "DO" ? "SUBSTACK" : n === "ELSE" ? "SUBSTACK2" : n}">${new XMLSerializer().serializeToString(ks[0])}</statement>` : ""; };
+          if (type === "cpp_if") xml = `<block type="pg_control_if" id="${X(id)}"><value name="CONDITION">${retag(cond(), id)}</value>${sub("DO")}</block>`;
+          else if (type === "cpp_ifelse") xml = `<block type="pg_control_ifelse" id="${X(id)}"><value name="CONDITION">${retag(cond(), id)}</value>${sub("DO")}${sub("ELSE")}</block>`;
+          else if (type === "cpp_while") xml = e && e.k === "bool" && e.v ? `<block type="pg_control_forever" id="${X(id)}">${sub("DO")}</block>` : `<block type="pg_control_while" id="${X(id)}"><value name="CONDITION">${retag(cond(), id)}</value>${sub("DO")}</block>`;
+          else if (type === "cpp_repeat") xml = `<block type="pg_control_repeat" id="${X(id)}"><value name="TIMES">${retag(e ? cc.toNum(e).xml : cc.B("math_number", 1, cc.F("NUM", 0)).xml, id)}</value>${sub("DO")}</block>`;
+        }
+      });
+      // splice: the generated chain takes the place of b, and b's next block follows the chain
+      const nextXml = nextEl && nextEl.firstElementChild ? new XMLSerializer().serializeToString(nextEl.firstElementChild).replace(/ xmlns="[^"]*"/, "") : "";
+      if (!xml) {   // empty text block: just keep what came after it
+        if (nextXml) b.replaceWith(...toDom(nextXml).children); else b.remove();
+        continue;
+      }
+      let full = xml;
+      if (nextXml) {
+        // attach after the last block of the generated chain
+        const d = toDom(xml).firstElementChild;
+        let tail = d; for (;;) { const nx = tail.querySelector(":scope > next > block"); if (!nx) break; tail = nx; }
+        const nn = d.ownerDocument.createElementNS(d.namespaceURI, "next"); nn.appendChild(toDom(nextXml).firstElementChild); tail.appendChild(nn);
+        full = new XMLSerializer().serializeToString(d);
+      }
+      const keepXY = el => { ["x", "y"].forEach(a => { if (b.hasAttribute(a)) el.setAttribute(a, b.getAttribute(a)); }); return el; };
+      b.replaceWith(keepXY(toDom(full).firstElementChild));
+    }
+    return dom;
+  }
+
+  return { tokenize, parser, compileProgram, expandTextBlocks, CppError, makeCompiler };
+})();
+
+/* ---- test page: coding modes (Blocks, Text blocks, C++) ---- */
+const BETA = !!window.RFS_BETA;
+const CODE_MODES = [["blocks", "Blocks"], ["text", "Text blocks"], ["cpp", "C++"]];
+function allowedModes() {
+  if (!BETA) return ["blocks"];
+  const m = Array.isArray(S.modes) && S.modes.length ? S.modes.filter(x => CODE_MODES.some(c => c[0] === x)) : CODE_MODES.map(c => c[0]);
+  return m.length ? m : ["blocks"];
+}
+let MODE = "blocks";
+const CPP_START = '#include "vex.h"\nusing namespace vex;\n\nint main() {\n  vexcodeInit();\n  \n}\n';
+let CPP_TEXT = LS.get("rfs.cpp", "");
+
+/* Text blocks: VEX-style blocks with C++ typed inside */
+(function defineTextBlocks() {
+  const CC = "#2f3542";
+  const code = (o, v) => ({ type: "field_input", name: "CODE", text: v, spellcheck: false });
+  Blockly.defineBlocksWithJsonArray([
+    { type: "cpp_stmt", message0: "%1", args0: [code(0, "Drivetrain.driveFor(forward, 200, mm);")], previousStatement: null, nextStatement: null, colour: CC, tooltip: "One or more C++ commands. End each one with ;" },
+    { type: "cpp_if", message0: "if ( %1 ) {", args0: [code(0, "Bumper8.pressing()")], message1: "%1", args1: [{ type: "input_statement", name: "DO" }], message2: "}", previousStatement: null, nextStatement: null, colour: CC },
+    { type: "cpp_ifelse", message0: "if ( %1 ) {", args0: [code(0, "Bumper8.pressing()")], message1: "%1", args1: [{ type: "input_statement", name: "DO" }], message2: "} else {", message3: "%1", args3: [{ type: "input_statement", name: "ELSE" }], message4: "}", previousStatement: null, nextStatement: null, colour: CC },
+    { type: "cpp_while", message0: "while ( %1 ) {", args0: [code(0, "true")], message1: "%1", args1: [{ type: "input_statement", name: "DO" }], message2: "}", previousStatement: null, nextStatement: null, colour: CC },
+    { type: "cpp_repeat", message0: "repeat ( %1 ) {", args0: [code(0, "4")], message1: "%1", args1: [{ type: "input_statement", name: "DO" }], message2: "}", previousStatement: null, nextStatement: null, colour: CC, tooltip: "Runs the blocks inside this many times (in C++ this is a for loop)." },
+    { type: "cpp_bool", message0: "( %1 )", args0: [code(0, "Bumper8.pressing()")], output: "Boolean", colour: CC },
+    { type: "cpp_num", message0: "( %1 )", args0: [code(0, "Distance7.distance(mm)")], output: "Number", colour: CC },
+  ]);
+})();
+function cppExamples() {
+  const d = t => DEVICES.find(x => x.type === t), nm = x => String(x.name).replace(/[^A-Za-z0-9_]/g, "_");
+  const bump = d("bumper"), dist = d("distance"), col = d("color"), led = d("touchled"), mot = d("motor");
+  return {
+    cond: bump ? `${nm(bump)}.pressing()` : dist ? `${nm(dist)}.distance(mm) > 200` : col ? `${nm(col)}.color() == red` : "true",
+    num: dist ? `${nm(dist)}.distance(mm)` : "Brain.Timer.time(seconds)",
+    stmt: drivetrain() ? "Drivetrain.driveFor(forward, 200, mm);" : mot ? `${nm(mot)}.spinFor(forward, 90, degrees);` : led ? `${nm(led)}.setColor(green);` : 'Brain.Screen.print("Hello");',
+  };
+}
+buildToolbox = (orig => function () {
+  const tb = orig();
+  if (MODE === "text") {
+    const ex = cppExamples(), F = v => ({ CODE: v });
+    tb.contents.unshift({ kind: "category", name: "C++", colour: "#2f3542", contents: [
+      { kind: "label", text: "Type C++ inside these blocks. Right-click a normal block to turn it into C++." },
+      { kind: "block", type: "cpp_stmt", fields: F(ex.stmt) },
+      { kind: "block", type: "cpp_stmt", fields: F("float count = 0;") },
+      { kind: "block", type: "cpp_stmt", fields: F("count = count + 1;") },
+      { kind: "block", type: "cpp_stmt", fields: F("wait(1, seconds);") },
+      { kind: "block", type: "cpp_if", fields: F(ex.cond) },
+      { kind: "block", type: "cpp_ifelse", fields: F(ex.cond) },
+      { kind: "block", type: "cpp_while", fields: F("true") },
+      { kind: "block", type: "cpp_repeat", fields: F("4") },
+      { kind: "block", type: "cpp_bool", fields: F(ex.cond) },
+      { kind: "block", type: "cpp_num", fields: F(ex.num) },
+    ] });
+  }
+  return tb;
+})(buildToolbox);
+
+/* right-click a block -> "Turn into C++" (text blocks mode) */
+function blockToCpp(b) {
+  const one = genCode("cpp", { block: b });
+  return one;
+}
+try {
+  Blockly.ContextMenuRegistry.registry.register({
+    id: "rfsToCpp", scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK, weight: 5,
+    displayText: () => "Turn into C++",
+    preconditionFn: s => MODE === "text" && s.block && !s.block.type.startsWith("cpp_") && !HAT_TYPES.includes(s.block.type) && !s.block.type.startsWith("procedures_def") && !s.block.isShadow() ? "enabled" : "hidden",
+    callback: s => turnIntoCpp(s.block),
+  });
+} catch (e) { /* already registered */ }
+function turnIntoCpp(b) {
+  const W = b.workspace, xy = b.getRelativeToSurfaceXY();
+  const r = blockToCpp(b);
+  if (!r) return;
+  Blockly.Events.setGroup(true);
+  try {
+    let nb;
+    if (r.kind === "value") {
+      nb = W.newBlock(r.bool ? "cpp_bool" : "cpp_num"); nb.setFieldValue(r.text, "CODE"); nb.initSvg(); nb.render();
+      const conn = b.outputConnection && b.outputConnection.targetConnection;
+      b.dispose(false);
+      if (conn) conn.connect(nb.outputConnection); else nb.moveBy(xy.x, xy.y);
+    } else {
+      nb = W.newBlock(r.type); nb.setFieldValue(r.text, "CODE"); nb.initSvg(); nb.render();
+      const prev = b.previousConnection && b.previousConnection.targetConnection;
+      const nextB = b.getNextBlock(); if (nextB) nextB.unplug(false);
+      for (const [from, to] of r.moves || []) { const kid = b.getInputTargetBlock(from); if (kid) { kid.unplug(false); nb.getInput(to).connection.connect(kid.previousConnection); } }
+      b.dispose(false);
+      if (prev) prev.connect(nb.previousConnection); else nb.moveBy(xy.x, xy.y);
+      if (nextB) nb.nextConnection.connect(nextB.previousConnection);
+    }
+    nb.select && nb.select();
+  } finally { Blockly.Events.setGroup(false); }
+}
+
+/* compiling for a run */
+function markBlockError(e) {
+  if (e.blockId) {
+    const b = ws.getBlockById(e.blockId);
+    if (b) { b.setWarningText(e.message); b.select && b.select(); ws.centerOnBlock && ws.centerOnBlock(b.id); }
+  }
+}
+function clearBlockErrors() { ws.getAllBlocks(false).forEach(b => { if (b.type.startsWith("cpp_") && b.warning) b.setWarningText(null); }); }
+function cppProgWs() {
+  if (MODE === "cpp") {
+    try {
+      const xml = CPP.compileProgram(CPP_TEXT || "");
+      const hw = new Blockly.Workspace();
+      Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), hw);
+      cppEd.setError(null);
+      return hw;
+    } catch (e) {
+      if (!(e instanceof CPP.CppError)) { console.error(e); log("Couldn't run the C++: " + e.message, "err"); return null; }
+      log(`Line ${e.line || "?"}: ${e.message}`, "err"); cppEd.setError(e); return null;
+    }
+  }
+  const hasText = ws.getAllBlocks(false).some(b => b.type.startsWith("cpp_") && b.isEnabled());
+  if (!hasText) return ws;
+  clearBlockErrors();
+  try {
+    const dom = Blockly.Xml.workspaceToDom(ws);
+    CPP.expandTextBlocks(dom, new Set(ws.getAllVariables().map(v => v.name)));
+    const hw = new Blockly.Workspace();
+    Blockly.Xml.domToWorkspace(dom, hw);
+    return hw;
+  } catch (e) {
+    if (!(e instanceof CPP.CppError)) { console.error(e); log("Couldn't run the text blocks: " + e.message, "err"); return null; }
+    log(`C++ block: ${e.message}`, "err"); markBlockError(e); return null;
+  }
+}
+function cppShowCurrent(ids) {
+  if (MODE !== "cpp") return false;
+  const lines = new Set(ids.map(id => +(String(id).match(/^L(\d+)_/) || [])[1]).filter(Boolean));
+  cppEd.setRunning(lines);
+  return true;
+}
+
+/* ---- the C++ editor: a textarea over a colored copy, with line numbers ---- */
+const cppEd = (() => {
+  const pane = document.getElementById("cppPane"), ta = document.getElementById("cppText"), hi = document.getElementById("cppHi"), gut = document.getElementById("cppGutter"), status = document.getElementById("cppStatus");
+  let err = null, running = new Set(), checkT = 0;
+  const KW = /^(if|else|while|for|do|break|return|int|float|double|bool|void|const|auto|true|false|using|namespace|thread|long|unsigned)$/;
+  const H = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  function color(line, inComment) {
+    let out = "", i = 0;
+    const devs = new Set(["Drivetrain", "Brain", "BrainInertial", "Controller", ...DEVICES.map(d => String(d.name).replace(/[^A-Za-z0-9_]/g, "_"))]);
+    while (i < line.length) {
+      if (inComment) { const j = line.indexOf("*/", i); const end = j < 0 ? line.length : j + 2; out += `<span class="tc">${H(line.slice(i, end))}</span>`; i = end; if (j >= 0) inComment = false; continue; }
+      const rest = line.slice(i);
+      let m;
+      if (rest.startsWith("//")) { out += `<span class="tc">${H(rest)}</span>`; break; }
+      if (rest.startsWith("/*")) { inComment = true; continue; }
+      if (rest.startsWith("#")) { out += `<span class="tp">${H(rest)}</span>`; break; }
+      if ((m = rest.match(/^"(?:[^"\\]|\\.)*"?/))) { out += `<span class="ts">${H(m[0])}</span>`; i += m[0].length; continue; }
+      if ((m = rest.match(/^\d+(\.\d+)?/))) { out += `<span class="tn">${m[0]}</span>`; i += m[0].length; continue; }
+      if ((m = rest.match(/^[A-Za-z_]\w*/))) {
+        const w = m[0], after = rest.slice(w.length);
+        out += KW.test(w) ? `<span class="tk">${w}</span>` : devs.has(w) ? `<span class="td">${w}</span>` : /^\s*\(/.test(after) ? `<span class="tf">${w}</span>` : H(w);
+        i += w.length; continue;
+      }
+      out += H(rest[0]); i++;
+    }
+    return { html: out, inComment };
+  }
+  function render() {
+    const lines = ta.value.split("\n");
+    let inC = false;
+    hi.innerHTML = lines.map((l, k) => { const r = color(l, inC); inC = r.inComment; const n = k + 1; return `<div class="cl${running.has(n) ? " run" : ""}${err && err.line === n ? " bad" : ""}">${r.html || " "}</div>`; }).join("");
+    gut.innerHTML = lines.map((_, k) => `<div class="${running.has(k + 1) ? "run" : ""}${err && err.line === k + 1 ? " bad" : ""}">${k + 1}</div>`).join("");
+    sync();
+  }
+  function sync() { hi.style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`; gut.style.transform = `translateY(${-ta.scrollTop}px)`; }
+  function check() {
+    clearTimeout(checkT);
+    checkT = setTimeout(() => {
+      if (MODE !== "cpp") return;
+      try { CPP.compileProgram(ta.value); setError(null); status.className = "cppstatus ok"; status.textContent = "✓ The sim can run this."; }
+      catch (e) { if (e instanceof CPP.CppError) setError(e); else { status.className = "cppstatus bad"; status.textContent = e.message; } }
+    }, 450);
+  }
+  function setError(e) {
+    err = e && e.line ? e : null;
+    if (e) { status.className = "cppstatus bad"; status.textContent = `Line ${e.line || "?"}: ${e.message}`; }
+    render();
+  }
+  function setRunning(lines) {
+    running = lines; render();
+    const first = [...lines][0];
+    if (first) {   // keep the running line in view
+      const lh = parseFloat(getComputedStyle(ta).lineHeight) || 20, top = (first - 1) * lh;
+      if (top < ta.scrollTop || top > ta.scrollTop + ta.clientHeight - lh * 2) { ta.scrollTop = Math.max(0, top - ta.clientHeight / 3); sync(); }
+    }
+  }
+  function setText(t) { ta.value = t; CPP_TEXT = t; LS.set("rfs.cpp", t); render(); check(); }
+  function insert(text) {
+    const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    const lineStart = v.lastIndexOf("\n", s - 1) + 1, indent = (v.slice(lineStart, s).match(/^\s*/) || [""])[0];
+    const onlySpace = v.slice(lineStart, s).trim() === "";
+    let t = text.split("\n").map((l, i) => i ? indent + l : l).join("\n");
+    if (!onlySpace) t = "\n" + indent + t;
+    ta.setRangeText(t, s, e, "end"); ta.focus(); changed();
+  }
+  function changed() { CPP_TEXT = ta.value; LS.set("rfs.cpp", ta.value); render(); check(); }
+  ta.addEventListener("input", changed);
+  ta.addEventListener("scroll", sync);
+  ta.addEventListener("keydown", e => {
+    const s = ta.selectionStart, v = ta.value;
+    if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (e.shiftKey) { const ls = v.lastIndexOf("\n", s - 1) + 1; if (v.startsWith("  ", ls)) { ta.setRangeText("", ls, ls + 2, "preserve"); ta.selectionStart = ta.selectionEnd = Math.max(ls, s - 2); changed(); } return; }
+      ta.setRangeText("  ", s, ta.selectionEnd, "end"); changed(); return;
+    }
+    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const ls = v.lastIndexOf("\n", s - 1) + 1, cur = v.slice(ls, s), ind = (cur.match(/^\s*/) || [""])[0], opens = /\{\s*$/.test(cur);
+      const closesNext = v[s] === "}";
+      const t = "\n" + ind + (opens ? "  " : "") + (opens && closesNext ? "\n" + ind : "");
+      ta.setRangeText(t, s, ta.selectionEnd, "end");
+      if (opens && closesNext) ta.selectionStart = ta.selectionEnd = s + 1 + ind.length + 2;
+      changed(); return;
+    }
+    if (e.key === "}") {
+      const ls = v.lastIndexOf("\n", s - 1) + 1;
+      if (v.slice(ls, s).trim() === "" && s - ls >= 2) { e.preventDefault(); ta.setRangeText("}", s - 2, ta.selectionEnd, "end"); changed(); }
+    }
+  });
+  ta.addEventListener("drop", () => setTimeout(changed, 0));
+  return { render, setError, setRunning, setText, insert, check, pane, ta };
+})();
+
+/* the command list next to the editor: click to insert, or drag into the code */
+function renderSnippets() {
+  const box = document.getElementById("cppSnips"); if (!box) return;
+  const nm = d => String(d.name).replace(/[^A-Za-z0-9_]/g, "_");
+  const groups = [];
+  if (drivetrain()) groups.push(["Drivetrain", ["Drivetrain.driveFor(forward, 200, mm);", "Drivetrain.turnFor(right, 90, degrees);", "Drivetrain.drive(forward);", "Drivetrain.turn(right);", "Drivetrain.stop();", "Drivetrain.turnToHeading(90, degrees);", "Drivetrain.setDriveVelocity(50, percent);", "Drivetrain.setTurnVelocity(50, percent);", "Drivetrain.setStopping(brake);", "Drivetrain.setTimeout(2, seconds);", "Drivetrain.heading(degrees)", "Drivetrain.isMoving()"]]);
+  DEVICES.forEach(d => {
+    const n = nm(d);
+    const L = { motor: [`${n}.spinFor(forward, 90, degrees);`, `${n}.spin(forward);`, `${n}.stop();`, `${n}.spinToPosition(0, degrees);`, `${n}.setVelocity(50, percent);`, `${n}.position(degrees)`],
+      bumper: [`${n}.pressing()`], touchled: [`${n}.setColor(green);`, `${n}.pressing()`], distance: [`${n}.distance(mm)`, `${n}.isObjectDetected()`],
+      color: [`${n}.color() == red`, `${n}.brightness()`, `${n}.isNearObject()`], gyro: [`${n}.heading(degrees)`, `${n}.rotation(degrees)`, `${n}.calibrate();`] }[d.type];
+    if (L) groups.push([d.name, L]);
+  });
+  if (controllerDev()) groups.push(["Controller", ["Controller.AxisA.position()", "Controller.ButtonEUp.pressing()", "Controller.ButtonEUp.pressed(onEUp);"]]);
+  groups.push(["Control", ["wait(1, seconds);", "waitUntil(condition);", "if (condition) {\n  \n}", "if (condition) {\n  \n} else {\n  \n}", "while (condition) {\n  \n  wait(5, msec);\n}", "while (true) {\n  \n  wait(5, msec);\n}", "for (int i = 0; i < 4; i++) {\n  \n}", "break;"]]);
+  groups.push(["Variables", ["float count = 0;", "count = count + 1;", "count++;", "bool done = false;"]]);
+  groups.push(["Brain", ['Brain.Screen.print("Hello");', "Brain.Screen.newLine();", "Brain.Screen.clearScreen();", "Brain.Timer.clear();", "Brain.Timer.time(seconds)", "BrainInertial.heading(degrees)"]]);
+  groups.push(["My functions", ["void myFunction() {\n  \n}", "void driveSquare(float side) {\n  for (int i = 0; i < 4; i++) {\n    Drivetrain.driveFor(forward, side, mm);\n    Drivetrain.turnFor(right, 90, degrees);\n  }\n}"]]);
+  box.innerHTML = `<p class="hint">Click to add at the cursor, or drag into your code.</p>` + groups.map(([g, list]) => `<details open><summary>${esc(g)}</summary>${list.map(c => `<button type="button" class="snip" draggable="true" data-code="${esc(c)}">${esc(c.split("\n")[0])}${c.includes("\n") ? " …" : ""}</button>`).join("")}</details>`).join("");
+  box.querySelectorAll(".snip").forEach(b => {
+    b.onclick = () => cppEd.insert(b.dataset.code);
+    b.addEventListener("dragstart", e => e.dataTransfer.setData("text/plain", b.dataset.code));
+  });
+}
+
+/* switching modes */
+function setMode(m, quiet) {
+  if (!allowedModes().includes(m)) m = allowedModes()[0];
+  if (RUN) stopProgram();
+  MODE = m; LS.set("rfs.codemode", m);
+  document.querySelectorAll("#modeBar [data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
+  const cpp = m === "cpp";
+  document.getElementById("blockly").hidden = cpp;
+  cppEd.pane.hidden = !cpp;
+  document.getElementById("btnCode").hidden = cpp;
+  if (cpp) {
+    if (!document.getElementById("codeview").hidden) document.getElementById("btnCode").onclick();
+    if (!CPP_TEXT.trim()) cppEd.setText(CPP_START); else { cppEd.ta.value = CPP_TEXT; cppEd.render(); cppEd.check(); }
+    renderSnippets();
+  } else {
+    ws.updateToolbox(buildToolbox());
+    setTimeout(() => Blockly.svgResize(ws), 0);
+  }
+  if (!quiet) log(m === "cpp" ? "C++ mode: type your program. The list on the right has the commands the sim knows." : m === "text" ? 'Text blocks: open the "C++" category, or right-click a block and pick "Turn into C++".' : "Blocks mode.");
+}
+(function setupModes() {
+  if (!BETA) return;
+  // the student link can carry the modes: ?modes=blocks,text,cpp
+  try {
+    const q = new URLSearchParams(location.search).get("modes");
+    if (q !== null) { const list = q.split(",").filter(x => CODE_MODES.some(c => c[0] === x)); S.modes = list.length ? list : null; LS.set("rfs.settings", S); }
+  } catch (e) {}
+  document.title = "Robot Field Sim (test)";
+  const bar = document.getElementById("modeBar"); bar.hidden = false;
+  const draw = () => {
+    const al = allowedModes();
+    bar.innerHTML = CODE_MODES.filter(([k]) => al.includes(k)).map(([k, l]) => `<button class="btn" type="button" data-mode="${k}" aria-pressed="${k === MODE}">${l}</button>`).join("");
+    bar.hidden = al.length < 2;
+    bar.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  };
+  draw();
+  window.redrawModes = () => { draw(); if (!allowedModes().includes(MODE)) setMode(allowedModes()[0]); };
+  document.getElementById("cppFromBlocks").onclick = () => {
+    const has = CPP_TEXT.trim() && CPP_TEXT.trim() !== CPP_START.trim();
+    if (has && !confirm("Replace your C++ with your blocks program?")) return;
+    cppEd.setText(genCode("cpp"));
+  };
+  document.getElementById("cppNew").onclick = () => { if (confirm("Start over with an empty program?")) cppEd.setText(CPP_START); };
+  document.getElementById("cppSnipToggle").onclick = () => { const s = document.getElementById("cppSnips"); s.hidden = !s.hidden; };
+  MODE = allowedModes().includes(LS.get("rfs.codemode", "blocks")) ? LS.get("rfs.codemode", "blocks") : allowedModes()[0];
+  setMode(MODE, true);
+  draw();
+})();
+
+/* saving and opening in C++ mode, and scores carry the C++ */
+projectJSON = (orig => function () {
+  if (!BETA || MODE !== "cpp") return orig();
+  const j = JSON.parse(orig()); j.codeMode = "cpp"; j.cpp = CPP_TEXT; return JSON.stringify(j);
+})(projectJSON);
+openProject = (orig => function (text) {
+  const t = String(text).trim();
+  if (BETA && !t.startsWith("{")) {   // plain C++ text
+    if (!allowedModes().includes("cpp")) throw new Error("C++ isn't turned on for you.");
+    cppEd.setText(String(text)); setMode("cpp", true); return;
+  }
+  const data = JSON.parse(text);
+  const r = orig(text);
+  if (BETA && data && typeof data.cpp === "string") { cppEd.setText(data.cpp); if (data.codeMode === "cpp" && allowedModes().includes("cpp")) setMode("cpp", true); }
+  return r;
+})(openProject);
+(function hookSave() {
+  const btn = document.getElementById("btnSave"), orig = btn.onclick;
+  btn.onclick = () => {
+    if (!BETA || MODE !== "cpp") return orig();
+    textDialog("Save C++", "Download this file, or copy the code into main.cpp in a VEXcode IQ C++ project. It opens here with Open.", CPP_TEXT, null,
+      { program: LEVEL === "open" ? "MyProgram" : camel(lvl().name.replace(/^\d+\w?\.\s*/, "")), ext: ".cpp" });
+  };
+})();
 
 /* ---- teacher: open a student's program from the View blocks link in the score sheet ---- */
 function viewBanner(info) {
