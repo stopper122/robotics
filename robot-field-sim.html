@@ -718,7 +718,29 @@ const FIXES = [
     task: "This remote should drive forward when you hold both Bumpers, but it turns instead. Load the broken program, hold both Bumpers (Z and X), and Step through it to see which block wins. Then fix it.",
     starter: () => XB(`<block type="pg_control_forever"><statement name="SUBSTACK"><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_and"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_drive"><field name="DIRECTION">fwd</field></block></statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(0, 8)}</value><statement name="SUBSTACK"><block type="pg_drivetrain_turn"><field name="TURNDIRECTION">left</field></block></statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(1, 9)}</value><statement name="SUBSTACK"><block type="pg_drivetrain_turn"><field name="TURNDIRECTION">right</field></block></statement><next><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_not"><value name="BOOL"><block type="pg_operators_or"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_stop_driving"></block></statement></block></next></block></next></block></next></block></statement></block>`) },
 ];
-for (const f of FIXES) { const base = LEVELS.find(l => l.id === f.after); const { after, ...rest } = f; LEVELS.splice(LEVELS.indexOf(base) + 1, 0, { ...base, ...rest, base: after, sub: true }); }
+/* more practice levels, numbered as sub-levels (1b, 5c, ...) for the same reason */
+const HEX_CW = [[0, -100], [260, 50], [520, -100], [520, -400], [260, -550], [0, -400]];
+const EXTRAS = [
+  { after: "square", id: "hexagon", name: "Pen art: hexagon", start: [0, -400, 0], walls: [],
+    guides: [{ pts: [[0, -400], ...HEX_CW], label: "300 mm sides" }],
+    task: "Put the pen down and draw a hexagon with 300 mm sides, ending where you started. A hexagon has 6 sides, and the robot turns 360 ÷ 6 degrees at each corner. Use a repeat loop and let the math block do the dividing.", needs: "Drivetrain" },
+  { after: "fixcount", id: "modemenu", name: "Touch LED mode menu", start: [0, -300, 0], walls: [],
+    task: "Make a menu with the Touch LED. The robot starts in mode 0: stopped, LED red. Each press goes to the next mode. Mode 1: drive forward, LED green. Mode 2: turn right in place, LED blue. After mode 2 it goes back to mode 0. Tip: keep the mode in a variable, and wait until the Touch LED is let go after each press.", needs: "Drivetrain, Touch LED" },
+  { after: "fixloop", id: "timeout", name: "Safety timeout", start: [0, -700, 0], walls: [{ x1: -500, y1: -100, x2: 500, y2: -100 }],
+    guides: [{ y: -270, x1: -500, x2: 500, label: "150 mm from the wall" }],
+    task: "Drive toward the wall and stop 150 mm away. But if 4 seconds go by first, stop anyway: the wall might not be there, and a real robot shouldn't drive forever. The test also runs once with the wall taken away. Tip: \"wait until (distance < 150) or (timer > 4)\".", needs: "Drivetrain, Distance sensor on the front" },
+  { after: "stayaway", id: "garage", name: "Park in the garage", start: [0, -700, 0],
+    walls: [{ x1: -600, y1: 535, x2: 600, y2: 535 }, { x1: -900, y1: 370, x2: -480, y2: 370 }, { x1: -900, y1: 30, x2: -480, y2: 30 }, { x1: -900, y1: 30, x2: -900, y2: 370 }],
+    guides: [{ y: 200, x1: -870, x2: 0, label: "garage" }],
+    task: "Drive up until the Distance sensor reads 200 mm from the far wall, turn left, and drive into the garage. Stop 100 mm from its back wall without touching anything. The test starts the robot in two different spots, so measure with the sensor instead of guessing distances.", needs: "Drivetrain, Distance sensor on the front" },
+  { after: "wallfollow", id: "patrol", name: "Patrol without crashing", start: [0, -700, 0],
+    walls: [{ x1: -400, y1: -200, x2: 200, y2: -200 }, { x1: 450, y1: 100, x2: 450, y2: 700 }, { x1: -650, y1: 400, x2: -100, y2: 400 }],
+    task: "Drive around the field for 30 seconds without touching any wall. When the Distance sensor sees a wall close ahead, turn away, then keep driving. The robot needs to keep moving, not just spin in place.", needs: "Drivetrain, Distance sensor on the front" },
+  { after: "line", id: "smoothline", name: "Smooth line following", start: [-200, -400, 90], walls: [],
+    floor: [{ line: stadium(0, 0, 450, 400, 3), width: 25, color: "black" }],
+    task: "Follow the oval smoothly instead of wobbling. Steer by how far off the line you are: brightness 50% means right on the edge. Set each wheel's speed to a base speed plus or minus (brightness − 50) × a small number. This is called proportional control. Finish one lap in under 40 seconds.", needs: "Two Motors (left and right), Color sensor pointing down" },
+];
+for (const f of [...FIXES, ...EXTRAS]) { const base = LEVELS.find(l => l.id === f.after); const { after, ...rest } = f; LEVELS.splice(LEVELS.indexOf(base) + 1, 0, f.starter ? { ...base, ...rest, base: after, sub: true } : { ...rest, sub: true }); }
 { let n = 0, sub = 0; LEVELS.forEach((l, i) => { if (!i) return; if (l.sub) l.name = n + String.fromCharCode(98 + sub++) + ". " + l.name; else { n++; sub = 0; l.name = n + ". " + l.name; } }); }
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
@@ -3315,6 +3337,111 @@ const CHECKS = {
   },
 };
 LEVELS.filter(l => l.base).forEach(l => { CHECKS[l.id] = CHECKS[l.base]; });
+Object.assign(CHECKS, { hexagon: hexCheck, modemenu: modeCheck, timeout: timeoutCheck, garage: garageCheck, patrol: patrolCheck, smoothline: smoothCheck });
+async function hexCheck() {
+  const seqs = [HEX_CW, HEX_CW.map(([x, y]) => [-x, y])].map(pts => ({ pts, n: 0 }));
+  let inked = 0, steps = 0;
+  const st = await testRun({ secs: 40, settle: 1, each: () => { steps++; if (W.pen) inked++; for (const q of seqs) if (q.n < q.pts.length && Math.hypot(W.x - q.pts[q.n][0], W.y - q.pts[q.n][1]) < 70) q.n++; } });
+  if (st.moved < 20) return nothing(st);
+  const q = seqs[0].n >= seqs[1].n ? seqs[0] : seqs[1], home = Math.hypot(W.x, W.y + 400), off = turnDiff(W.rot, 0);
+  const pen = W.trails.reduce((n, t) => n + t.pts.length, 0) > 20;
+  if (q.n === 6 && home <= 60 && off <= 8 && st.still) return pen ? result(4, "The robot drew the hexagon and ended where it started.") : result(3, "The robot drove the hexagon, but the pen was up, so nothing was drawn.", 'Put "move pen down" at the start.');
+  if (q.n === 6) return result(3, `The robot went around but ended ${home.toFixed(0)} mm from the start, facing ${off.toFixed(0)} degrees off.`, "Each turn is 360 ÷ 6 = 60 degrees, and each side is 300 mm. Turn the gyro on for the Drivetrain so the turns are exact.");
+  return result(q.n >= 2 ? 2 : 1, `The robot reached ${q.n} of the 6 corners.`, "Repeat 6 times: drive forward 300 mm, then turn right (360 ÷ 6) degrees.");
+}
+async function modeCheck() {
+  const led = devOf("touchled")[0];
+  if (!led) return result(0, "There is no Touch LED in Devices.", "Add a Touch LED in Devices.");
+  const press = t => [{ t, fn: () => { W.leds[led.name].pressed = true; } }, { t: t + 0.3, fn: () => { W.leds[led.name].pressed = false; } }];
+  const wins = [[0.3, 1, 0], [1.8, 4, 1], [4.8, 7, 2], [7.8, 10, 0], [10.8, 12.5, 1]], meas = [];
+  const events = [1, 4, 7, 10].flatMap(press);
+  wins.forEach(([a, b], i) => { events.push({ t: a, fn: () => { meas[i] = { x: W.x, y: W.y, rot: W.rot }; } }, { t: b, fn: () => { const m = meas[i]; m.fd = (W.x - m.x) * Math.sin(m.rot * DEG) + (W.y - m.y) * Math.cos(m.rot * DEG); m.dr = W.rot - m.rot; m.led = W.leds[led.name] && W.leds[led.name].color; } }); });
+  const st = await testRun({ label: "Pressing the Touch LED 4 times", secs: 12.6, full: true, events });
+  if (st.noProgram) return nothing(st);
+  const want = [["red", m => Math.abs(m.fd) < 15 && Math.abs(m.dr) < 5, "stopped"], ["green", m => m.fd > 50 && Math.abs(m.dr) < 15, "driving forward"], ["blue", m => m.dr > 20 && Math.abs(m.fd) < 60, "turning right"]];
+  const fails = [];
+  wins.forEach(([a, b, mode], i) => { const m = meas[i], [col, okMove, words] = want[mode]; if (!m || m.fd === undefined || !okMove(m) || m.led !== col) fails.push({ i, mode, col, words, moveOk: m && m.fd !== undefined && okMove(m) }); });
+  const pass = wins.length - fails.length;
+  st.rec.ok = !fails.length; st.rec.note = `${pass} of ${wins.length} right`;
+  const said = `The test pressed the Touch LED 4 times. The robot was in the right mode ${pass} of ${wins.length} times.`;
+  if (!fails.length) return result(4, said);
+  const f = fails[0], when = f.i === 0 ? "At the start" : `After ${f.i} press${f.i > 1 ? "es" : ""}`;
+  const hint = f.moveOk ? `${when} the robot moved right, but the LED should be ${f.col}. Set the LED color in each mode.` : `${when} the robot should be in mode ${f.mode}: ${f.words}. ${f.i >= 3 ? "After mode 2, set the mode back to 0." : "Change the mode by 1 for each press, and wait until the Touch LED is let go."}`;
+  return result(pass >= 4 ? 3 : pass >= 2 ? 2 : 1, said, hint);
+}
+async function timeoutCheck() {
+  if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
+  const base = copyWalls(lvl().walls);
+  const a = await testRun({ label: "Wall in front", secs: 12, settle: 0.5 });
+  if (a.noProgram) return nothing(a);
+  const d = frontAhead(), okA = a.still && Math.abs(d - 150) <= 40;
+  a.rec.ok = okA; a.rec.note = a.still ? `stopped ${d.toFixed(0)} mm from the wall` : "never stopped";
+  const b = await testRun({ label: "Wall taken away", secs: 12, full: true, setup: () => { WALLS = []; } });
+  WALLS = copyWalls(base); newWorld();
+  const okB = b.moved > 300 && b.still && b.lastMoveT >= 3.4 && b.lastMoveT <= 4.9;
+  b.rec.ok = okB; b.rec.note = b.moved <= 300 ? "barely moved" : `stopped after ${b.lastMoveT.toFixed(1)} s (goal: about 4 s)`;
+  if (Math.max(a.moved, b.moved) < 20) return nothing(a);
+  if (okA && okB) return result(4, "The robot stopped 150 mm from the wall, and stopped after 4 seconds when the wall was gone.");
+  if (okA) return result(2, `With the wall gone, the robot ${b.lastMoveT > 4.9 ? `kept going for ${b.lastMoveT.toFixed(1)} s` : `stopped after ${b.lastMoveT.toFixed(1)} s`}.`, 'Stop when the distance is less than 150 OR the timer is more than 4: "wait until (distance < 150) or (timer > 4)", then stop driving.');
+  if (okB) return result(2, `With the wall there, the robot stopped ${d.toFixed(0)} mm away instead of 150 mm.`, "Check the distance part of your condition: distance less than 150 mm.");
+  return result(1, "The robot didn't stop at 150 mm or after 4 seconds.", 'Drive forward, then "wait until (distance < 150) or (timer > 4)", then stop driving.');
+}
+async function garageCheck() {
+  if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
+  let parked = 0, moved = 0; const notes = [];
+  for (const y0 of [-700, -450]) {
+    const st = await testRun({ label: y0 === -700 ? "Starting far back" : "Starting closer", secs: 30, settle: 0.5, setup: () => { START = [0, y0, 0]; } });
+    START = lvl().start.slice();
+    if (st.noProgram) return nothing(st);
+    moved = Math.max(moved, st.moved);
+    const h = turnDiff(W.rot, 270), d = frontAhead(), rear = W.x + S.robotL / 2;
+    const inside = h <= 8 && Math.abs(W.y - 200) <= 40 && rear <= -480 && Math.abs(d - 100) <= 40 && st.still;
+    st.rec.ok = inside && !st.bumps;
+    st.rec.note = st.bumps ? `touched a wall ${st.bumps} time${st.bumps > 1 ? "s" : ""}` : inside ? "parked" : rear > -480 && h <= 30 ? "stopped partway into the garage" : h > 30 ? "never turned toward the garage" : "missed the garage";
+    if (st.rec.ok) parked++;
+    notes.push(st.rec.note);
+  }
+  newWorld();
+  if (moved < 20) return nothing({});
+  const said = `The test started the robot in 2 spots. It parked ${parked} of 2 times (${notes.join("; ")}).`;
+  if (parked === 2) return result(4, said);
+  if (parked === 1) return result(3, said, "It only works from one start spot. Drive until the distance to the far wall is 200 mm, instead of driving a set number of mm.");
+  return result(moved > 300 ? 2 : 1, said, "Drive forward until the distance is less than 200 mm, turn left 90 degrees, then drive until the distance is less than 100 mm and stop.");
+}
+async function patrolCheck() {
+  if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
+  let path = 0, px = null, py = null;
+  const st = await testRun({ label: "30 seconds of patrol", secs: 30, full: true, each: () => { if (px !== null) path += Math.hypot(W.x - px, W.y - py); px = W.x; py = W.y; } });
+  if (st.moved < 20) return nothing(st);
+  const said = `In 30 seconds the robot drove ${(path / 1000).toFixed(1)} m and touched a wall ${st.bumps} time${st.bumps === 1 ? "" : "s"}.`;
+  st.rec.note = said;
+  if (!st.bumps && path >= 2500) return result(4, said);
+  if (!st.bumps) return result(3, said, "Keep moving: after turning away from a wall, drive forward again. Use a forever loop.");
+  if (st.bumps <= 1 && path >= 2500) return result(3, said, "Turn away a little earlier: check for a wall closer than about 300 mm.");
+  return result(path >= 1000 ? 2 : 1, said, "In a forever loop: if the distance is less than 300 mm, turn right; else drive forward.");
+}
+var WOBBLE_OK = 20;
+async function smoothCheck() {
+  const line = lvl().floor[0].line, bins = new Set();
+  let jit = 0, nj = 0, path = 0, px = null, py = null, pr = null, rate = 0, lapT = null;
+  const st = await testRun({ label: "One lap of the oval", secs: 45, full: true, each: () => {
+    const c = downColor(); if (!c) return;
+    const p = mountWorld(c), r = nearestOnLine(line, p.x, p.y);
+    if (r.d < 40) bins.add(Math.min(49, Math.floor(r.s / r.total * 50)));
+    if (lapT === null && bins.size >= 48) lapT = W.t;
+    if (px !== null) path += Math.hypot(W.x - px, W.y - py); px = W.x; py = W.y;
+    // wobble: how far the turning speed jumps around its smoothed value (degrees per second)
+    if (pr !== null) { const raw = (W.rot - pr) / DT; rate += (raw - rate) * Math.min(1, DT / 0.3); jit += Math.abs(raw - rate); nj++; }
+    pr = W.rot;
+  } });
+  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (st.moved < 20) return nothing(st);
+  const wob = nj ? jit / nj : 99, done = lapT !== null && lapT <= 40;
+  const said = done ? `The robot finished a lap in ${lapT.toFixed(0)} s. Wobble: ${wob.toFixed(0)} (smooth is under ${WOBBLE_OK}).` : `The robot followed ${Math.round(bins.size / 50 * 100)}% of the oval in 40 s.`;
+  if (done && wob < WOBBLE_OK) return result(4, said);
+  if (done) return result(3, said + " That's a wobble.", "Instead of hard left/right turns, make the steering depend on how far off you are: each wheel's speed = base ± (brightness − 50) × 0.5.");
+  return result(bins.size >= 25 ? 2 : 1, said, "Use two Motors. In a forever loop, set the left motor velocity to 30 + (brightness − 50) × 0.5 and the right one to 30 − (brightness − 50) × 0.5, and keep both spinning.");
+}
 const turnDiff = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
 async function squareCheck(laps) {
   // follow the corners in order, turning right or left, for each lap
@@ -3574,6 +3701,12 @@ const PLANS = {
   fixloop: ["The bug: the distance is always more than 0, so the while loop never ends.", "Change the condition to: distance > 200 mm."],
   fixfind: ["The bug: \"turn right for 120 degrees\" only works when the cube is in that one spot.", "Replace it with:", "  turn right", "  wait until the distance is less than 700 mm", "  stop driving", "Keep the rest."],
   fixifs: ["The bug: every if runs, so the last one that matches wins.", "Use one if / else if / else chain:", "  if left AND right: drive forward", "  else if left: turn left", "  else if right: turn right", "  else: stop driving"],
+  hexagon: ["Move pen down.", "Repeat 6 times:", "  drive forward 300 mm", "  turn right (360 / 6) degrees"],
+  modemenu: ["Set mode to 0.", "Forever:", "  if the Touch LED is pressed:", "    change mode by 1", "    if mode = 3: set mode to 0", "    wait until the Touch LED is NOT pressed", "  if mode = 0: stop driving, LED red", "  else if mode = 1: drive forward, LED green", "  else: turn right, LED blue"],
+  timeout: ["Drive forward.", "Wait until (distance < 150 mm) OR (timer > 4 seconds).", "Stop driving."],
+  garage: ["Drive forward.", "Wait until the distance is less than 200 mm. Stop driving.", "Turn left 90 degrees.", "Drive forward.", "Wait until the distance is less than 100 mm. Stop driving."],
+  patrol: ["Drive forward.", "Forever:", "  if the distance is less than 300 mm:", "    turn right 90 degrees", "    drive forward"],
+  smoothline: ["Spin both Motors forward.", "Forever:", "  error = brightness − 50", "  set left velocity to 30 + error × 0.5", "  set right velocity to 30 − error × 0.5", "If it turns the wrong way, swap the + and −."],
   sort: ["For each cube:", "  grab it", "  read its color with the Color sensor", "  if red: carry it to the red square, else carry it to the blue square", "  let go and come back"],
 };
 
@@ -3599,12 +3732,12 @@ function replayRun(rec) {
   if (!rec || CHECKING) return;
   if (EDIT.on) setEdit(false);
   undoReplay();
-  const saved = { walls: copyWalls(WALLS), cubes: CUBES.map(c => ({ ...c })) };
-  REPLAY_UNDO = () => { WALLS = saved.walls; CUBES = saved.cubes; };
+  const saved = { walls: copyWalls(WALLS), cubes: CUBES.map(c => ({ ...c })), start: START && START.slice() };
+  REPLAY_UNDO = () => { WALLS = saved.walls; CUBES = saved.cubes; START = saved.start; };
   startProgram();
   if (!RUN) return;
   FORCE_COLORS = rec.forceColors; FORCE_ANGLE = rec.forceAngle;
-  newWorld(); if (rec.setup) rec.setup();
+  if (rec.setup) rec.setup(); newWorld();
   FORCE_COLORS = null; FORCE_ANGLE = null;
   RUN.events = rec.events.slice().sort((a, b) => a.t - b.t); RUN.until = rec.secs;
   log(`Watching the test: ${rec.label || "the test run"}.`);
