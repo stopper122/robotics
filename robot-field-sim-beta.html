@@ -956,36 +956,36 @@ const lvl = () => LEVELS.find(l => l.id === LEVEL);
 const TASK_STEPS = {
   square: { goal: "Drive in a square. End where you started.", steps: ["Drive forward 600 mm.", "Turn right 90 degrees.", "Do steps 1 and 2 four times."], tip: 'Put the 2 blocks inside a "repeat 4" block.' },
   hexagon: { goal: "Draw a shape with 6 sides (a hexagon).", steps: ['Start with "move pen down".', "Drive forward 300 mm.", "Turn right 60 degrees.", "Do steps 2 and 3 six times.", "End where you started."], tip: "360 ÷ 6 = 60. You can let a math block do the dividing." },
-  gyro: { goal: "Drive the square 2 times. End where you started.", steps: ["This floor is slippery, so turns come up short.", "Run your square program. Watch the robot slide off the square.", "Open Devices. Click the Drivetrain. Set the gyro to the Brain's gyro.", 'Use "repeat 8" to go around 2 times (8 sides).', "Run it again."], tip: "The gyro helps the robot turn the right amount." },
-  touch: { goal: "Drive to the wall. Stop when the Bumper touches it.", steps: ["Drive forward.", "Keep going until the Bumper is pressed.", "Stop."] },
+  gyro: { goal: "Drive the square 2 times. End where you started.", steps: ["This floor is slippery. Turns can come up short.", "Open Devices. Click the Drivetrain. Check that Gyro says the Brain's gyro.", 'Use "repeat 8" to go around 2 times (8 sides).', "Click Start and watch."], tip: "The gyro helps the robot turn the right amount. Want to see the slip? Set Gyro to none and try it." },
+  touch: { goal: "Drive to the wall. Stop when the Bumper touches it.", steps: ["Drive forward.", 'Use "wait until" with "Bumper pressed?".', "Stop driving."] },
   waittouch: { goal: "Wait for the Bumper. Then drive 500 mm.", steps: ["The robot waits. It does not move yet.", "Someone presses the Bumper.", "The robot drives forward 500 mm."], keys: "To press the Bumper, hold the Bumper button below the field." },
   counter: { goal: "Press the Bumper a few times. The robot drives 200 mm for each press.", steps: ["Count each Bumper press.", "When the Touch LED is pressed, stop counting.", "Drive 200 mm for each press. Example: 3 presses = 600 mm."], tip: "Make a variable called count. Add 1 for each press. Then wait until the Bumper is let go.", keys: "Hold Z to press the Bumper. Click the Touch LED below the field." },
-  fixcount: { goal: "Fix the broken program. It should drive 200 mm for each Bumper press.", steps: ["What the program should do: count Bumper presses. When you press the Touch LED, the robot drives 200 mm for each press.", 'Click "Load the broken program".', "Click Run. Press the Bumper 1 time. Then click the Touch LED.", 'The robot drives too far. Look at "count (variable)" under the field. It went up by more than 1.', "Fix the program so 1 press adds only 1. Then click Check my work."], keys: "Hold Z to press the Bumper. Click the Touch LED below the field." },
-  modemenu: { goal: "Each time you press the Touch LED, the robot switches to the next job. It works like a fan button: off, low, high, off.", steps: ["When the program starts, the robot stays still and the Touch LED is red.", "Press the Touch LED once. The robot drives forward and keeps going. The LED turns green.", "Press it again. The robot spins right in place and keeps spinning. The LED turns blue.", "Press it again. The robot stops and the LED is red again, just like the start.", "Each press after that keeps going around: red (stop), green (forward), blue (spin)."], tip: 'Make a variable called mode that counts the presses: 0 = stop, 1 = forward, 2 = spin. After 2, set it back to 0. After each press, "wait until not TouchLED pressed?".', keys: "Click the Touch LED below the field to press it." },
-  distance: { goal: "Drive to the wall. Stop 200 mm away (at the dashed line).", steps: ["Drive forward.", "Watch the Distance sensor.", "Stop when the distance is less than 200 mm."] },
-  fixloop: { goal: "Fix the broken program. It should stop 200 mm from the wall.", steps: ["What the program should do: drive forward and stop 200 mm from the wall.", 'Click "Load the broken program". Click Run.', "The robot hits the wall and keeps pushing. Click Pause.", "Look at the while block. It says TRUE, so the loop keeps going.", "Fix the while block so it turns FALSE at 200 mm. Then click Check my work."] },
+  fixcount: { goal: "Fix the broken program. It should drive 200 mm for each Bumper press.", steps: ["What the program should do: count Bumper presses. When you press the Touch LED, the robot drives 200 mm for each press.", 'Click "Load the broken program".', "Click Start. Press the Bumper 1 time. Then click the Touch LED.", 'The robot drives too far. Look at "count (variable)" under the field. It went up by more than 1.', "Fix the program so 1 press adds only 1. Then click Check my work."], keys: "Hold Z to press the Bumper. Click the Touch LED below the field." },
+  modemenu: { goal: "Each time you press the Touch LED, the robot switches to the next job. It works like a fan button: each press goes to the next setting.", steps: ["When the program starts, the robot stays still and the Touch LED is red.", "Press the Touch LED once. The robot drives forward and keeps going. The LED turns green.", "Press it again. The robot spins right in place and keeps spinning. The LED turns blue.", "Press it again. The robot stops and the LED is red again, just like the start.", "Each press after that keeps going around: red (stop), green (forward), blue (spin)."], tip: 'Make a variable called mode that counts the presses: 0 = stop, 1 = forward, 2 = spin. After 2, set it back to 0. After each press, "wait until not TouchLED pressed?".', keys: "Click the Touch LED below the field to press it." },
+  distance: { goal: "Drive to the wall. Stop 200 mm away (at the dashed line).", steps: ["Drive forward.", 'Use "wait until" with "distance < 200".', "Stop driving."] },
+  fixloop: { goal: "Fix the broken program. It should stop 200 mm from the wall.", steps: ["What the program should do: drive forward and stop 200 mm from the wall.", 'Click "Load the broken program". Click Start.', "The robot hits the wall and keeps pushing. Click Stop.", 'Look at the while block. It says "distance > 0". The distance is always more than 0, so the loop never stops.', "Change the 0 to 200. Then click Check my work."] },
   timeout: { goal: "Stop 150 mm from the wall. Never drive more than 4 seconds.", steps: ["Drive forward.", "Stop when the wall is less than 150 mm away.", "Also stop if 4 seconds go by.", "The test runs one time with no wall."], tip: '"wait until (distance < 150) or (timer > 4)"' },
   stayaway: { goal: "Stay 300 mm away from the wall. The wall will move.", steps: ["Too close to the wall? Back up.", "Too far from the wall? Drive forward.", "Keep checking forever."], tip: "While it runs, drag the wall closer and farther to test it." },
   garage: { goal: "Park in the garage. Do not touch anything.", steps: ["Drive forward until the far wall is 200 mm away.", "Turn left 90 degrees.", "Drive into the garage.", "Stop 100 mm from the back wall."], tip: "The robot starts in 2 different spots. Use the Distance sensor, not a set number of mm." },
-  wallfollow: { goal: "Follow the wall on your right to the green tile.", steps: ["Put the Distance sensor on the right side.", "Too far from the wall (more than 150 mm)? Steer right, toward it.", "Too close? Steer left, away from it.", "Keep doing this until you reach green.", "Do not touch the wall."], tip: 'Use an "if then else" block. To steer right, make the left motor faster. To steer left, make the right motor faster.' },
-  patrol: { goal: "Drive around for 30 seconds. Do not touch any wall.", steps: ["Drive forward.", "Wall close ahead? Turn away.", "Drive forward again.", "Keep doing this forever."], tip: "Keep moving. Spinning in place does not count." },
+  wallfollow: { goal: "Follow the wall on your right to the green tile.", steps: ["In Devices, click the Distance sensor. Set Mounted on to Right side.", "Using 2 Motors? Click the right motor (Motor6). Turn on Reverse direction.", "Too far from the wall (more than 150 mm)? Steer right, toward it.", "Too close? Steer left, away from it.", "Keep doing this until you reach green.", "Do not touch the wall."], tip: 'Use an "if then else" block. To steer right, make the left motor faster. To steer left, make the right motor faster.' },
+  patrol: { goal: "Drive around for 30 seconds. Do not touch any wall.", steps: ["Drive forward.", "Wall closer than 300 mm? Turn right 90 degrees.", "Drive forward again.", "Keep doing this forever."], tip: "Keep moving. Spinning in place does not count." },
   find: { goal: "Find the cube. Stop next to it.", steps: ["Turn in place.", "Stop turning when the Distance sensor sees something closer than 700 mm.", "Drive forward to the cube.", "Stop about 50 mm away. Do not push it."], tip: "The cube moves every run. The walls are farther than 700 mm, so they will not fool you." },
   fixfind: { goal: "Fix the broken program. It should find the cube every time.", steps: ["What the program should do: turn until it sees the cube, drive to it, and stop about 50 mm away.", 'Click "Load the broken program". Click Check my work.', "One test fails, because the cube moves every run. Click ▶ Watch on the ✗ test.", "The program always turns the same amount. Change it to turn until the Distance sensor sees something closer than 700 mm."] },
   color: { goal: "Drive over the color tiles. Use the Color sensor.", steps: ["Drive forward over the tiles.", "Print each color you see. OR stop on the color you pick."] },
-  countlines: { goal: "Stop on the 3rd black line.", steps: ["Drive forward.", "Count each black line you cross.", "Stop on line 3."], tip: "Make a variable. When the sensor sees dark, add 1. Then wait until it sees white again." },
-  sumo: { goal: "Stay inside the black ring for 20 seconds.", steps: ["Drive forward.", "See the black edge? Back up.", "Turn.", "Drive forward again.", "Keep doing this forever."] },
-  line: { goal: "Follow the black line all the way around.", steps: ["Read the Color sensor's brightness.", "Dark? You are on the line. Turn one way.", "Bright? You are off the line. Turn the other way.", "Keep doing this forever."], tip: "Go slow." },
-  smoothline: { goal: "Follow the oval smoothly, with no wobble, in under 40 seconds.", steps: ["Use two Motors.", "Brightness 50 means you are on the edge of the line.", "Make a variable called steer. Set steer to (brightness − 50) × 0.5", "Set the left motor velocity to 30 + steer.", "Set the right motor velocity to 30 − steer.", "Keep doing this forever."], tip: "Blocks do the inside block first. So build (brightness − 50) × 0.5 first. Then put it inside 30 + ___. Far off the line = steer a lot. Close = steer a little. This is called proportional control." },
+  countlines: { goal: "Stop on the 3rd black line.", steps: ["Drive forward.", "Count each black line you cross.", "Stop on line 3."], tip: "Make a variable. When the brightness is less than 50, you are on a black line: add 1. Then wait until the brightness is more than 50 again." },
+  sumo: { goal: "Stay inside the black ring for 20 seconds.", steps: ["Drive forward.", "Brightness less than 20? You are on the black edge. Back up.", "Turn right about 120 degrees.", "Drive forward again.", "Keep doing this forever."], tip: 'The Color sensor has no "black". Black means a low brightness.' },
+  line: { goal: "Follow the black line all the way around.", steps: ["Use an \"if then else\" block.", "If brightness < 50 (on the dark line): turn right for 5 degrees.", "Else (off the line): turn left for 5 degrees.", "After the if block: drive forward for 10 mm.", "Keep doing this forever."], tip: 'Small turns and small drives keep the robot on the line. "turn right" with no number only spins in place.' },
+  smoothline: { goal: "Follow the oval smoothly, with no wobble, in under 40 seconds.", steps: ["Use two Motors. In Devices, turn on Reverse direction for the right motor.", "Brightness 50 means you are on the edge of the line.", "Make a variable called steer. Set steer to (brightness − 50) × 0.5", "Set the left motor velocity to 30 + steer.", "Set the right motor velocity to 30 − steer.", "Keep doing this forever."], tip: "Blocks do the inside block first. So build (brightness − 50) × 0.5 first. Then put it inside 30 + ___. Far off the line = steer a lot. Close = steer a little. This is called proportional control." },
   line2: { goal: "Follow the tricky line. Stop on the green tile.", steps: ["Follow the line like on the oval.", "Go slower.", "Turn harder.", "Stop when you see green."] },
   maze: { goal: "Drive through the maze. The colors tell you where to turn.", steps: ["Green = turn left.", "Blue = turn right.", "Yellow = stop. You are done."], tip: "When you see a tile, drive 190 mm more. Turn 90 degrees. Drive off the tile before you check again." },
   myblocks: { goal: "Climb the stairs to the yellow tile.", steps: ['Make a My Block called "step".', "Inside it: forward 400 mm, turn right 90, forward 400 mm, turn left 90.", 'Use "step" 3 times.', "Then drive forward 400 mm."], tip: "My Blocks make long programs short." },
   maze2: { goal: "Drive through a longer maze. Same color rules.", steps: ["Green = turn left.", "Blue = turn right.", "Yellow = stop."] },
   maze3: { goal: "Drive through the maze. The colors change after 3 tiles!", steps: ["Tiles 1, 2 and 3: green = left, blue = right.", "Tile 4 and after: green = right, blue = left.", "Yellow = stop."], tip: "Make a variable to count the tiles." },
   rc1: { goal: "Use 2 Bumpers as a remote control.", steps: ["Hold left: turn left.", "Hold right: turn right.", "Hold both: drive forward.", "Hold none: stop."], tip: 'Use a forever loop. Check "both" first.', keys: "Hold Z and X (or the buttons below the field)." },
-  fixifs: { goal: "Fix the broken remote. Holding both Bumpers should drive forward.", steps: ["What the program should do: hold left = turn left, hold right = turn right, hold both = drive forward, hold none = stop.", 'Click "Load the broken program". Click Run.', "Hold Z and X (both Bumpers). The robot turns instead of driving forward.", "Keep holding both and click Step a few times. Watch which if block runs last. The last one wins.", 'Fix the if blocks so "both" wins.'] },
-  rc2: { goal: "Add a 3rd Bumper to drive backward.", steps: ["Hold back + left: back up turning left.", "Hold back + right: back up turning right.", "Hold back only: drive backward.", "Everything from Remote control 1 still works."], keys: "Keys: Z, X, C." },
-  crc1: { goal: "Remote control 1, with lights.", steps: ["Use 2 Motors and 2 Touch LEDs, one for each motor.", "Motor going forward: its LED is green.", "Motor stopped: its LED is red.", "The remote works like Remote control 1."], keys: "Hold Z and X." },
-  crc2: { goal: "Remote control 2, with lights.", steps: ["Motor going forward: green.", "Motor stopped: red.", "Motor going backward: yellow."], keys: "Keys: Z, X, C." },
+  fixifs: { goal: "Fix the broken remote. Holding both Bumpers should drive forward.", steps: ["What the program should do: hold left = turn left, hold right = turn right, hold both = drive forward, hold none = stop.", 'Click "Load the broken program". Click Start.', "Hold Z and X (both Bumpers). The robot turns instead of driving forward.", "Keep holding both and click Step a few times. Watch which if block runs last. The last one wins.", 'Fix the if blocks so "both" wins.'] },
+  rc2: { goal: "Add a 3rd Bumper to drive backward.", steps: ["Hold back + left: back up turning left.", "Hold back + right: back up turning right.", "Hold back only: drive backward.", "Everything from Remote control 1 still works."], keys: "Hold Z, X and C. Each Bumper button below the field shows its key." },
+  crc1: { goal: "Remote control 1, with lights.", steps: ["Use 2 Motors and 2 Touch LEDs, one for each motor. Turn on Reverse direction for the right motor.", "Motor going forward: its LED is green.", "Motor stopped: its LED is red.", "The remote works like Remote control 1."], keys: "Hold Z and X." },
+  crc2: { goal: "Remote control 2, with lights.", steps: ["Motor going forward: green.", "Motor stopped: red.", "Motor going backward: yellow."], keys: "Hold Z, X and C. Each Bumper button below the field shows its key." },
   pincher: { goal: "Move the cube to the red square.", steps: ["Open the pincher.", "Drive up so the cube is between the fingers.", "Close the pincher.", "Drive to the red square.", "Open the pincher. Back away."], tip: "In Devices, start from the Pincher bot build." },
   lift: { goal: "Put the cube on top of the brown platform.", steps: ["Arm down. Open the claw.", "Drive to the cube. Close the claw.", "Raise the arm about 45 degrees.", "Drive to the platform.", "Open the claw. Back away."], tip: "In Devices, start from the Clawbot build." },
   sort: { goal: "Put each cube on the square of its own color.", steps: ["The colors switch every run.", "Read each cube with the Color sensor (facing forward).", "Red cube: take it to red. Blue cube: take it to blue."], tip: "In Devices, start from the Sorter bot build." },
@@ -1010,10 +1010,33 @@ function readAloud(parts, btn) {
   u.onend = u.onerror = () => { btn.classList.remove("on"); if (SPEAK_BTN === btn) SPEAK_BTN = null; };
   SPEAK_BTN = btn; btn.classList.add("on"); sy.speak(u);
 }
+// which drive setup fits each level, and why (shown in the task box and read aloud)
+const BUILD_WHY = {
+  exact: ["Drivetrain", "It can drive an exact distance and turn an exact number of degrees."],
+  simple: ["Drivetrain", "One block drives the whole robot. With 2 Motors you need 2 blocks for everything."],
+  steer: ["2 Motors", "Each wheel gets its own speed. Then the robot can steer while it drives."],
+  leds: ["2 Motors", "Each Touch LED shows what one motor is doing. So you need 2 Motors."],
+  either: ["Drivetrain or 2 Motors", "Both work. 2 Motors can steer while driving, so they are faster on curves."],
+  preset: ["Drivetrain", "Pick the robot build in Devices. It already has a Drivetrain."],
+  controller: ["Drivetrain", "The Controller drive modes need a Drivetrain."],
+};
+const LEVEL_BUILD = {
+  square: "exact", hexagon: "exact", gyro: "exact", myblocks: "exact", garage: "exact", line: "exact", maze: "exact", maze2: "exact", maze3: "exact",
+  touch: "simple", waittouch: "simple", counter: "simple", fixcount: "simple", modemenu: "simple", distance: "simple", fixloop: "simple", timeout: "simple",
+  stayaway: "simple", patrol: "simple", find: "simple", fixfind: "simple", color: "simple", countlines: "simple", sumo: "simple", rc1: "simple", fixifs: "simple", rc2: "simple",
+  wallfollow: "steer", smoothline: "steer", line2: "either", crc1: "leds", crc2: "leds",
+  pincher: "preset", lift: "preset", sort: "preset", skills: "preset", driving: "controller",
+};
+const buildFor = id => BUILD_WHY[LEVEL_BUILD[id]];
+function buildHTML(id) {
+  const b = buildFor(id);
+  return b ? `<div class="tip">🤖 Best build: <b>${esc(b[0])}</b>. ${esc(b[1])}</div>` : "";
+}
 function taskParts(l) {
   const t = TASK_STEPS[l.id];
   if (!t) return [l.name, LEVEL === "open" ? CUSTOM.task : l.task];
-  return [l.name, "Goal: " + t.goal, ...t.steps.map((s, i) => `Step ${i + 1}: ${s}`), t.tip && "Tip: " + t.tip, t.keys];
+  const b = buildFor(l.id);
+  return [l.name, "Goal: " + t.goal, ...t.steps.map((s, i) => `Step ${i + 1}: ${s}`), t.tip && "Tip: " + t.tip, t.keys, b && `Best build: ${b[0]}. ${b[1]}`];
 }
 function taskStepsHTML(t) {
   return `<div class="goal">🎯 ${esc(t.goal)}</div><ol class="steps">${t.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol>${t.tip ? `<div class="tip">💡 ${esc(t.tip)}</div>` : ""}${t.keys ? `<div class="tip">⌨️ ${esc(t.keys)}</div>` : ""}`;
@@ -3607,7 +3630,7 @@ async function testRun({ secs, setup, events = [], each, settle = 0, full = fals
   stopProgram(false); newWorld(); if (setup) setup();
   startProgram();
   rec.realSeed = W.real ? W.real.seed : null;
-  const st = { x0: W.x, y0: W.y, r0: W.rot, moved: 0, bumps: 0, wasBlocked: false, grabbed: false, maxHeldZ: 0, prints: [], lastMoveT: 0, ended: false, noProgram: !RUN };
+  const st = { x0: W.x, y0: W.y, r0: W.rot, moved: 0, turned: 0, bumps: 0, wasBlocked: false, grabbed: false, maxHeldZ: 0, prints: [], lastMoveT: 0, ended: false, noProgram: !RUN };
   if (!RUN) return st;
   W.prints = st.prints;
   const evs = events.slice().sort((a, b) => a.t - b.t);
@@ -3620,6 +3643,7 @@ async function testRun({ secs, setup, events = [], each, settle = 0, full = fals
     if (!alive && RUN) { RUN = null; st.ended = true; st.endT = W.t; if (!full) endAt = W.t + settle; }
     if (Math.hypot(W.x - px, W.y - py) > 0.3 || Math.abs(W.rot - pr) > 0.15) st.lastMoveT = W.t;
     st.moved = Math.max(st.moved, Math.hypot(W.x - st.x0, W.y - st.y0), Math.abs(W.rot - st.r0) * 2);
+    st.turned += Math.abs(W.rot - pr);
     if (W.blocked && !st.wasBlocked) st.bumps++;
     st.wasBlocked = W.blocked;
     const h = heldCube(); if (h) { st.grabbed = true; st.maxHeldZ = Math.max(st.maxHeldZ, h.z); }
@@ -3634,6 +3658,7 @@ async function testRun({ secs, setup, events = [], each, settle = 0, full = fals
 }
 const result = (score, said, hint) => ({ score, said, hint: score < 4 ? hint : "" });
 const nothing = st => st.noProgram ? result(0, "No program ran.", 'Put your blocks under "when started".')
+  : st.turned > 20 ? result(0, "The robot only turned in place. It never drove forward.", "After each turn, add a drive forward block. Give turns a number, like turn right for 5 degrees.")
   : result(0, "The robot did not move.", "Check Devices. Then check that your drive blocks are under \"when started\".");
 
 const CHECKS = {
@@ -3744,6 +3769,33 @@ const CHECKS = {
 };
 LEVELS.filter(l => l.base).forEach(l => { CHECKS[l.id] = CHECKS[l.base]; });
 Object.assign(CHECKS, { skills: skillsCheck, hexagon: hexCheck, modemenu: modeCheck, timeout: timeoutCheck, garage: garageCheck, patrol: patrolCheck, smoothline: smoothCheck });
+// two single Motors with no Reverse on the right one: the robot circles, and the level's own hint would mislead
+function needsReverse() {
+  if (!S.rightMirrored || drivetrain()) return null;
+  const ms = devOf("motor"), r = ms.find(m => m.port === S.ports.right);
+  return r && !r.reverse && ms.some(m => m.port === S.ports.left) ? r : null;
+}
+for (const id of ["wallfollow", "line", "line2", "smoothline", "patrol", "sumo"]) {
+  const fn = CHECKS[id];
+  CHECKS[id] = async (...a) => {
+    const r = await fn(...a), m = needsReverse();
+    if (m && r && r.score < 4) r.hint = `Your right motor (${m.name || "Motor" + m.port}) is backwards. Open Devices, click it, and turn on Reverse direction.`;
+    return r;
+  };
+}
+// a low score with the drive setup that makes this level harder: say which one fits better
+const usingMotors = () => !drivetrain() && devOf("motor").filter(m => m.port === S.ports.left || m.port === S.ports.right).length >= 2;
+for (const id of Object.keys(CHECKS)) {
+  const fn = CHECKS[id];
+  CHECKS[id] = async (...a) => {
+    const r = await fn(...a), k = LEVEL_BUILD[lvl().id];
+    if (!r || r.score >= 4 || r.score === 0 && !r.hint || /Drivetrain|2 Motors|Reverse/.test(r.hint || "")) return r;
+    const add = (k === "steer" || k === "leds") && drivetrain() ? "This level is easier with 2 Motors instead of a Drivetrain. Each wheel gets its own speed."
+      : (k === "exact" || k === "simple") && usingMotors() ? "This level is easier with a Drivetrain. One block drives the whole robot." : "";
+    if (add) r.hint = r.hint ? r.hint + " " + add : add;
+    return r;
+  };
+}
 // skills challenge points: 3 per cube in its own color zone, 1 in the other zone, 2 for parking on green
 function skillPoints() {
   let cubes = 0, wrong = 0;
@@ -4041,7 +4093,7 @@ async function lineCheck(tricky) {
   const cov = bins.size / 50, pct = Math.round(cov * 100);
   const g = lvl().floor[1] && lvl().floor[1].rect, c = downColor(), p = mountWorld(c);
   const finished = tricky && st.still && floorReading(p.x, p.y).name === "green";   // what the sensor itself sees
-  const hint = "Dark? Turn one way. Bright? Turn the other way. Go slower if the robot loses the line on curves.";
+  const hint = "If brightness < 50: turn right for 5 degrees. Else: turn left for 5 degrees. Then drive forward 10 mm. Put it all in forever.";
   if (tricky) {
     if (finished && cov >= 0.8) return result(4, `The robot followed ${pct}% of the line and stopped on green.`);
     if (finished || cov >= 0.7) return result(3, finished ? "The robot stopped on green but skipped parts of the line." : `The robot followed ${pct}% of the line but didn't stop on green.`, finished ? hint : 'Put your line following inside "repeat until Color detects green". Then stop.');
@@ -4121,9 +4173,9 @@ const PLANS = {
   wallfollow: ["Put the Distance sensor on the right side.", "Forever (or until you reach the green tile), use an \"if then else\" block:", "  if the distance is more than 150 mm: steer right (left motor faster, like 50 and 25)", "  else: steer left (right motor faster, like 25 and 50)", "Put the else blocks inside the else part. Blocks under the whole if run every time."],
   find: ["Turn right (don't use \"for\").", "Wait until the sensor finds an object closer than 700 mm.", "Stop, then drive forward.", "Wait until the distance is less than 50 mm.", "Stop driving."],
   color: ["Drive forward.", "Forever: if the Color sensor sees your color, stop driving.", "Or: print the color name each time it changes."],
-  countlines: ["Set lines to 0. Drive forward.", "Repeat until lines = 3:", "  wait until the sensor sees dark", "  change lines by 1", "  wait until the sensor sees white again", "Stop driving."],
-  sumo: ["Drive forward.", "Forever:", "  if the Color sensor sees black:", "    drive reverse 150 mm", "    turn right 120 degrees", "    drive forward"],
-  line: ["Forever:", "  if the brightness is low (on the line): steer one way", "  else (off the line): steer the other way", "Use a slow speed so it doesn't lose the line."],
+  countlines: ["Set lines to 0. Drive forward.", "Repeat until lines = 3:", "  wait until brightness < 50 (a black line)", "  change lines by 1", "  wait until brightness > 50 (white again)", "Stop driving."],
+  sumo: ["Drive forward.", "Forever:", "  if the brightness is less than 20 (black edge):", "    drive reverse 150 mm", "    turn right 120 degrees", "    drive forward"],
+  line: ["Forever:", "  if brightness < 50: turn right for 5 degrees", "  else: turn left for 5 degrees", "  drive forward for 10 mm", "If it goes off the wrong way, swap right and left."],
   line2: ["Same as the oval, but slower.", "Turn harder: make the inside wheel go backward a little on each correction.", "Stop when the Color sensor sees green."],
   maze: ["Drive forward.", "Forever:", "  if green: drive 190 mm, turn left 90, drive off the tile", "  if blue: drive 190 mm, turn right 90, drive off the tile", "  if yellow: stop and end the program"],
   myblocks: ["Make a My Block \"step\": forward 400, turn right 90, forward 400, turn left 90.", "Use step 3 times.", "Drive forward 400 mm."],
@@ -5695,7 +5747,7 @@ function renderTask() {
   box.hidden = !l.task;
   const task = LEVEL === "open" ? CUSTOM.task : l.task;
   box.hidden = !task;
-  if (task) box.innerHTML = `<div class="taskhead"><b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><button class="btn small speak" type="button" id="btnSpeakTask" title="Read the task out loud">🔊 Read to me</button></div>${TASK_STEPS[LEVEL] ? taskStepsHTML(TASK_STEPS[LEVEL]) : `<span>${esc(task)}</span>`}${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
+  if (task) box.innerHTML = `<div class="taskhead"><b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><button class="btn small speak" type="button" id="btnSpeakTask" title="Read the task out loud">🔊 Read to me</button></div>${TASK_STEPS[LEVEL] ? taskStepsHTML(TASK_STEPS[LEVEL]) + buildHTML(LEVEL) : `<span>${esc(task)}</span>`}${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
   box.querySelectorAll("[data-note]").forEach(t => t.oninput = () => { const n = LS.get("rfs.notes", {}); n[LEVEL] = n[LEVEL] || {}; n[LEVEL][t.dataset.note] = t.value.slice(0, 600); LS.set("rfs.notes", n); });
   const bs = document.getElementById("btnStarter");
   if (bs) bs.onclick = () => {
