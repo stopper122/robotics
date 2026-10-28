@@ -384,7 +384,7 @@ function defaultSettings() {
     startX: 0, startY: 0, startH: 0,
     robotL: 230, robotW: 200,
     wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
-    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false, realChecks: false,
+    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false, switchBlocks: false, realChecks: false,
     assigned: null, lockOrder: false, modes: null,   // modes: coding modes on the test page (null = all)   // levels students see (null = all), and unlock in order at a score of 3+
     ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8, bumper2: 9, bumper3: 11, touchled2: 12 },
     distanceMax: 1000,
@@ -422,6 +422,13 @@ const controllerDev = () => DEVICES.find(d => d.type === "controller");
 const C = { events: "#FFBF00", drive: "#4C97FF", motion: "#4C97FF", looks: "#9966FF", control: "#FFAB19", sensing: "#5CB1D6", ops: "#59C059" };
 const num = (name) => ({ type: "input_value", name, check: "Number" });
 const dd = (name, opts) => ({ type: "field_dropdown", name, options: opts });
+// operator dropdowns: the value is the block type it turns into
+const OP_MENU = {
+  math: [["+", "add"], ["−", "subtract"], ["*", "multiply"], ["/", "divide"]],
+  compare: [["=", "equal"], ["<", "less_than"], ["≤", "less_equal"], [">", "greater_than"], ["≥", "greater_equal"]],
+  logic: [["and", "and"], ["or", "or"]],
+};
+const OP_TYPES = new Set(Object.values(OP_MENU).flat().map(o => "pg_operators_" + o[1]));
 const stmt = (o) => Object.assign({ previousStatement: null, nextStatement: null, inputsInline: true }, o);
 const DIRS = [["forward", "fwd"], ["reverse", "rev"]];
 const TURNS = [["right", "right"], ["left", "left"]];
@@ -440,6 +447,7 @@ const LED_HEX = { none: "#f4f5f7", red: "#ff2a2a", green: "#20c05a", blue: "#2a6
 
 Blockly.defineBlocksWithJsonArray([
   { type: "pg_events_when_started", message0: "when started", nextStatement: null, colour: C.events },
+  { type: "pg_events_when_timer", message0: "when timer > %1 seconds", args0: [{ type: "field_number", name: "TIME", value: 1, min: 0 }], nextStatement: null, colour: C.events },
   // Drivetrain
   stmt({ type: "pg_drivetrain_drive", message0: "drive %1", args0: [dd("DIRECTION", DIRS)], colour: C.drive }),
   stmt({ type: "pg_drivetrain_drive_for", message0: "drive %1 for %2 %3", args0: [dd("DIRECTION", DIRS), num("AMOUNT"), dd("UNITS", DIST_UNITS)], colour: C.drive }),
@@ -488,17 +496,47 @@ Blockly.defineBlocksWithJsonArray([
   { type: "pg_sensing_drivetrain_rotation", message0: "drive rotation in degrees", output: "Number", colour: C.sensing },
   { type: "pg_sensing_drivetrain_velocity", message0: "drive velocity in %%", output: "Number", colour: C.sensing },
   // Operators
-  ...[["add", "+"], ["subtract", "-"], ["multiply", "*"], ["divide", "/"]].map(([n, s]) =>
-    ({ type: "pg_operators_" + n, message0: "%1 " + s + " %2", args0: [num("NUM1"), num("NUM2")], output: "Number", inputsInline: true, colour: C.ops })),
-  ...[["less_than", "<"], ["less_equal", "≤"], ["greater_than", ">"], ["greater_equal", "≥"], ["equal", "="]].map(([n, s]) =>
-    ({ type: "pg_operators_" + n, message0: "%1 " + s + " %2", args0: [num("NUM1"), num("NUM2")], output: "Boolean", inputsInline: true, colour: C.ops })),
-  { type: "pg_operators_and", message0: "%1 and %2", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
-  { type: "pg_operators_or", message0: "%1 or %2", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
+  // math, compare and and/or are one block each with a dropdown, like VEXcode; each choice is its own block type (see OP_GROUPS)
+  ...[["add", "+"], ["subtract", "−"], ["multiply", "*"], ["divide", "/"]].map(([n]) =>
+    ({ type: "pg_operators_" + n, message0: "%1 %2 %3", args0: [num("NUM1"), dd("OP", OP_MENU.math), num("NUM2")], output: "Number", inputsInline: true, colour: C.ops })),
+  ...[["equal"], ["less_than"], ["less_equal"], ["greater_than"], ["greater_equal"]].map(([n]) =>
+    ({ type: "pg_operators_" + n, message0: "%1 %2 %3", args0: [num("NUM1"), dd("OP", OP_MENU.compare), num("NUM2")], output: "Boolean", inputsInline: true, colour: C.ops })),
+  ...["and", "or"].map(n => ({ type: "pg_operators_" + n, message0: "%1 %2 %3", args0: [{ type: "input_value", name: "BOOL1", check: "Boolean" }, dd("OP", OP_MENU.logic), { type: "input_value", name: "BOOL2", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops })),
   { type: "pg_operators_not", message0: "not %1", args0: [{ type: "input_value", name: "BOOL", check: "Boolean" }], output: "Boolean", inputsInline: true, colour: C.ops },
   { type: "pg_operators_random", message0: "pick random %1 to %2", args0: [num("FROM"), num("TO")], output: "Number", inputsInline: true, colour: C.ops },
   { type: "pg_operators_round", message0: "round %1", args0: [num("NUM")], output: "Number", inputsInline: true, colour: C.ops },
   { type: "pg_operators_join", message0: "join %1 %2", args0: [{ type: "input_value", name: "STRING1" }, { type: "input_value", name: "STRING2" }], output: "String", inputsInline: true, colour: C.ops },
 ]);
+
+for (const t of OP_TYPES) {
+  const init = Blockly.Blocks[t].init;
+  Blockly.Blocks[t].init = function () {
+    init.call(this); this.setFieldValue(t.slice(13), "OP");
+    // start an undo group on a change, so undo puts back the old block in one step (swapOpBlock closes it)
+    this.getField("OP").setValidator(v => { if (this.workspace && !this.workspace.isFlyout && v !== this.type.slice(13) && !Blockly.Events.getGroup()) { Blockly.Events.setGroup(true); this.opGroup = Blockly.Events.getGroup(); } return v; });
+  };
+}
+// picking another operator in the dropdown swaps the block for that operator's block, keeping what is plugged in
+function swapOpBlock(b, op) {
+  const W = b.workspace, nt = "pg_operators_" + op;
+  if (!W || W.isFlyout || b.type === nt || !OP_TYPES.has(nt)) return;
+  const st = Blockly.serialization.blocks.save(b, { addCoordinates: true }); st.type = nt; st.fields = { ...(st.fields || {}), OP: op }; delete st.id;
+  const parent = b.outputConnection && b.outputConnection.targetConnection, sel = Blockly.getSelected && Blockly.getSelected() === b;
+  const grp = b.opGroup || Blockly.Events.getGroup() || true; Blockly.Events.setGroup(grp);
+  try {
+    b.dispose(false);
+    const nb = Blockly.serialization.blocks.append(st, W, { recordUndo: true });
+    if (parent && nb.outputConnection) parent.connect(nb.outputConnection);
+    if (sel && nb.select) nb.select();
+  } finally { Blockly.Events.setGroup(false); }
+}
+function watchOpBlocks(W) {
+  W.addChangeListener(e => {
+    if (e.type !== Blockly.Events.BLOCK_CHANGE || e.element !== "field" || e.name !== "OP") return;
+    const b = W.getBlockById(e.blockId);
+    if (b && OP_TYPES.has(b.type) && "pg_operators_" + e.newValue !== b.type) setTimeout(() => { if (!b.isDisposed()) swapOpBlock(b, e.newValue); }, 0);
+  });
+}
 
 /* Device blocks: the first field is a dropdown of the student's devices of that type.
    parts: list of items, each a string (label), ["value", NAME, check?] or ["dd", NAME, options]. */
@@ -575,7 +613,35 @@ Blockly.defineBlocksWithJsonArray([
   { type: "iq_controller_when_axis", message0: "when Controller axis %1 is changed", args0: [dd("AXIS", AXES)], nextStatement: null, colour: C.events },
   stmt({ type: "iq_controller_actions", message0: "%1 Controller configured actions", args0: [dd("STATE", [["disable", "disable"], ["enable", "enable"]])], colour: C.control }),
 ]);
-const HAT_TYPES = ["pg_events_when_started", "iq_controller_when_button", "iq_controller_when_axis"];
+const HAT_TYPES = ["pg_events_when_started", "iq_controller_when_button", "iq_controller_when_axis", "pg_events_when_timer", "pg_events_when_i_receive"];
+/* broadcast messages: a dropdown of the message names used in the program, plus "New message" */
+const MSG_NAMES = new Set(["my_event"]);
+class FieldMessage extends Blockly.FieldDropdown {
+  constructor() {
+    super(function () {
+      const W = this.getSourceBlock() && this.getSourceBlock().workspace;
+      if (W) for (const b of W.getAllBlocks(false)) { const f = b.getField("BROADCAST"); if (f && f.getValue()) MSG_NAMES.add(f.getValue()); }
+      return [...MSG_NAMES].sort().map(n => [n, n]).concat([["New message…", "__new"]]);
+    }, function (v) {
+      if (v !== "__new") return v;
+      Blockly.dialog.prompt("New message name:", "", name => {
+        name = String(name || "").trim().replace(/\s+/g, "_");
+        if (name) { MSG_NAMES.add(name); this.setValue(name); }
+      });
+      return null;
+    });
+  }
+  doClassValidation_(v) { if (typeof v === "string" && v && v !== "__new") { MSG_NAMES.add(v); this.getOptions(false); } return super.doClassValidation_(v); }   // a name from a loaded file joins the list
+}
+for (const [t, label, hat] of [["pg_events_when_i_receive", "when I receive", true], ["pg_events_broadcast", "broadcast", false], ["pg_events_broadcast_and_wait", "broadcast", false]]) {
+  Blockly.Blocks[t] = { init() {
+    this.appendDummyInput().appendField(label).appendField(new FieldMessage(), "BROADCAST");
+    if (t === "pg_events_broadcast_and_wait") this.appendDummyInput().appendField("and wait");
+    this.setInputsInline(true); this.setColour(C.events);
+    if (hat) this.setNextStatement(true); else { this.setPreviousStatement(true); this.setNextStatement(true); }
+    this.setFieldValue("my_event", "BROADCAST");
+  } };
+}
 
 /* Toolbox: categories unlock as devices are added */
 const sh = (type, fields) => ({ shadow: { type, fields } });
@@ -604,7 +670,8 @@ function buildToolbox() {
   if (has("color")) looks.push({ kind: "label", text: "Color sensor" }, blk("iq_looks_set_color_sensor_brightness", { LEVEL: N(50) }));
   cats.push({ kind: "category", name: "Looks", colour: C.looks, contents: looks });
   const ctl = !!controllerDev();
-  cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started")].concat(ctl ? [
+  cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started"), blk("pg_events_when_timer"),
+    blk("pg_events_when_i_receive"), blk("pg_events_broadcast"), blk("pg_events_broadcast_and_wait")].concat(ctl ? [
     { kind: "label", text: "Controller" }, blk("iq_controller_when_button"), blk("iq_controller_when_axis")] : []) });
   cats.push({ kind: "category", name: "Control", colour: C.control, contents: [
     blk("pg_control_wait", { TIME: N(1) }), blk("pg_control_repeat", { TIMES: N(10) }), blk("pg_control_forever"),
@@ -626,11 +693,8 @@ function buildToolbox() {
   if (S.allowPosition) sensing.push({ kind: "label", text: "Field position" }, blk("pg_sensing_position"));
   cats.push({ kind: "category", name: "Sensing", colour: C.sensing, contents: sensing });
   cats.push({ kind: "category", name: "Operators", colour: C.ops, contents: [
-    blk("pg_operators_add", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_subtract", { NUM1: N(0), NUM2: N(0) }),
-    blk("pg_operators_multiply", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_divide", { NUM1: N(0), NUM2: N(0) }),
-    blk("pg_operators_less_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_less_equal", { NUM1: N(0), NUM2: N(50) }),
-    blk("pg_operators_greater_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_greater_equal", { NUM1: N(0), NUM2: N(50) }),
-    blk("pg_operators_equal", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_and"), blk("pg_operators_or"), blk("pg_operators_not"),
+    blk("pg_operators_add", { NUM1: N(0), NUM2: N(0) }), blk("pg_operators_equal", { NUM1: N(0), NUM2: N(50) }),
+    blk("pg_operators_and"), blk("pg_operators_not"),
     blk("pg_operators_random", { FROM: N(1), TO: N(10) }), blk("pg_operators_round", { NUM: N(0) }),
     blk("iq_operator_remainder", { NUM1: N(7), NUM2: N(2) }), blk("iq_operator_function", { NUM: N(0) }),
     blk("pg_operators_join", { STRING1: sh("text", { TEXT: "apple " }), STRING2: sh("text", { TEXT: "banana" }) }) ] });
@@ -651,6 +715,7 @@ const ws = Blockly.inject("blockly", {
   zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel scrolls instead of zooming
   move: { scrollbars: true, drag: true, wheel: true }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
 });
+watchOpBlocks(ws);
 /* zoom buttons on the workspace: bigger, smaller, and find my code */
 (function zoomBar() {
   const bar = document.createElement("div"); bar.className = "zoombar";
@@ -1584,6 +1649,8 @@ function* exec(b) {
     case "pg_control_ifelse": yield* runStack(sub(v("CONDITION") ? "SUBSTACK" : "SUBSTACK2")); return;
     case "pg_control_break": throw new Break();
     case "pg_control_stop_project": throw new Stop();
+    case "pg_events_broadcast": broadcast(f("BROADCAST")); return;
+    case "pg_events_broadcast_and_wait": { const runs = broadcast(f("BROADCAST")); yield; while (runs.some(g => RUN.scripts.includes(g))) yield; return; }
     case "pg_sensing_reset_timer": W.timer0 = W.t; return;
     case "iq_drivetrain_set_drive_stopping": W.stopping = f("MODE"); return;
     case "iq_looks_set_touchled_fade": case "iq_looks_set_color_sensor_brightness": case "iq_motion_set_motor_torque": return;
@@ -1604,6 +1671,25 @@ function* exec(b) {
     }
   }
   if (!HAT_TYPES.includes(b.type)) log(`Block "${b.type}" is not supported yet; skipped.`, "warn");
+}
+// start every "when I receive" script for this message (a script that is still running starts over)
+function broadcast(name) {
+  const runs = [];
+  for (const h of RUN.receivers.filter(h => h.getFieldValue("BROADCAST") === name)) {
+    const old = RUN.hatRuns.get(h.id); if (old) RUN.scripts = RUN.scripts.filter(g => g !== old);
+    const g = runStack(h.getNextBlock()); RUN.hatRuns.set(h.id, g); RUN.scripts.push(g); runs.push(g);
+  }
+  return runs;
+}
+// "when timer > N seconds": runs once when the Brain timer passes N (again after the timer is reset)
+function timerTick() {
+  const now = W.t - W.timer0;
+  for (const tm of RUN.timers) {
+    if (now <= tm.secs) { tm.armed = true; continue; }
+    if (!tm.armed) continue;
+    tm.armed = false;
+    const g = runStack(tm.block.getNextBlock()); RUN.hatRuns.set(tm.block.id, g); RUN.scripts.push(g);
+  }
 }
 function* runStack(b) {
   while (b) {
@@ -1634,13 +1720,15 @@ function startProgram() {
   const all = PW.getTopBlocks(true).filter(b => b.isEnabled());
   const tops = all.filter(b => b.type === "pg_events_when_started");
   const hats = controllerDev() ? all.filter(b => b.type === "iq_controller_when_button" || b.type === "iq_controller_when_axis") : [];
+  const timers = all.filter(b => b.type === "pg_events_when_timer").map(b => ({ block: b, secs: Math.max(0, +b.getFieldValue("TIME") || 0), armed: true }));
+  const receivers = all.filter(b => b.type === "pg_events_when_i_receive");
   const cd = controllerDev(), hasActions = !!cd && (cd.drive && cd.drive !== "none" && !!drivetrain() || Object.values(cd.buttons || {}).some(Boolean));
-  if (!tops.length && !hats.length && !hasActions) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
+  if (!tops.length && !hats.length && !timers.length && !hasActions) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
   const loose = all.filter(b => !HAT_TYPES.includes(b.type) && !b.type.startsWith("procedures_def") && !b.isShadow());
   if (loose.length) log(`${loose.length} loose stack${loose.length > 1 ? "s are" : " is"} not attached to a "when" block and won't run.`, "warn");
   if (all.some(b => b.type.startsWith("iq_controller_when")) && !cd) log("Controller event blocks need a Controller in Devices.", "warn");
   RUN = { vars: {}, current: new Set(), scripts: tops.map(t => runStack(t.getNextBlock())), last: 0, acc: 0,
-    hats, hatRuns: new Map(), actionsOn: true, persistent: hats.length > 0 || hasActions, prevCtrl: null };
+    hats, hatRuns: new Map(), timers, receivers, actionsOn: true, persistent: hats.length > 0 || hasActions, prevCtrl: null };
   if (RUN.persistent) log("The program keeps running so the controller works. Press Stop when you're done.");
   setRunning(true);
   requestAnimationFrame(loop);
@@ -1655,9 +1743,11 @@ function stopProgram(redraw = true) {
   if (redraw) draw();
 }
 function tickScripts() {
-  controllerTick();
-  const alive = [];
-  for (const s of RUN.scripts) {
+  controllerTick(); timerTick();
+  // scripts started during this tick (broadcasts, events) first run on the next tick
+  const finished = new Set();
+  for (const s of RUN.scripts.slice()) {
+    if (!RUN.scripts.includes(s)) continue;   // restarted by a broadcast
     let done = false;
     try { done = s.next().done; }
     catch (e) {
@@ -1665,10 +1755,10 @@ function tickScripts() {
       if (e instanceof Break) done = true;
       else { log("Error: " + e.message, "err"); console.error(e); done = true; }
     }
-    if (!done) alive.push(s);
+    if (done) finished.add(s);
   }
-  RUN.scripts = alive;
-  return alive.length > 0 || W.mode !== "idle" || motorsBusy() || RUN.persistent;
+  RUN.scripts = RUN.scripts.filter(s => !finished.has(s));
+  return RUN.scripts.length > 0 || W.mode !== "idle" || motorsBusy() || RUN.persistent || RUN.timers.some(t => t.armed);
 }
 function loop(ts) {
   if (!RUN || CHECKING) return;
@@ -2186,6 +2276,7 @@ function renderTeacher() {
     <label>Start heading (°)<input type="number" id="t_startH" value="${s.startH}" step="1"></label>
     <label class="chk"><input type="checkbox" id="t_allowPosition" ${s.allowPosition ? "checked" : ""}> Allow "position X/Y" blocks</label>
     <label class="chk"><input type="checkbox" id="t_hideRepeatUntil" ${s.hideRepeatUntil ? "checked" : ""}> Hide the "repeat until" block (students use "while" like in C++)</label>
+    <label class="chk"><input type="checkbox" id="t_switchBlocks" ${s.switchBlocks ? "checked" : ""}> Show Switch blocks (type C++ inside a block). Leave off until you teach it. Copy the student link again after a change.</label>
     <label class="chk full"><input type="checkbox" id="t_realChecks" ${s.realChecks ? "checked" : ""}> Check my work in real-world mode (each test run gets new slip and sensor noise, so programs must use their sensors)</label>
   </div></fieldset>
   <fieldset><legend>Robot build</legend><div class="form">
@@ -2244,7 +2335,7 @@ function readTeacher() {
   const g = id => document.getElementById(id), n = id => +g(id).value;
   const s = tDraft;
   ["fieldW", "fieldH", "grid", "startX", "startY", "startH", "robotL", "robotW", "wheelTravel", "track", "gear", "motorRPM", "distanceMax"].forEach(k => { if (g("t_" + k)) s[k] = n("t_" + k); });
-  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.hideRepeatUntil = g("t_hideRepeatUntil").checked; s.realChecks = g("t_realChecks").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
+  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.hideRepeatUntil = g("t_hideRepeatUntil").checked; s.switchBlocks = g("t_switchBlocks").checked; s.realChecks = g("t_realChecks").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
   PORT_ROLES.forEach(([k]) => { s.ports[k] = n("p_" + k); });
   s.sheetUrl = g("t_sheetUrl").value.trim();
   const picked = [...tBody.querySelectorAll("[data-lv]")].filter(c => c.checked).map(c => c.dataset.lv);
@@ -2259,6 +2350,7 @@ function studentLink(s) {
   if (validSheet(s.sheetUrl)) q.set("sheet", s.sheetUrl.trim());
   q.set("levels", s.assigned ? s.assigned.join(",") : "all");
   if (s.lockOrder) q.set("lock", "1");
+  if (s.switchBlocks) q.set("switch", "1");
   if (typeof BETA !== "undefined" && BETA && s.modes) q.set("modes", s.modes.join(","));
   return location.origin + location.pathname + "?" + q.toString();
 }
@@ -2499,6 +2591,7 @@ function iqTranslate(xmlText, dir) {
     const dropIn = new Set([...(p.drop || []), ...(dir === "in" ? Object.keys(p.add || {}) : [])]);
     if (dir === "in" && p.to.startsWith("iq_motor") && !["iq_motor_spin_for", "iq_motor_spin_to_position", "iq_motor_set_position", "iq_motor_position"].includes(p.to)) dropIn.add("UNITS");
     if (dir === "in" && p.to.startsWith("pg_operators_round")) dropIn.add("DECIMAL");
+    if (dir === "out" && OP_TYPES.has(t)) dropIn.add("OP");   // the sim's operator dropdown; VEXcode has its own field
     for (const c of kids(b)) {
       const name = c.getAttribute("name");
       if (c.tagName === "field") {
@@ -4191,7 +4284,7 @@ function genCode(lang, opts = {}) {
   const PCT = py ? "PERCENT" : "percent", SEC = py ? "SECONDS" : "seconds", DEGS = py ? "DEGREES" : "degrees";
   const DT = py ? "drivetrain" : "Drivetrain", BI = py ? "brain_inertial" : "BrainInertial";
   const end = py ? "" : ";";
-  const vars = new Set(), procs = [];
+  const vars = new Set(), procs = [], msgs = new Set();
   const f = (b, n) => b.getFieldValue(n);
   const varName = (b, n = "VAR") => { const m = b.workspace.getVariableById(f(b, n)); return id(m ? m.name : f(b, n)); };
   function val(b, name, dflt = "0") {
@@ -4302,6 +4395,8 @@ function genCode(lang, opts = {}) {
       }
       case "pg_control_break": return L("break");
       case "pg_control_stop_project": return L(py ? "brain.program_stop()" : "Brain.programStop()");
+      case "pg_events_broadcast": msgs.add(id(f(b, "BROADCAST"))); return L(`${id(f(b, "BROADCAST"))}.broadcast()`);
+      case "pg_events_broadcast_and_wait": msgs.add(id(f(b, "BROADCAST"))); return L(`${id(f(b, "BROADCAST"))}.${py ? "broadcast_and_wait" : "broadcastAndWait"}()`);
       case "pg_sensing_reset_timer": return L(py ? "brain.timer.clear()" : "Brain.Timer.clear()");
       case "iq_sensing_inertial_calibrate": return L(call(BI, "calibrate", ""));
       case "iq_brain_set_heading": return L(call(BI, "set_heading", `${v("HEADING")}, ${DEGS}`));
@@ -4360,6 +4455,17 @@ function genCode(lang, opts = {}) {
   // events and My Blocks
   const tops = ws.getTopBlocks(true).filter(b => b.isEnabled());
   const out = [], mains = [], events = [];
+  let tn = 0;
+  for (const b of tops.filter(x => x.type === "pg_events_when_timer")) {
+    tn++; const fn = py ? `when_timer${tn}` : `whenTimer${tn}`, ms = Math.round((+b.getFieldValue("TIME") || 0) * 1000);
+    events.push({ fn, lines: stack(b.getNextBlock(), IND), reg: py ? `brain.timer.event(${fn}, ${ms})` : `Brain.Timer.event(${fn}, ${ms});` });
+  }
+  const rn = {};
+  for (const b of tops.filter(x => x.type === "pg_events_when_i_receive")) {
+    const m = id(b.getFieldValue("BROADCAST")); msgs.add(m); rn[m] = (rn[m] || 0) + 1;
+    const fn = py ? `onevent_${m}_${rn[m] - 1}` : `onevent_${m}_${rn[m] - 1}`;
+    events.push({ fn, lines: stack(b.getNextBlock(), IND), reg: py ? `${m}(${fn})` : `${m}(${fn});` });
+  }
   for (const d of tops.filter(b => b.type === "procedures_defnoreturn")) {
     const name = id(d.getFieldValue("NAME")), params = d.getVars().map(id);
     d.getDescendants(false).forEach(x => { if (x.type === "variables_get") { const m = x.workspace.getVariableById(x.getFieldValue("VAR")); if (m && d.getVars().includes(m.name)) x.__param = true; } });
@@ -4387,6 +4493,7 @@ function genCode(lang, opts = {}) {
       else out.push(`${nm} = ${{ gyro: "Gyro", distance: "Distance", color: "ColorSensor", touchled: "Touchled", bumper: "Bumper" }[d.type]}(Ports.PORT${d.port})`);
     }
     out.push("#endregion VEXcode Generated Robot Configuration", "");
+    msgs.forEach(m => out.push(`${m} = Event()`)); if (msgs.size) out.push("");
     globals.forEach(g => out.push(`${g} = 0`)); if (globals.length) out.push("");
     procs.forEach(p => out.push(...p));
     const gl = globals.length ? [IND + "global " + globals.join(", ")] : [];
@@ -4395,6 +4502,7 @@ function genCode(lang, opts = {}) {
     if (mains.length) { out.push(`${mains[0].fn}()`); mains.slice(1).forEach(m => out.splice(out.length - 1, 0, `Thread(${m.fn})`)); }
   } else {
     out.push("// Made from blocks in Robot Field Sim. Close to VEXcode IQ C++; small details may differ.", "// The robot setup (ports, drivetrain) lives in VEXcode's Devices window.", '#include "vex.h"', "using namespace vex;", "");
+    msgs.forEach(m => out.push(`event ${m} = event();`)); if (msgs.size) out.push("");
     globals.forEach(g => out.push(`float ${g} = 0;`)); if (globals.length) out.push("");
     procs.forEach(p => out.push(...p));
     for (const e of events) out.push(`void ${e.fn}() {`, ...e.lines, "}", "");
@@ -5140,9 +5248,10 @@ function cppExamples() {
 }
 buildToolbox = (orig => function () {
   const tb = orig();
-  if (MODE === "text") {
+  // Switch blocks (C++ typed inside a block): always in "Text blocks" mode, and on any page when the teacher turns them on
+  if (MODE === "text" || S.switchBlocks) {
     const ex = cppExamples(), F = v => ({ CODE: v });
-    tb.contents.unshift({ kind: "category", name: "C++", colour: "#2f3542", contents: [
+    tb.contents[MODE === "text" ? "unshift" : "push"]({ kind: "category", name: "Switch", colour: "#2f3542", contents: [
       { kind: "label", text: "Type C++ inside these blocks. Right-click a normal block to turn it into C++." },
       { kind: "block", type: "cpp_stmt", fields: F(ex.stmt) },
       { kind: "block", type: "cpp_stmt", fields: F("float count = 0;") },
@@ -5168,7 +5277,7 @@ try {
   Blockly.ContextMenuRegistry.registry.register({
     id: "rfsToCpp", scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK, weight: 5,
     displayText: () => "Turn into C++",
-    preconditionFn: s => MODE === "text" && s.block && !s.block.type.startsWith("cpp_") && !HAT_TYPES.includes(s.block.type) && !s.block.type.startsWith("procedures_def") && !s.block.isShadow() ? "enabled" : "hidden",
+    preconditionFn: s => (MODE === "text" || S.switchBlocks) && s.block && !s.block.type.startsWith("cpp_") && !HAT_TYPES.includes(s.block.type) && !s.block.type.startsWith("procedures_def") && !s.block.isShadow() ? "enabled" : "hidden",
     callback: s => turnIntoCpp(s.block),
   });
 } catch (e) { /* already registered */ }
@@ -5375,7 +5484,7 @@ function setMode(m, quiet) {
     ws.updateToolbox(buildToolbox());
     setTimeout(() => Blockly.svgResize(ws), 0);
   }
-  if (!quiet) log(m === "cpp" ? "C++ mode: type your program. The list on the right has the commands the sim knows." : m === "text" ? 'Text blocks: open the "C++" category, or right-click a block and pick "Turn into C++".' : "Blocks mode.");
+  if (!quiet) log(m === "cpp" ? "C++ mode: type your program. The list on the right has the commands the sim knows." : m === "text" ? 'Text blocks: open the "Switch" category, or right-click a block and pick "Turn into C++".' : "Blocks mode.");
 }
 (function setupModes() {
   if (!BETA) return;
@@ -5560,8 +5669,9 @@ const lvlSel = document.getElementById("level");
     const q = new URLSearchParams(location.search), v = q.get("levels");
     if (v === null) return;
     const ids = v === "all" ? [] : v.split(",").filter(id => LEVELS.some(l => l.id === id));
-    S.assigned = ids.length ? ids : null; S.lockOrder = q.get("lock") === "1";
+    S.assigned = ids.length ? ids : null; S.lockOrder = q.get("lock") === "1"; S.switchBlocks = q.get("switch") === "1";
     LS.set("rfs.settings", S);
+    ws.updateToolbox(buildToolbox());   // Switch blocks on or off
   } catch (e) {}
 })();
 function levelList() { return S.assigned ? LEVELS.filter(l => S.assigned.includes(l.id)) : LEVELS; }
