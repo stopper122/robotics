@@ -145,6 +145,7 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 .views .btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); position: relative; }
 .blocklyToolboxDiv { font-family: var(--body) !important; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.namerow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -240,7 +241,7 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 <div class="modal" id="mText" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="xTitle">
     <header><h2 id="xTitle">Save project</h2><button class="btn" type="button" data-close>Close</button></header>
-    <div class="body"><p class="hint" id="xHint"></p><textarea id="xText" aria-label="Project text"></textarea><div class="err-text" id="xErr"></div></div>
+    <div class="body"><p class="hint" id="xHint"></p><div class="form1 namerow" id="xNames" hidden><label>Last name<input id="xLast" autocomplete="family-name"></label><label>First name<input id="xFirst" autocomplete="given-name"></label></div><textarea id="xText" aria-label="Project text"></textarea><div class="err-text" id="xErr"></div></div>
     <footer><button class="btn" type="button" id="xDownload" hidden>Download file</button><button class="btn" type="button" id="xAction" hidden>Load</button><button class="btn primary" type="button" id="xCopy">Copy</button></footer>
   </div>
 </div>
@@ -2144,8 +2145,18 @@ document.getElementById("btnSave").onclick = () => {
   const r = iqProjectJSON();
   const left = r.left.size ? ` These blocks have no VEXcode IQ match yet, so they are not in the file: ${leftText(r.left)}.` : "";
   textDialog("Save project", "Download this file (or copy the text into a file ending in .iqblocks). It opens here with Open, and in VEXcode IQ, so you can download it to the robot." + left + " Your work also saves automatically in this browser.",
-    r.text, null, { name: (LEVEL === "open" ? "MyProgram" : lvl().name.replace(/^\d+\.\s*/, "").replace(/(^|[^a-zA-Z0-9]+)([a-zA-Z0-9])/g, (m, a, c) => c.toUpperCase())) + ".iqblocks" });
+    r.text, null, { program: LEVEL === "open" ? "MyProgram" : camel(lvl().name.replace(/^\d+\.\s*/, "")) });
 };
+// file names look like LastName_FirstName_Program.iqblocks
+const camel = t => t.replace(/(^|[^a-zA-Z0-9]+)([a-zA-Z0-9])/g, (m, a, c) => c.toUpperCase()).replace(/[^a-zA-Z0-9]/g, "");
+function myName() {
+  const saved = LS.get("rfs.myname", null);
+  if (saved) return saved;
+  const n = STUDENT && STUDENT.name ? STUDENT.name.trim() : "";
+  if (!n) return { first: "", last: "" };
+  if (n.includes(",")) { const [last, first] = n.split(",").map(x => x.trim()); return { first, last }; }
+  const parts = n.split(/\s+/); return { first: parts.slice(0, -1).join(" ") || parts[0], last: parts.length > 1 ? parts[parts.length - 1] : "" };
+}
 document.getElementById("btnOpen").onclick = () => document.getElementById("fileIn").click();
 document.getElementById("fileIn").onchange = e => {
   const file = e.target.files[0]; if (!file) return;
@@ -2160,11 +2171,19 @@ document.getElementById("showPath").onchange = draw;
 
 function textDialog(title, hint, text, onLoad, download) {
   const dl = document.getElementById("xDownload"); dl.hidden = !download;
-  if (download) dl.onclick = async () => {
-    const r = await downloadText(download.name, text), msg = document.getElementById("xErr");
-    msg.textContent = r === "renamed" ? `Saved as ${download.name}.json. Rename it to ${download.name} (take off ".json") before opening it in VEXcode IQ.`
-      : r === "blocked" ? "Downloads are blocked here. Use Copy instead." : "";
-  };
+  const names = document.getElementById("xNames"); names.hidden = !download;
+  if (download) {
+    const me = myName(); document.getElementById("xFirst").value = me.first; document.getElementById("xLast").value = me.last;
+    dl.onclick = async () => {
+      const first = document.getElementById("xFirst").value.trim(), last = document.getElementById("xLast").value.trim(), msg = document.getElementById("xErr");
+      if (!first || !last) { msg.textContent = "Type your last and first name first."; return; }
+      LS.set("rfs.myname", { first, last });
+      const name = [camel(last), camel(first), download.program].filter(Boolean).join("_") + ".iqblocks";
+      const r = await downloadText(name, text);
+      msg.textContent = r === "renamed" ? `Saved as ${name}.json. Rename it to ${name} (take off ".json") before opening it in VEXcode IQ.`
+        : r === "blocked" ? "Downloads are blocked here. Use Copy instead." : "";
+    };
+  }
   document.getElementById("xTitle").textContent = title;
   document.getElementById("xHint").textContent = hint;
   const ta = document.getElementById("xText"); ta.value = text; ta.readOnly = !onLoad;
