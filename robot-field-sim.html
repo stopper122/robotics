@@ -901,7 +901,7 @@ const TASK_STEPS = {
   timeout: { goal: "Stop 150 mm from the wall. Never drive more than 4 seconds.", steps: ["Drive forward.", "Stop when the wall is less than 150 mm away.", "Also stop if 4 seconds go by.", "The test runs one time with no wall."], tip: '"wait until (distance < 150) or (timer > 4)"' },
   stayaway: { goal: "Stay 300 mm away from the wall. The wall will move.", steps: ["Too close to the wall? Back up.", "Too far from the wall? Drive forward.", "Keep checking forever."], tip: "While it runs, drag the wall closer and farther to test it." },
   garage: { goal: "Park in the garage. Do not touch anything.", steps: ["Drive forward until the far wall is 200 mm away.", "Turn left 90 degrees.", "Drive into the garage.", "Stop 100 mm from the back wall."], tip: "The robot starts in 2 different spots. Use the Distance sensor, not a set number of mm." },
-  wallfollow: { goal: "Follow the wall on your right to the green tile.", steps: ["Put the Distance sensor on the right side.", "Too far from the wall (more than 150 mm)? Steer right, toward it.", "Too close? Steer left, away from it.", "Keep doing this until you reach green.", "Do not touch the wall."], tip: 'Two Motors with "set velocity" steer smoothly.' },
+  wallfollow: { goal: "Follow the wall on your right to the green tile.", steps: ["Put the Distance sensor on the right side.", "Too far from the wall (more than 150 mm)? Steer right, toward it.", "Too close? Steer left, away from it.", "Keep doing this until you reach green.", "Do not touch the wall."], tip: 'Use an "if then else" block. To steer right, make the left motor faster. To steer left, make the right motor faster.' },
   patrol: { goal: "Drive around for 30 seconds. Do not touch any wall.", steps: ["Drive forward.", "Wall close ahead? Turn away.", "Drive forward again.", "Keep doing this forever."], tip: "Keep moving. Spinning in place does not count." },
   find: { goal: "Find the cube. Stop next to it.", steps: ["Turn in place.", "Stop turning when the Distance sensor sees something closer than 700 mm.", "Drive forward to the cube.", "Stop about 50 mm away. Do not push it."], tip: "The cube moves every run. The walls are farther than 700 mm, so they will not fool you." },
   fixfind: { goal: "Fix the broken program. It should find the cube every time.", steps: ["What the program should do: turn until it sees the cube, drive to it, and stop about 50 mm away.", 'Click "Load the broken program". Click Check my work.', "One test fails, because the cube moves every run. Click ▶ Watch on the ✗ test.", "The program always turns the same amount. Change it to turn until the Distance sensor sees something closer than 700 mm."] },
@@ -3832,7 +3832,9 @@ async function wallCheck() {
   let ok = 0, n = 0, fin = false, far = 0, touches = 0, was = false;
   const st = await testRun({ secs: 60, settle: 0.5, each: () => {
     if (fin) return;
-    if (W.x >= 650 && W.y >= 220 && W.y <= 800) { fin = true; return; }
+    // done when the robot is at the green tile, or its front is on it (a program that stops when the Color sensor sees green)
+    const fx = W.x + Math.sin(W.rot * DEG) * S.robotL / 2, fy = W.y + Math.cos(W.rot * DEG) * S.robotL / 2;
+    if ((W.x >= 650 && W.y >= 220 && W.y <= 800) || floorAt(fx, fy) === "green") { fin = true; return; }
     if (W.blocked && !was) touches++; was = W.blocked;
     const d = Math.min(...FOLLOW_WALLS.map(w => segDist(W.x, W.y, [w.x1, w.y1], [w.x2, w.y2]))) - S.robotW / 2 - WALL_T / 2;
     n++; if (d >= 50 && d <= 300) ok++;
@@ -4014,7 +4016,7 @@ const PLANS = {
   counter: ["Set count to 0.", "While the Touch LED is NOT pressed:", "  if the Bumper is pressed:", "    change count by 1", "    wait until the Bumper is NOT pressed", "Drive forward (count × 200) mm."],
   distance: ["Drive forward.", "Wait until the distance is less than 200 mm.", "Stop driving.", "Too far past the line? Set a slower drive velocity first."],
   stayaway: ["Forever:", "  if the distance is less than 280 mm: drive reverse", "  else if the distance is more than 320 mm: drive forward", "  else: stop driving"],
-  wallfollow: ["Put the Distance sensor on the right side.", "Forever (or until you reach the green tile):", "  if the distance is more than 150 mm: steer a little to the right", "  else: steer a little to the left", "Steer by giving the two wheels slightly different speeds."],
+  wallfollow: ["Put the Distance sensor on the right side.", "Forever (or until you reach the green tile), use an \"if then else\" block:", "  if the distance is more than 150 mm: steer right (left motor faster, like 50 and 25)", "  else: steer left (right motor faster, like 25 and 50)", "Put the else blocks inside the else part. Blocks under the whole if run every time."],
   find: ["Turn right (don't use \"for\").", "Wait until the sensor finds an object closer than 700 mm.", "Stop, then drive forward.", "Wait until the distance is less than 50 mm.", "Stop driving."],
   color: ["Drive forward.", "Forever: if the Color sensor sees your color, stop driving.", "Or: print the color name each time it changes."],
   countlines: ["Set lines to 0. Drive forward.", "Repeat until lines = 3:", "  wait until the sensor sees dark", "  change lines by 1", "  wait until the sensor sees white again", "Stop driving."],
