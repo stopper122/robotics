@@ -145,6 +145,7 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .plan { font-size: 12.5px; margin-top: 6px; background: rgba(255,255,255,.65); border-radius: 6px; padding: 6px 8px; } .plan .pl { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; line-height: 1.5; }
 .run .btn { white-space: nowrap; flex: none; }
 #btnMoreHelp { align-self: flex-start; margin-top: 4px; }
+.notes { margin-top: 8px; font-size: 12.5px; } .notes summary { cursor: pointer; color: var(--muted); } .notes label { display: block; margin-top: 6px; } .notes textarea { width: 100%; height: 46px; min-height: 0; resize: vertical; box-sizing: border-box; font: 13px var(--body); margin-top: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
 .score .saved { font-size: 12px; color: var(--muted); }
 .form1 { display: flex; flex-direction: column; gap: 10px; }
 .form1 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -191,6 +192,8 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
           <select id="speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
         </label>
         <label for="showPath"><input type="checkbox" id="showPath" checked> Path</label>
+        <label for="realMode" title="Wheels slip, sensors jitter, and the robot glides after stopping, like a real robot"><input type="checkbox" id="realMode"> Real world</label>
+        <button class="btn small" id="realNew" type="button" hidden title="New real-world conditions">🎲</button>
       </div>
       <div class="dbg" id="dbg" hidden></div>
       <div class="task" id="task" hidden></div>
@@ -290,7 +293,7 @@ function defaultSettings() {
     startX: 0, startY: 0, startH: 0,
     robotL: 230, robotW: 200,
     wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
-    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false,
+    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false, realChecks: false,
     assigned: null, lockOrder: false,   // levels students see (null = all), and unlock in order at a score of 3+
     ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8, bumper2: 9, bumper3: 11, touchled2: 12 },
     distanceMax: 1000,
@@ -356,6 +359,7 @@ Blockly.defineBlocksWithJsonArray([
   stmt({ type: "pg_drivetrain_stop_driving", message0: "stop driving", colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_velocity", message0: "set drive velocity to %1 %%", args0: [num("VELOCITY")], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_turn_velocity", message0: "set turn velocity to %1 %%", args0: [num("VELOCITY")], colour: C.drive }),
+  stmt({ type: "pg_drivetrain_set_stopping", message0: "set drive stopping to %1", args0: [dd("MODE", [["brake", "brake"], ["coast", "coast"], ["hold", "hold"]])], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_heading", message0: "set drive heading to %1 degrees", args0: [num("HEADING")], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_rotation", message0: "set drive rotation to %1 degrees", args0: [num("ROTATION")], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_timeout", message0: "set drive timeout to %1 seconds", args0: [num("TIME")], colour: C.drive }),
@@ -495,7 +499,7 @@ function buildToolbox() {
     blk("pg_drivetrain_drive"), blk("pg_drivetrain_drive_for", { AMOUNT: N(200) }), blk("pg_drivetrain_turn"),
     blk("pg_drivetrain_turn_for", { AMOUNT: N(90) }), blk("pg_drivetrain_turn_to_heading", { HEADING: N(90) }),
     blk("pg_drivetrain_turn_to_rotation", { ROTATION: N(90) }), blk("pg_drivetrain_stop_driving"),
-    blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }),
+    blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_stopping"),
     blk("pg_drivetrain_set_drive_heading", { HEADING: N(0) }), blk("pg_drivetrain_set_drive_rotation", { ROTATION: N(0) }),
     blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }), blk("iq_drivetrain_set_drive_stopping"),
   ] : [lockLabel("Drivetrain")] });
@@ -806,6 +810,18 @@ const DT = 1 / 60;
 let W;            // world state
 let VIEW = { Wd: 1, Ht: 1, sc: 1, dpr: 1 };
 const EDIT = { on: false, sel: null, draft: null, drag: null, tool: "wall", color: "red" };   // sel: {k: "wall" | "floor", i}
+/* Real-world mode: the wheels slip a little, the robot drifts, sensors jitter, and it glides after "stop driving".
+   Conditions come from a seed, so they stay the same until the student asks for new ones. */
+const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+let REAL = LS.get("rfs.real", { on: false, seed: 1 }), REAL_FORCE = null, REAL_NEXT = null;
+const realOn = () => REAL_FORCE !== null ? REAL_FORCE : !!REAL.on;
+function makeReal() {
+  if (!realOn()) return null;
+  const seed = REAL_NEXT !== null ? REAL_NEXT : REAL_FORCE ? (Math.random() * 1e9) | 0 : REAL.seed;
+  const rnd = mulberry32(seed), u = (a, b) => a + (b - a) * rnd();
+  return { seed, turnK: u(0.95, 0.99), driveK: u(0.97, 1.02), drift: u(-0.6, 0.6) / 1000, rnd,
+    gauss: () => { const a = Math.max(1e-9, rnd()), b = rnd(); return Math.sqrt(-2 * Math.log(a)) * Math.cos(2 * Math.PI * b); } };
+}
 function newWorld() {
   const P = startPose();
   W = {
@@ -827,6 +843,7 @@ function newWorld() {
   resetCubes();
   for (const m of devOf("motor")) W.motors[m.name] = { enc: 0, mode: "idle", dir: 1, target: 0, vel: 50, timeout: 0, deadline: 0 };
   for (const g of devOf("gyro")) W.gyros[g.name] = { hOff: 0, rOff: 0, calUntil: 0 };
+  W.stopping = "brake"; W.glide = null; W.real = makeReal();
   for (const l of devOf("touchled")) W.leds[l.name] = { color: "none", bright: 100, pressed: false };
 }
 newWorld();
@@ -1087,6 +1104,12 @@ function physicsStep() {
       }
     }
     if (W.cmd && W.cmd.deadline && W.t >= W.cmd.deadline && W.mode !== "spin") W.mode = "idle";
+    W.glide = W.mode === "spin" ? { l: dL, r: dR } : null;
+  } else if (dt && W.real && W.glide) {
+    // real-world mode: after "stop driving" the robot keeps rolling a little (brake: a short slide, coast: a long one, hold: none)
+    const tau = W.stopping === "coast" ? 0.35 : W.stopping === "hold" ? 0 : 0.07, k = tau ? Math.exp(-DT / tau) : 0;
+    W.glide.l *= k; W.glide.r *= k; dL = W.glide.l; dR = W.glide.r;
+    if (Math.abs(dL) + Math.abs(dR) < 0.01) W.glide = null;
   }
   W.encL += dL; W.encR += dR;
   if (dt) W.estRot += (cfgMM(dL) - cfgMM(dR)) / dt.track / DEG;
@@ -1124,7 +1147,8 @@ function physicsStep() {
   const mL = realMM(wL), mR = realMM(wR);
   W.lastWL = mL; W.lastWR = mR;   // how far each side's wheels turned this tick (mm), for checks
   const slip = LEVEL !== "open" && lvl().slip || 1;
-  const dCenter = (mL + mR) / 2, dRot = (mL - mR) / S.track / DEG * slip;
+  let dCenter = (mL + mR) / 2, dRot = (mL - mR) / S.track / DEG * slip;
+  if (W.real) { dRot = dRot * W.real.turnK + dCenter * W.real.drift; dCenter *= W.real.driveK; }
   const before = W.rot, ox0 = W.x, oy0 = W.y;
   if (dCenter || dRot) {
     const mid = (W.rot + dRot / 2) * DEG;
@@ -1248,7 +1272,9 @@ function val(block) {
     case "pg_sensing_distance_found": case "pg_sensing_distance_from": {
       const dev = devFor(block, "distance", "distance");
       if (!dev) return t.endsWith("found") ? false : 0;
-      const d = sensorRange(dev), found = d >= 24 && d <= S.distanceMax;
+      let d = sensorRange(dev);
+      if (W.real && d <= S.distanceMax) d += W.real.gauss() * (3 + 0.01 * d);   // real-world mode: readings jitter a little
+      const found = d >= 24 && d <= S.distanceMax;
       if (t.endsWith("found")) return found;
       const mm = found ? d : (d < 24 ? 24 : S.distanceMax); return +(f("UNITS") === "in" ? mm / 25.4 : mm).toFixed(1);
     }
@@ -1260,7 +1286,7 @@ function val(block) {
       if (t === "iq_color_detects") return r.name === f("COLORS");
       if (t === "iq_color_name") return r.name;
       if (t === "iq_color_found") return r.found;
-      if (t === "iq_color_brightness") return r.bright;
+      if (t === "iq_color_brightness") return W.real ? Math.max(0, Math.min(100, Math.round(r.bright + W.real.gauss() * 1.5))) : r.bright;
       return r.hue;
     }
     case "pg_sensing_bumper_pressed": { const dev = devFor(block, "bumper", "bumper"); return !!dev && bumperPressed(dev); }
@@ -1309,6 +1335,7 @@ function* exec(b) {
     case "pg_drivetrain_stop_driving": W.mode = "idle"; W.cmd = null; return;
     case "pg_drivetrain_set_drive_velocity": W.drivePct = Math.max(-100, Math.min(100, +v("VELOCITY"))); return;
     case "pg_drivetrain_set_turn_velocity": W.turnPct = Math.max(-100, Math.min(100, +v("VELOCITY"))); return;
+    case "pg_drivetrain_set_stopping": W.stopping = f("MODE"); return;
     case "pg_drivetrain_set_drive_heading": W.headingOffset += +v("HEADING") - rd_heading(); return;
     case "pg_drivetrain_set_drive_rotation": W.rotationOffset += +v("ROTATION") - rd_rotation(); return;
     case "pg_drivetrain_set_drive_timeout": W.timeout = Math.max(0, +v("TIME")); return;
@@ -1914,6 +1941,7 @@ function renderTeacher() {
     <label>Start heading (°)<input type="number" id="t_startH" value="${s.startH}" step="1"></label>
     <label class="chk"><input type="checkbox" id="t_allowPosition" ${s.allowPosition ? "checked" : ""}> Allow "position X/Y" blocks</label>
     <label class="chk"><input type="checkbox" id="t_hideRepeatUntil" ${s.hideRepeatUntil ? "checked" : ""}> Hide the "repeat until" block (students use "while" like in C++)</label>
+    <label class="chk full"><input type="checkbox" id="t_realChecks" ${s.realChecks ? "checked" : ""}> Check my work in real-world mode (each test run gets new slip and sensor noise, so programs must use their sensors)</label>
   </div></fieldset>
   <fieldset><legend>Robot build</legend><div class="form">
     <label>Robot length (mm)<input type="number" id="t_robotL" value="${s.robotL}" step="5"></label>
@@ -1967,7 +1995,7 @@ function readTeacher() {
   const g = id => document.getElementById(id), n = id => +g(id).value;
   const s = tDraft;
   ["fieldW", "fieldH", "grid", "startX", "startY", "startH", "robotL", "robotW", "wheelTravel", "track", "gear", "motorRPM", "distanceMax"].forEach(k => { if (g("t_" + k)) s[k] = n("t_" + k); });
-  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.hideRepeatUntil = g("t_hideRepeatUntil").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
+  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.hideRepeatUntil = g("t_hideRepeatUntil").checked; s.realChecks = g("t_realChecks").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
   PORT_ROLES.forEach(([k]) => { s.ports[k] = n("p_" + k); });
   s.sheetUrl = g("t_sheetUrl").value.trim();
   const picked = [...tBody.querySelectorAll("[data-lv]")].filter(c => c.checked).map(c => c.dataset.lv);
@@ -2420,6 +2448,15 @@ document.getElementById("fileIn").onchange = e => {
 document.getElementById("btnNew").onclick = () => { stopProgram(); loadXml(STARTER); newWorld(); clearLog(); paintLeds(); draw(); };
 document.getElementById("btnRun").onclick = () => { if (CHECKING) return; if (EDIT.on) setEdit(false); undoReplay(); startProgram(); };
 document.getElementById("btnStop").onclick = () => stopProgram();
+const realBox = document.getElementById("realMode"), realNew = document.getElementById("realNew");
+function showReal() { realBox.checked = !!REAL.on; realNew.hidden = !REAL.on; }
+realBox.onchange = () => {
+  REAL.on = realBox.checked; LS.set("rfs.real", REAL); showReal();
+  if (!RUN && !CHECKING) { newWorld(); draw(); }
+  log(REAL.on ? 'Real-world mode is on: the wheels slip a little, the robot drifts, sensor readings jitter, and it glides after "stop driving" (less with brake, none with hold). The conditions stay the same until you press 🎲.' : "Real-world mode is off.");
+};
+realNew.onclick = () => { REAL.seed = (Math.random() * 1e9) | 0; LS.set("rfs.real", REAL); if (!RUN && !CHECKING) { newWorld(); draw(); } log("New real-world conditions. Run your program again and see what changes."); };
+showReal();
 document.getElementById("btnReset").onclick = () => { if (CHECKING) return; stopProgram(false); undoReplay(); newWorld(); clearLog(); paintLeds(); draw(); };
 document.getElementById("showPath").onchange = draw;
 
@@ -3156,7 +3193,7 @@ async function reportScore(level, r) {
   if (!sheetUrl()) return;
   if (!STUDENT) { CHECK_RESULT.saved = "Sign in to send your scores to your teacher."; renderTask(); return; }
   const lv = LEVELS.find(l => l.id === level);
-  const item = { action: "score", code: STUDENT.code, name: STUDENT.name, pin: STUDENT.pin, level: lv ? lv.name : level, score: r.score, said: r.said, hint: r.hint, program: projectJSON(), at: Date.now() };
+  const item = { action: "score", code: STUDENT.code, name: STUDENT.name, pin: STUDENT.pin, level: lv ? lv.name : level, score: r.score, said: r.said, hint: r.hint, program: projectJSON(), notes: notesText(level), real: !!S.realChecks, at: Date.now() };
   CHECK_RESULT.saved = "Saving your score…"; renderTask();
   try { await sheetCall(item); CHECK_RESULT.saved = "✓ Score sent to your teacher."; flushQueue(); }
   catch (e) {
@@ -3173,7 +3210,7 @@ async function flushQueue() {
 }
 document.getElementById("btnSign").onclick = openSignIn;
 const sheetScript = () => SHEET_SCRIPT.replace(/var LEVEL_NAMES = \[[\s\S]*?\];/, "var LEVEL_NAMES = " + JSON.stringify(LEVELS.filter(l => CHECKS[l.id]).map(l => l.name)) + ";");
-const SHEET_SCRIPT = "// Robot Field Sim score sheet\n// Paste this into Extensions > Apps Script in a Google Sheet, run \"setup\" once,\n// then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).\n\nvar LEVEL_NAMES = [\"1. Go till touch\", \"2. Wait for touch\", \"3. Go till distance\", \"4. Stay away\", \"5. Color detection\",\n  \"6. Line tracing (oval)\", \"7. Line tracing (tricky)\", \"8. Color maze (easy)\", \"9. Color maze (medium)\", \"10. Color maze (counting)\",\n  \"11. Remote control\", \"12. Remote control 2\", \"13. Color remote control\", \"14. Color remote control 2\",\n  \"15. Pincher: move the cube\", \"16. Clawbot: up on the platform\", \"17. Sort the cubes\"];\n\nfunction setup() {\n  var ss = SpreadsheetApp.getActive();\n  var roster = ensureSheet_(ss, \"Roster\", [[\"Name\", \"Class\", \"PIN (optional)\"]]);\n  roster.setColumnWidth(1, 200);\n  ensureSheet_(ss, \"Attempts\", [[\"Time\", \"Name\", \"Class\", \"Level\", \"Score\", \"What happened\", \"Hint\", \"Program\"]]);\n  var best = ensureSheet_(ss, \"Best scores\", [[\"Name\", \"Class\"].concat(LEVEL_NAMES)]);\n  best.setColumnWidth(1, 200);\n  var range = best.getRange(2, 3, 500, LEVEL_NAMES.length);\n  best.setConditionalFormatRules([\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(4).setBackground(\"#c8ecd4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(3).setBackground(\"#eef3c4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(3).setBackground(\"#fbdcc8\").setRanges([range]).build()]);\n  var settings = ensureSheet_(ss, \"Settings\", [[\"Class code\", String(1000 + Math.floor(Math.random() * 9000))],\n    [\"\", \"Students type this code to sign in. Change it any time.\"]]);\n  settings.setColumnWidth(1, 120);\n  var extra = ss.getSheetByName(\"Sheet1\");\n  if (extra && extra.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(extra);\n}\n\nfunction ensureSheet_(ss, name, rows) {\n  var sh = ss.getSheetByName(name);\n  if (!sh) {\n    sh = ss.insertSheet(name);\n    sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);\n    sh.setFrozenRows(1);\n    sh.getRange(1, 1, 1, rows[0].length).setFontWeight(\"bold\");\n  }\n  return sh;\n}\n\nfunction sheet_(name) { return SpreadsheetApp.getActive().getSheetByName(name); }\nfunction classCode_() { return String(sheet_(\"Settings\").getRange(\"B1\").getValue()).trim(); }\nfunction roster_() {\n  return sheet_(\"Roster\").getDataRange().getValues().slice(1)\n    .filter(function (r) { return String(r[0]).trim() !== \"\"; })\n    .map(function (r) { return { name: String(r[0]).trim(), cls: String(r[1] || \"\").trim(), pin: String(r[2] || \"\").trim() }; });\n}\nfunction out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }\n\n// GET ?action=roster&code=1234 -> the names students pick from\nfunction doGet(e) {\n  var p = (e && e.parameter) || {};\n  if (String(p.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  if (p.action === \"roster\") return out_({ ok: true, students: roster_().map(function (s) { return { name: s.name, cls: s.cls, pin: s.pin !== \"\" }; }) });\n  return out_({ ok: false, error: \"Unknown request.\" });\n}\n\n// POST {action: \"signin\" | \"score\", code, name, pin, level, score, said, hint, program}\nfunction doPost(e) {\n  var d;\n  try { d = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: \"Bad request.\" }); }\n  if (String(d.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  var st = roster_().filter(function (s) { return s.name === d.name; })[0];\n  if (!st) return out_({ ok: false, error: \"That name isn't on the roster.\" });\n  if (st.pin !== \"\" && st.pin !== String(d.pin || \"\").trim()) return out_({ ok: false, error: \"That PIN isn't right.\" });\n  if (d.action === \"signin\") return out_({ ok: true, name: st.name, cls: st.cls });\n  if (d.action !== \"score\") return out_({ ok: false, error: \"Unknown request.\" });\n  var score = Math.max(0, Math.min(4, Math.round(Number(d.score) || 0)));\n  var level = String(d.level || \"\").slice(0, 80);\n  var lock = LockService.getScriptLock();\n  lock.waitLock(10000);\n  try {\n    sheet_(\"Attempts\").appendRow([new Date(), st.name, st.cls, level, score, String(d.said || \"\").slice(0, 500), String(d.hint || \"\").slice(0, 500), String(d.program || \"\").slice(0, 45000)]);\n    updateBest_(st, level, score);\n  } finally { lock.releaseLock(); }\n  return out_({ ok: true });\n}\n\nfunction updateBest_(st, level, score) {\n  var sh = sheet_(\"Best scores\"), data = sh.getDataRange().getValues();\n  var col = data[0].indexOf(level);\n  if (col < 0) { col = data[0].length; sh.getRange(1, col + 1).setValue(level); }\n  var row = -1;\n  for (var i = 1; i < data.length; i++) if (data[i][0] === st.name) { row = i; break; }\n  if (row < 0) { row = data.length; sh.getRange(row + 1, 1, 1, 2).setValues([[st.name, st.cls]]); }\n  var cell = sh.getRange(row + 1, col + 1), cur = cell.getValue();\n  if (cur === \"\" || score > Number(cur)) cell.setValue(score);\n}\n";
+const SHEET_SCRIPT = "// Robot Field Sim score sheet\n// Paste this into Extensions > Apps Script in a Google Sheet, run \"setup\" once,\n// then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).\n\nvar LEVEL_NAMES = [\"1. Go till touch\", \"2. Wait for touch\", \"3. Go till distance\", \"4. Stay away\", \"5. Color detection\",\n  \"6. Line tracing (oval)\", \"7. Line tracing (tricky)\", \"8. Color maze (easy)\", \"9. Color maze (medium)\", \"10. Color maze (counting)\",\n  \"11. Remote control\", \"12. Remote control 2\", \"13. Color remote control\", \"14. Color remote control 2\",\n  \"15. Pincher: move the cube\", \"16. Clawbot: up on the platform\", \"17. Sort the cubes\"];\n\nfunction setup() {\n  var ss = SpreadsheetApp.getActive();\n  var roster = ensureSheet_(ss, \"Roster\", [[\"Name\", \"Class\", \"PIN (optional)\"]]);\n  roster.setColumnWidth(1, 200);\n  ensureSheet_(ss, \"Attempts\", [[\"Time\", \"Name\", \"Class\", \"Level\", \"Score\", \"What happened\", \"Hint\", \"Program\", \"Real robot notes\"]]);\n  var best = ensureSheet_(ss, \"Best scores\", [[\"Name\", \"Class\"].concat(LEVEL_NAMES)]);\n  best.setColumnWidth(1, 200);\n  var range = best.getRange(2, 3, 500, LEVEL_NAMES.length);\n  best.setConditionalFormatRules([\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(4).setBackground(\"#c8ecd4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(3).setBackground(\"#eef3c4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(3).setBackground(\"#fbdcc8\").setRanges([range]).build()]);\n  var settings = ensureSheet_(ss, \"Settings\", [[\"Class code\", String(1000 + Math.floor(Math.random() * 9000))],\n    [\"\", \"Students type this code to sign in. Change it any time.\"]]);\n  settings.setColumnWidth(1, 120);\n  var extra = ss.getSheetByName(\"Sheet1\");\n  if (extra && extra.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(extra);\n}\n\nfunction ensureSheet_(ss, name, rows) {\n  var sh = ss.getSheetByName(name);\n  if (!sh) {\n    sh = ss.insertSheet(name);\n    sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);\n    sh.setFrozenRows(1);\n    sh.getRange(1, 1, 1, rows[0].length).setFontWeight(\"bold\");\n  }\n  return sh;\n}\n\nfunction sheet_(name) { return SpreadsheetApp.getActive().getSheetByName(name); }\nfunction classCode_() { return String(sheet_(\"Settings\").getRange(\"B1\").getValue()).trim(); }\nfunction roster_() {\n  return sheet_(\"Roster\").getDataRange().getValues().slice(1)\n    .filter(function (r) { return String(r[0]).trim() !== \"\"; })\n    .map(function (r) { return { name: String(r[0]).trim(), cls: String(r[1] || \"\").trim(), pin: String(r[2] || \"\").trim() }; });\n}\nfunction out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }\n\n// GET ?action=roster&code=1234 -> the names students pick from\nfunction doGet(e) {\n  var p = (e && e.parameter) || {};\n  if (String(p.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  if (p.action === \"roster\") return out_({ ok: true, students: roster_().map(function (s) { return { name: s.name, cls: s.cls, pin: s.pin !== \"\" }; }) });\n  return out_({ ok: false, error: \"Unknown request.\" });\n}\n\n// POST {action: \"signin\" | \"score\", code, name, pin, level, score, said, hint, program}\nfunction doPost(e) {\n  var d;\n  try { d = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: \"Bad request.\" }); }\n  if (String(d.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  var st = roster_().filter(function (s) { return s.name === d.name; })[0];\n  if (!st) return out_({ ok: false, error: \"That name isn't on the roster.\" });\n  if (st.pin !== \"\" && st.pin !== String(d.pin || \"\").trim()) return out_({ ok: false, error: \"That PIN isn't right.\" });\n  if (d.action === \"signin\") return out_({ ok: true, name: st.name, cls: st.cls });\n  if (d.action !== \"score\") return out_({ ok: false, error: \"Unknown request.\" });\n  var score = Math.max(0, Math.min(4, Math.round(Number(d.score) || 0)));\n  var level = String(d.level || \"\").slice(0, 80);\n  var lock = LockService.getScriptLock();\n  lock.waitLock(10000);\n  try {\n    sheet_(\"Attempts\").appendRow([new Date(), st.name, st.cls, level, score, String(d.said || \"\").slice(0, 500), String(d.hint || \"\").slice(0, 500), String(d.program || \"\").slice(0, 45000), String(d.notes || \"\").slice(0, 2000)]);\n    updateBest_(st, level, score);\n  } finally { lock.releaseLock(); }\n  return out_({ ok: true });\n}\n\nfunction updateBest_(st, level, score) {\n  var sh = sheet_(\"Best scores\"), data = sh.getDataRange().getValues();\n  var col = data[0].indexOf(level);\n  if (col < 0) { col = data[0].length; sh.getRange(1, col + 1).setValue(level); }\n  var row = -1;\n  for (var i = 1; i < data.length; i++) if (data[i][0] === st.name) { row = i; break; }\n  if (row < 0) { row = data.length; sh.getRange(row + 1, 1, 1, 2).setValues([[st.name, st.cls]]); }\n  var cell = sh.getRange(row + 1, col + 1), cur = cell.getValue();\n  if (cur === \"\" || score > Number(cur)) cell.setValue(score);\n}\n";
 
 /* =====================================================================
    Check my work: runs the student's program in a test (fast, with scripted
@@ -3201,6 +3238,7 @@ async function testRun({ secs, setup, events = [], each, settle = 0, full = fals
   CHECK_RUNS.push(rec);
   stopProgram(false); newWorld(); if (setup) setup();
   startProgram();
+  rec.realSeed = W.real ? W.real.seed : null;
   const st = { x0: W.x, y0: W.y, r0: W.rot, moved: 0, bumps: 0, wasBlocked: false, grabbed: false, maxHeldZ: 0, prints: [], lastMoveT: 0, ended: false, noProgram: !RUN };
   if (!RUN) return st;
   W.prints = st.prints;
@@ -3710,6 +3748,13 @@ const PLANS = {
   sort: ["For each cube:", "  grab it", "  read its color with the Color sensor", "  if red: carry it to the red square, else carry it to the blue square", "  let go and come back"],
 };
 
+/* sim vs. real robot: predict, test, explain. Saved in this browser and sent with the next score. */
+const NOTE_QS = [["predict", "What do you predict the real robot will do differently?"], ["saw", "What happened on the real robot?"], ["changed", "What did you change, and why?"]];
+function notesHTML() {
+  const n = (LS.get("rfs.notes", {})[LEVEL]) || {}, filled = NOTE_QS.some(([k]) => n[k]);
+  return `<details class="notes" ${filled ? "open" : ""}><summary>Sim vs. real robot notes</summary>${NOTE_QS.map(([k, q]) => `<label>${esc(q)}<textarea data-note="${k}" rows="2">${esc(n[k] || "")}</textarea></label>`).join("")}</details>`;
+}
+const notesText = level => { const n = (LS.get("rfs.notes", {})[level]) || {}; return NOTE_QS.filter(([k]) => n[k]).map(([k, q]) => q + " " + n[k]).join("\n"); };
 function runsHTML(r) {
   if (!r.runs || !r.runs.length) return "";
   const many = r.runs.length > 1;
@@ -3737,8 +3782,9 @@ function replayRun(rec) {
   startProgram();
   if (!RUN) return;
   FORCE_COLORS = rec.forceColors; FORCE_ANGLE = rec.forceAngle;
+  REAL_FORCE = rec.realSeed !== null && rec.realSeed !== undefined; REAL_NEXT = REAL_FORCE ? rec.realSeed : null;
   if (rec.setup) rec.setup(); newWorld();
-  FORCE_COLORS = null; FORCE_ANGLE = null;
+  FORCE_COLORS = null; FORCE_ANGLE = null; REAL_FORCE = null; REAL_NEXT = null;
   RUN.events = rec.events.slice().sort((a, b) => a.t - b.t); RUN.until = rec.secs;
   log(`Watching the test: ${rec.label || "the test run"}.`);
 }
@@ -3749,12 +3795,12 @@ async function checkWork() {
   const fn = CHECKS[LEVEL]; if (!fn || CHECKING) return;
   if (EDIT.on) setEdit(false);
   stopProgram(false); clearLog();
-  CHECKING = true; undoReplay(); CHECK_RUNS = []; renderTask();
+  CHECKING = true; undoReplay(); CHECK_RUNS = []; REAL_FORCE = !!S.realChecks; renderTask();
   let r;
   const lvAt = LEVEL;
   try { r = await fn(); }
   catch (e) { console.error(e); r = result(0, "The check could not finish: " + e.message, "Try running your program first to look for errors."); }
-  finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; FORCE_ANGLE = null; }
+  finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; FORCE_ANGLE = null; REAL_FORCE = null; }
   if (LEVEL !== lvAt) return;   // the level was changed while checking
   const prev = SCORES[LEVEL], wasLocked = lockedIds();
   SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now(), misses: r.score >= 4 ? 0 : (prev && prev.misses || 0) + 1 };
@@ -3810,7 +3856,8 @@ function renderTask() {
   box.hidden = !l.task;
   const task = LEVEL === "open" ? CUSTOM.task : l.task;
   box.hidden = !task;
-  if (task) box.innerHTML = `<b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><span>${esc(task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}`;
+  if (task) box.innerHTML = `<b>${esc(LEVEL === "open" ? "Your level" : l.name)}</b><span>${esc(task)}</span>${l.needs ? `<span class="needs">Needs: ${esc(l.needs)}</span>` : ""}${l.starter ? `<div><button class="btn" type="button" id="btnStarter">Load the broken program</button></div>` : ""}${scoreCardHTML()}${CHECKS[LEVEL] ? notesHTML() : ""}`;
+  box.querySelectorAll("[data-note]").forEach(t => t.oninput = () => { const n = LS.get("rfs.notes", {}); n[LEVEL] = n[LEVEL] || {}; n[LEVEL][t.dataset.note] = t.value.slice(0, 600); LS.set("rfs.notes", n); });
   const bs = document.getElementById("btnStarter");
   if (bs) bs.onclick = () => {
     const mine = ws.getAllBlocks(false).filter(b => !b.isShadow()).length > 1;
