@@ -215,6 +215,22 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 @media (max-width: 860px) { .cppsnips { display: none; } }
 .pindlg { max-width: 380px; } #pinForm label { display: block; margin-bottom: 10px; } #pinForm input { font-size: 18px; letter-spacing: .2em; width: 100%; box-sizing: border-box; } #pinErr { color: #c62828; min-height: 1.2em; margin: 8px 0 0; }
 .namerow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+
+/* run buttons stay at the top of the side panel while it scrolls */
+.side > .controls:first-child { position: sticky; top: -12px; z-index: 6; background: var(--panel); margin: -12px -12px 0; padding: 12px 12px 8px; border-bottom: 1px solid var(--line); }
+/* popped-out field: a window that floats over the blocks */
+.floatfield { position: fixed; z-index: 40; background: #fff; border: 1px solid #b9c2d0; border-radius: 10px; box-shadow: 0 12px 34px rgba(20,30,50,.28); display: flex; flex-direction: column; overflow: hidden; resize: horizontal; min-width: 260px; max-width: 95vw; }
+.floatfield .ffhead { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: #1f2633; color: #fff; cursor: move; user-select: none; touch-action: none; font: 600 13px/1 var(--body); }
+.floatfield .ffhead .t { flex: 1; }
+.floatfield .ffhead .btn { padding: 5px 9px; font-size: 13px; }
+.floatfield .views { padding: 6px 8px 0; }
+.floatfield .fieldwrap { max-width: none; padding: 6px 8px 8px; box-sizing: border-box; }
+.floatfield .fieldwrap canvas { border-radius: 6px; }
+.side .views { scroll-margin-top: 92px; }
+.floatfield #btnPop { display: none; }
+.floatfield .leds { padding: 0 8px 8px; }
+#btnPop[aria-pressed="true"] { background: #4C97FF; color: #fff; border-color: #4C97FF; }
+.floatfield #btnBig { display: none; }
 </style>
 </head>
 <body>
@@ -262,11 +278,13 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
       </div>
       <div class="dbg" id="dbg" hidden></div>
       <div class="task" id="task" hidden></div>
+      <div id="fieldHome"></div>
       <div class="views" role="group" aria-label="Camera view">
         <button class="btn" type="button" data-view="top" aria-pressed="true">Top</button>
         <button class="btn" type="button" data-view="chase" aria-pressed="false">Behind robot</button>
         <button class="btn" type="button" data-view="field3d" aria-pressed="false">3D field</button>
         <button class="btn" type="button" id="btnBig" aria-pressed="false" title="Make the field as big as the screen allows">⤢ Bigger field</button>
+        <button class="btn" type="button" id="btnPop" aria-pressed="false" title="Float the field over the blocks, so you can see your code and the robot at the same time">⧉ Pop out</button>
       </div>
       <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas><canvas id="field3d" hidden aria-label="3D field view"></canvas></div>
       <div class="controls">
@@ -5467,6 +5485,62 @@ function viewBanner(info) {
   };
   window.addEventListener("resize", apply);
   apply();
+})();
+
+/* ---- pop out: the field floats over the blocks, so students see code and robot together ---- */
+(function popOut() {
+  const btn = document.getElementById("btnPop"), home = document.getElementById("fieldHome");
+  const views = document.querySelector(".side .views"), wrap = document.querySelector(".side .fieldwrap"), leds = document.getElementById("leds"), ledsHome = leds.previousElementSibling;
+  let win = null;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const place = st => {
+    const w = clamp(st.w || 420, 260, window.innerWidth - 20);
+    win.style.width = w + "px";
+    win.style.left = clamp(st.x != null ? st.x : 140, 0, window.innerWidth - 120) + "px";
+    win.style.top = clamp(st.y != null ? st.y : 70, 0, window.innerHeight - 60) + "px";
+  };
+  const save = () => { if (win) LS.set("rfs.popout", { on: true, x: win.offsetLeft, y: win.offsetTop, w: win.offsetWidth }); };
+  function open() {
+    if (win) return;
+    win = document.createElement("div"); win.className = "floatfield"; win.setAttribute("role", "dialog"); win.setAttribute("aria-label", "Robot field");
+    win.innerHTML = `<div class="ffhead"><span class="t">Robot field</span><button class="btn go" type="button" data-p="btnRun">▶ Start</button><button class="btn stop" type="button" data-p="btnStop">■ Stop</button><button class="btn" type="button" data-p="btnReset">↺ Reset</button><button class="btn" type="button" id="ffBack" title="Put the field back on the right">Put back</button></div>`;
+    win.querySelectorAll("[data-p]").forEach(b => b.onclick = () => document.getElementById(b.dataset.p).click());
+    win.querySelector("#ffBack").onclick = close;
+    const run = document.getElementById("btnRun"), mini = win.querySelector('[data-p="btnRun"]');
+    const sync = () => { mini.disabled = run.disabled; mini.style.opacity = run.style.opacity; };
+    new MutationObserver(sync).observe(run, { attributes: true, attributeFilter: ["disabled", "style"] }); sync();
+    win.append(views, wrap, leds);   // the Touch LEDs go along, so students can click them while watching
+    document.body.appendChild(win);
+    place(LS.get("rfs.popout", {}) || {});
+    btn.setAttribute("aria-pressed", "true"); btn.textContent = "⧉ Put back";
+    const head = win.querySelector(".ffhead");
+    head.addEventListener("pointerdown", e => {
+      if (e.target.closest("button")) return;
+      e.preventDefault(); head.setPointerCapture(e.pointerId);
+      const dx = e.clientX - win.offsetLeft, dy = e.clientY - win.offsetTop;
+      const move = ev => { win.style.left = clamp(ev.clientX - dx, 0, window.innerWidth - 120) + "px"; win.style.top = clamp(ev.clientY - dy, 0, window.innerHeight - 40) + "px"; };
+      const up = () => { head.removeEventListener("pointermove", move); head.removeEventListener("pointerup", up); head.removeEventListener("pointercancel", up); save(); };
+      head.addEventListener("pointermove", move); head.addEventListener("pointerup", up); head.addEventListener("pointercancel", up);
+    });
+    new ResizeObserver(() => { if (win) { if (win.offsetHeight > window.innerHeight - 10) win.style.width = Math.max(260, win.offsetWidth - (win.offsetHeight - window.innerHeight + 10)) + "px"; save(); } }).observe(win);
+    save();
+  }
+  function close() {
+    if (!win) return;
+    home.after(views); views.after(wrap); ledsHome.after(leds);
+    win.remove(); win = null;
+    btn.setAttribute("aria-pressed", "false"); btn.textContent = "⧉ Pop out";
+    const st = LS.get("rfs.popout", {}) || {}; LS.set("rfs.popout", { ...st, on: false });
+  }
+  btn.onclick = () => win ? close() : open();
+  window.addEventListener("resize", () => { if (win) place({ x: win.offsetLeft, y: win.offsetTop, w: win.offsetWidth }); });
+  if ((LS.get("rfs.popout", {}) || {}).on && window.innerWidth >= 700) open();
+  // on Start, make sure the field can be seen
+  document.getElementById("btnRun").addEventListener("click", () => {
+    if (win) return;
+    const side = document.querySelector(".side"), r = wrap.getBoundingClientRect(), s = side.getBoundingClientRect();
+    if (r.top < s.top + 40 || r.bottom > s.bottom) views.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 })();
 
 /* ---- level picker ---- */
