@@ -628,6 +628,7 @@ const COUNT_LINES = [-500, -200, 100, 400, 700];   // y of each black line, the 
 const STAIR_PATH = [[-700, -1000], [-700, -480], [-300, -480], [-300, -80], [100, -80], [100, 320], [500, 320], [500, 870]];
 // the wall to follow: up the right side, then around the corner to the right
 const FOLLOW_WALLS = [{ x1: 200, y1: -1000, x2: 200, y2: 200 }, { x1: 200, y1: 200, x2: 1000, y2: 200 }];
+const DRIVE_GATES = [[-250, -450, 250, -450], [350, 0, 800, 0], [350, 650, 800, 650], [-250, 750, 250, 750], [-800, 650, -350, 650], [-800, 0, -350, 0], [-250, -600, 250, -600]];
 const LEVELS = [
   { id: "open", name: "Build your own", task: "" },
   { id: "square", name: "Drive a square", start: SQ_START, walls: [], guides: [squareGuide],
@@ -701,6 +702,14 @@ const LEVELS = [
     floor: [{ rect: [-900, -150, 300, 300], color: "red" }, { rect: [600, -150, 300, 300], color: "blue" }],
     goal: () => W.cubes.every(cubeOnTile), done: "Both cubes are sorted.",
     task: "Each cube goes on the square of its own color, but the colors switch around every run! Use a Color sensor facing forward (it sees a cube right in front of it) to check each cube, then carry it to the matching square. Tip: the Sorter bot build has one.", needs: "Sorter bot (Pincher bot plus a Color sensor facing forward)" },
+  { id: "skills", name: "Autonomous skills challenge", start: [0, -750, 0], walls: [],
+    cubes: [{ x: -400, y: -100, color: "red" }, { x: -650, y: 250, color: "red" }, { x: 400, y: -100, color: "blue" }, { x: 650, y: 250, color: "blue" }],
+    floor: [{ rect: [-950, 550, 400, 400], color: "red" }, { rect: [550, 550, 400, 400], color: "blue" }, { rect: [-150, -900, 300, 300], color: "green" }],
+    task: "You have 60 seconds. Each cube in the zone of its own color scores 3 points, and a cube in the other zone scores 1. Being parked on the green square when time runs out scores 2 more. The best score is 14. Plan your route, test it, and beat your best!", needs: "Any robot build (a Pincher or Clawbot helps)" },
+  { id: "driving", name: "Driving practice (controller)", start: [0, -800, 0],
+    walls: [{ x1: 0, y1: -100, x2: 0, y2: 450 }, { x1: -1000, y1: -250, x2: -650, y2: -250 }, { x1: 650, y1: -250, x2: 1000, y2: -250 }],
+    guides: DRIVE_GATES.map((g, i) => ({ pts: [[g[0], g[1]], [g[2], g[3]]], label: i === DRIVE_GATES.length - 1 ? "finish" : String(i + 1) })),
+    task: "Drive through the numbered gates in order and back through the finish as fast as you can. Each wall touch adds 2 seconds. Add a Controller in Devices and pick a drive mode (for example Split arcade), press Start, then drive with the on-screen sticks or a real controller through Sim Link. No program needed.", needs: "Drivetrain, Controller with a drive mode" },
 ];
 /* "Fix it" warm-ups: a broken program to repair, on the same field and check as the level before them.
    They are numbered 5b, 6b... so the main levels keep their numbers (and their score sheet columns). */
@@ -1464,7 +1473,9 @@ function loop(ts) {
     RUN.acc -= DT;
     if (RUN.events) while (RUN.events.length && W.t >= RUN.events[0].t) RUN.events.shift().fn();
     alive = tickScripts();
+    const px = W.x, py = W.y;
     physicsStep();
+    if (LEVEL === "driving") drivingTick(px, py);
     if (RUN.until && W.t >= RUN.until) alive = false;
     if (!alive) break;
     if (RUN.stepHit) { RUN.stepHit = false; setPaused(true); break; }
@@ -1473,6 +1484,25 @@ function loop(ts) {
   draw();
   if (!alive) { if (RUN) { LAST_VARS = RUN.vars; RUN = null; ws.highlightBlock(null); setRunning(false); } return; }
   if (RUN && !RUN.paused) requestAnimationFrame(loop);
+}
+/* driving practice: gates in order, a clock that starts when the robot first moves, +2 s per wall touch */
+let DRIVE = null;
+const crosses = (ax, ay, bx, by, [x1, y1, x2, y2]) => { const d = (bx - ax) * (y2 - y1) - (by - ay) * (x2 - x1); if (Math.abs(d) < 1e-9) return false;
+  const t = ((x1 - ax) * (y2 - y1) - (y1 - ay) * (x2 - x1)) / d, u = ((x1 - ax) * (by - ay) - (y1 - ay) * (bx - ax)) / d; return t >= 0 && t <= 1 && u >= 0 && u <= 1; };
+function drivingTick(px, py) {
+  if (!DRIVE || DRIVE.w !== W) DRIVE = { w: W, next: 0, t0: null, touches: 0, was: false, done: null };
+  const D = DRIVE; if (D.done !== null) return;
+  if (D.t0 === null && Math.hypot(W.x - px, W.y - py) > 0.2) D.t0 = W.t;
+  if (W.blocked && !D.was) D.touches++; D.was = W.blocked;
+  if (crosses(px, py, W.x, W.y, DRIVE_GATES[D.next])) {
+    D.next++;
+    if (D.next === DRIVE_GATES.length) {
+      D.done = W.t - D.t0 + 2 * D.touches;
+      const best = LS.get("rfs.drivebest", null), isBest = best === null || D.done < best;
+      if (isBest) LS.set("rfs.drivebest", +D.done.toFixed(1));
+      log(`Finished in ${D.done.toFixed(1)} s${D.touches ? ` (${D.touches} wall touch${D.touches > 1 ? "es" : ""}, +${2 * D.touches} s)` : ""}.${isBest ? " New best time!" : ` Your best is ${best} s.`} Press Start to try again.`);
+    }
+  }
 }
 function setRunning(on) {
   document.getElementById("btnRun").disabled = on;
@@ -1530,6 +1560,12 @@ function readouts() {
   devOf("color").forEach(d => { const r = plugged(d, "color") && colorReading(d); items.push([d.name, !r ? NOSENSOR : `${r.name} · ${r.bright}%`]); });
   devOf("bumper").forEach(d => items.push([d.name, !plugged(d, "bumper") ? NOSENSOR : bumperPressed(d) ? "pressed" : "released"]));
   if (hasPart("arm")) items.push(["Arm", armAngle().toFixed(0) + "° up"]);
+  if (LEVEL === "driving") {
+    const D = DRIVE && DRIVE.w === W ? DRIVE : null, best = LS.get("rfs.drivebest", null);
+    items.push(["Gate", D ? (D.done !== null ? "finished" : `${D.next + 1 === DRIVE_GATES.length ? "finish" : D.next + 1} next`) : "1 next"],
+      ["Time", D && D.t0 !== null ? ((D.done !== null ? D.done : W.t - D.t0 + 2 * D.touches).toFixed(1) + " s") : "–"], ["Best time", best !== null ? best + " s" : "–"]);
+  }
+  if (LEVEL === "skills") { const sp = skillPoints(); items.push(["Points", `${sp.total} (time ${Math.max(0, 60 - W.t).toFixed(0)} s)`]); }
   const vars = RUN ? RUN.vars : LAST_VARS;
   ws.getAllVariables().forEach(m => { if (m.type === "") { const val = vars[m.name]; items.push(["var", m.name, val === undefined ? "–" : typeof val === "number" ? +val.toFixed(3) + "" : String(val)]); } });
   if (hasPart("claw")) { const hc = heldCube(); items.push(["Claw", hc ? `holding ${hc.color} cube` : clawOpen() > 0.45 ? "open" : "closed"]); }
@@ -3375,7 +3411,26 @@ const CHECKS = {
   },
 };
 LEVELS.filter(l => l.base).forEach(l => { CHECKS[l.id] = CHECKS[l.base]; });
-Object.assign(CHECKS, { hexagon: hexCheck, modemenu: modeCheck, timeout: timeoutCheck, garage: garageCheck, patrol: patrolCheck, smoothline: smoothCheck });
+Object.assign(CHECKS, { skills: skillsCheck, hexagon: hexCheck, modemenu: modeCheck, timeout: timeoutCheck, garage: garageCheck, patrol: patrolCheck, smoothline: smoothCheck });
+// skills challenge points: 3 per cube in its own color zone, 1 in the other zone, 2 for parking on green
+function skillPoints() {
+  let cubes = 0, wrong = 0;
+  for (const c of W.cubes || []) { if (c.held || c.z) continue; const f = floorAt(c.x, c.y); if (f === c.color) cubes++; else if (f === "red" || f === "blue") wrong++; }
+  const parked = floorAt(W.x, W.y) === "green";
+  return { total: cubes * 3 + wrong + (parked ? 2 : 0), cubes, wrong, parked };
+}
+async function skillsCheck() {
+  const st = await testRun({ label: "60-second run", secs: 60, full: true });
+  if (st.moved < 20) return nothing(st);
+  const p = skillPoints();
+  const said = `${p.total} points: ${p.cubes} cube${p.cubes === 1 ? "" : "s"} in the right zone${p.wrong ? `, ${p.wrong} in the wrong zone` : ""}${p.parked ? ", parked" : ", not parked"}.`;
+  st.rec.note = `${p.total} points`;
+  const r = p.total >= 12 ? result(4, said) : p.total >= 8 ? result(3, said, "Good run! Look for the slowest part of your route and make it shorter, or add the cubes you skipped.")
+    : p.total >= 3 ? result(2, said, "Get one cube all the way into its zone first, then add the next one. Drive back to the green square at the end for 2 more points.")
+    : result(1, said, "Start simple: push the nearest cube into its zone, then drive back to the green square.");
+  r.points = p.total;
+  return r;
+}
 async function hexCheck() {
   const seqs = [HEX_CW, HEX_CW.map(([x, y]) => [-x, y])].map(pts => ({ pts, n: 0 }));
   let inked = 0, steps = 0;
@@ -3745,6 +3800,7 @@ const PLANS = {
   garage: ["Drive forward.", "Wait until the distance is less than 200 mm. Stop driving.", "Turn left 90 degrees.", "Drive forward.", "Wait until the distance is less than 100 mm. Stop driving."],
   patrol: ["Drive forward.", "Forever:", "  if the distance is less than 300 mm:", "    turn right 90 degrees", "    drive forward"],
   smoothline: ["Spin both Motors forward.", "Forever:", "  error = brightness − 50", "  set left velocity to 30 + error × 0.5", "  set right velocity to 30 − error × 0.5", "If it turns the wrong way, swap the + and −."],
+  skills: ["Pick the 2 cubes closest to each other first.", "For each cube: drive to it, push or carry it into its color zone, back away.", "Use the gyro for exact turns, and the Distance sensor to line up.", "Save the last 8 seconds to drive back to the green square."],
   sort: ["For each cube:", "  grab it", "  read its color with the Color sensor", "  if red: carry it to the red square, else carry it to the blue square", "  let go and come back"],
 };
 
@@ -3804,6 +3860,7 @@ async function checkWork() {
   if (LEVEL !== lvAt) return;   // the level was changed while checking
   const prev = SCORES[LEVEL], wasLocked = lockedIds();
   SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now(), misses: r.score >= 4 ? 0 : (prev && prev.misses || 0) + 1 };
+  if (r.points !== undefined) { SCORES[LEVEL].points = Math.max(r.points, prev && prev.points || 0); if (!prev || r.points > (prev.points || 0)) r.said += " New personal best!"; }
   LS.set("rfs.scores", SCORES);
   const opened = levelList().find(l => wasLocked.has(l.id) && !lockedIds().has(l.id));
   const runs = CHECK_RUNS.filter(x => !x.hidden);
@@ -3818,7 +3875,7 @@ function scoreCardHTML() {
   if (!CHECKS[LEVEL]) return "";
   if (CHECKING) return `<div class="score checking">Checking your program…</div>`;
   const r = CHECK_RESULT && CHECK_RESULT.level === LEVEL ? CHECK_RESULT : null, best = SCORES[LEVEL];
-  let h = `<div class="checkrow"><button class="btn primary" type="button" id="btnCheck">Check my work</button>${best ? `<span class="best">Best: ${best.best} / 4</span>` : ""}</div>`;
+  let h = `<div class="checkrow"><button class="btn primary" type="button" id="btnCheck">Check my work</button>${best ? `<span class="best">Best: ${best.best} / 4${best.points !== undefined ? ` · ${best.points} points` : ""}</span>` : ""}</div>`;
   if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${runsHTML(r)}${hintHTML(r)}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}${r.unlocked ? `<span class="unlocked">Unlocked: ${esc(r.unlocked)}. Pick it from the Level menu.</span>` : ""}</div>`;
   else if (S.lockOrder && CHECKS[LEVEL] && !(best && best.best >= 3)) { const nx = levelList()[levelList().findIndex(l => l.id === LEVEL) + 1]; if (nx && lockedIds().has(nx.id)) h += `<div class="lockhint">Score 3 or more to unlock the next level.</div>`; }
   return h;
