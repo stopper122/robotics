@@ -241,7 +241,7 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="xTitle">
     <header><h2 id="xTitle">Save project</h2><button class="btn" type="button" data-close>Close</button></header>
     <div class="body"><p class="hint" id="xHint"></p><textarea id="xText" aria-label="Project text"></textarea><div class="err-text" id="xErr"></div></div>
-    <footer><button class="btn" type="button" id="xAction" hidden>Load</button><button class="btn primary" type="button" id="xCopy">Copy</button></footer>
+    <footer><button class="btn" type="button" id="xDownload" hidden>Download file</button><button class="btn" type="button" id="xAction" hidden>Load</button><button class="btn primary" type="button" id="xCopy">Copy</button></footer>
   </div>
 </div>
 
@@ -358,6 +358,10 @@ Blockly.defineBlocksWithJsonArray([
   { type: "pg_sensing_timer", message0: "timer in seconds", output: "Number", colour: C.sensing },
   stmt({ type: "pg_sensing_reset_timer", message0: "reset timer", colour: C.sensing }),
   // the Gen 2 Brain's built-in gyro
+  stmt({ type: "iq_drivetrain_set_drive_stopping", message0: "set drive stopping to %1", args0: [dd("MODE", [["brake", "brake"], ["coast", "coast"], ["hold", "hold"]])], colour: C.drive }),
+  stmt({ type: "iq_sensing_inertial_calibrate", message0: "calibrate Brain gyro", colour: C.sensing }),
+  { type: "iq_operator_remainder", message0: "remainder of %1 / %2", args0: [num("NUM1"), num("NUM2")], output: "Number", inputsInline: true, colour: C.ops },
+  { type: "iq_operator_function", message0: "%1 of %2", args0: [dd("OPERATOR", ["abs", "floor", "ceiling", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "e ^", "10 ^"].map(x => [x, x])), num("NUM")], output: "Number", inputsInline: true, colour: C.ops },
   stmt({ type: "iq_brain_set_heading", message0: "set Brain heading to %1 degrees", args0: [num("HEADING")], colour: C.sensing }),
   stmt({ type: "iq_brain_set_rotation", message0: "set Brain rotation to %1 degrees", args0: [num("ROTATION")], colour: C.sensing }),
   { type: "iq_brain_heading", message0: "Brain heading in degrees", output: "Number", colour: C.sensing },
@@ -431,6 +435,10 @@ defDev("iq_gyro_set_rotation", "gyro", C.sensing, ["set", "@", "rotation to", ["
 defDev("iq_gyro_heading", "gyro", C.sensing, ["@", "heading in degrees"], "Number");
 defDev("iq_gyro_rotation", "gyro", C.sensing, ["@", "rotation in degrees"], "Number");
 defDev("iq_gyro_rate", "gyro", C.sensing, ["@", "rate in dps"], "Number");
+// blocks from VEXcode IQ that don't change anything in the sim (kept so programs open and save cleanly)
+defDev("iq_looks_set_touchled_fade", "touchled", C.looks, ["set", "@", "fade", ["dd", "setting", [["slow", "slow"], ["fast", "fast"], ["off", "off"]]]], "stmt");
+defDev("iq_looks_set_color_sensor_brightness", "color", C.looks, ["set", "@", "light to", ["value", "LEVEL", "Number"], "%"], "stmt");
+defDev("iq_motion_set_motor_torque", "motor", C.motion, ["set", "@", "torque to", ["value", "TORQUE", "Number"], "%"], "stmt");
 // Distance (Gen 1 ultrasonic)
 defDev("pg_sensing_distance_found", "distance", C.sensing, ["@", "found an object?"], "Boolean");
 defDev("pg_sensing_distance_from", "distance", C.sensing, ["@", "distance in", ["dd", "UNITS", DIST_UNITS]], "Number");
@@ -468,16 +476,17 @@ function buildToolbox() {
     blk("pg_drivetrain_turn_to_rotation", { ROTATION: N(90) }), blk("pg_drivetrain_stop_driving"),
     blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }),
     blk("pg_drivetrain_set_drive_heading", { HEADING: N(0) }), blk("pg_drivetrain_set_drive_rotation", { ROTATION: N(0) }),
-    blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }),
+    blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }), blk("iq_drivetrain_set_drive_stopping"),
   ] : [lockLabel("Drivetrain")] });
   cats.push({ kind: "category", name: "Motion", colour: C.motion, contents: has("motor") ? [
     blk("iq_motor_spin"), blk("iq_motor_spin_for", { AMOUNT: N(90) }), blk("iq_motor_spin_to_position", { POSITION: N(90) }),
     blk("iq_motor_stop"), blk("iq_motor_set_position", { POSITION: N(0) }), blk("iq_motor_set_velocity", { VELOCITY: N(50) }),
-    blk("iq_motor_set_timeout", { TIME: N(1) }),
+    blk("iq_motor_set_timeout", { TIME: N(1) }), blk("iq_motion_set_motor_torque", { TORQUE: N(50) }),
   ] : [lockLabel("Motor")] });
   const looks = [blk("pg_looks_print", { VALUE: sh("text", { TEXT: "Hello" }) }), blk("pg_looks_clear_all_rows"),
     blk("pg_looks_move_pen"), blk("pg_looks_set_pen_color")];
-  if (has("touchled")) looks.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_set_color"), blk("iq_touchled_set_brightness", { BRIGHTNESS: N(100) }));
+  if (has("touchled")) looks.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_set_color"), blk("iq_touchled_set_brightness", { BRIGHTNESS: N(100) }), blk("iq_looks_set_touchled_fade"));
+  if (has("color")) looks.push({ kind: "label", text: "Color sensor" }, blk("iq_looks_set_color_sensor_brightness", { LEVEL: N(50) }));
   cats.push({ kind: "category", name: "Looks", colour: C.looks, contents: looks });
   const ctl = !!controllerDev();
   cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started")].concat(ctl ? [
@@ -498,7 +507,7 @@ function buildToolbox() {
   if (has("color")) sensing.push({ kind: "label", text: "Color" }, blk("iq_color_detects"), blk("iq_color_name"), blk("iq_color_found"), blk("iq_color_brightness"), blk("iq_color_hue"));
   if (ctl) sensing.push({ kind: "label", text: "Controller" }, blk("iq_controller_axis"), blk("iq_controller_pressed"));
   sensing.push({ kind: "label", text: "Brain" }, blk("pg_sensing_timer"), blk("pg_sensing_reset_timer"),
-    blk("iq_brain_heading"), blk("iq_brain_rotation"), blk("iq_brain_set_heading", { HEADING: N(0) }), blk("iq_brain_set_rotation", { ROTATION: N(0) }));
+    blk("iq_brain_heading"), blk("iq_brain_rotation"), blk("iq_sensing_inertial_calibrate"), blk("iq_brain_set_heading", { HEADING: N(0) }), blk("iq_brain_set_rotation", { ROTATION: N(0) }));
   if (S.allowPosition) sensing.push({ kind: "label", text: "Field position" }, blk("pg_sensing_position"));
   cats.push({ kind: "category", name: "Sensing", colour: C.sensing, contents: sensing });
   cats.push({ kind: "category", name: "Operators", colour: C.ops, contents: [
@@ -507,6 +516,7 @@ function buildToolbox() {
     blk("pg_operators_less_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_greater_than", { NUM1: N(0), NUM2: N(50) }),
     blk("pg_operators_equal", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_and"), blk("pg_operators_or"), blk("pg_operators_not"),
     blk("pg_operators_random", { FROM: N(1), TO: N(10) }), blk("pg_operators_round", { NUM: N(0) }),
+    blk("iq_operator_remainder", { NUM1: N(7), NUM2: N(2) }), blk("iq_operator_function", { NUM: N(0) }),
     blk("pg_operators_join", { STRING1: sh("text", { TEXT: "apple " }), STRING2: sh("text", { TEXT: "banana" }) }) ] });
   cats.push({ kind: "category", name: "Variables", colour: "#FF8C1A", custom: "VARIABLE" });
   cats.push({ kind: "category", name: "My Blocks", colour: "#FF6680", custom: "MYBLOCKS" });
@@ -1133,6 +1143,13 @@ function val(block) {
     case "pg_operators_not": return !v("BOOL");
     case "pg_operators_random": { const a = Math.ceil(+v("FROM")), b = Math.floor(+v("TO")); return a + Math.floor(Math.random() * (b - a + 1)); }
     case "pg_operators_round": return Math.round(+v("NUM"));
+    case "iq_operator_remainder": { const d = +v("NUM2"); return d ? ((+v("NUM1") % d) + d) % d : 0; }
+    case "iq_operator_function": {
+      const x = +v("NUM"), r = DEG;
+      const fn = { abs: Math.abs, floor: Math.floor, ceiling: Math.ceil, sqrt: Math.sqrt, sin: a => Math.sin(a * r), cos: a => Math.cos(a * r), tan: a => Math.tan(a * r),
+        asin: a => Math.asin(a) / r, acos: a => Math.acos(a) / r, atan: a => Math.atan(a) / r, ln: Math.log, log: Math.log10, "e ^": Math.exp, "10 ^": a => Math.pow(10, a) }[f("OPERATOR")];
+      return fn ? +fn(x).toFixed(6) : 0;
+    }
     case "pg_operators_join": return fmtNum(v("STRING1")) + fmtNum(v("STRING2"));
     case "iq_brain_heading": return +((((W.rot + (W.brainH || 0)) % 360) + 360) % 360).toFixed(2);
     case "iq_brain_rotation": return +(W.rot + (W.brainR || 0)).toFixed(2);
@@ -1272,6 +1289,8 @@ function* exec(b) {
     case "pg_control_break": throw new Break();
     case "pg_control_stop_project": throw new Stop();
     case "pg_sensing_reset_timer": W.timer0 = W.t; return;
+    case "iq_drivetrain_set_drive_stopping": case "iq_looks_set_touchled_fade": case "iq_looks_set_color_sensor_brightness": case "iq_motion_set_motor_torque": return;
+    case "iq_sensing_inertial_calibrate": { const end = W.t + 2; while (W.t < end) yield; return; }
     case "iq_brain_set_heading": W.brainH = +v("HEADING") - W.rot; return;
     case "iq_brain_set_rotation": W.brainR = +v("ROTATION") - W.rot; return;
     case "iq_controller_actions": RUN.actionsOn = f("STATE") === "enable"; if (!RUN.actionsOn) releaseActions(); return;
@@ -1841,6 +1860,248 @@ function applySettings(ns) {
 }
 
 /* =====================================================================
+   VEXcode IQ files (.iqblocks). VEXcode IQ uses its own block names, so
+   blocks are translated both ways: Open reads VEXcode IQ programs, and
+   Save writes a file VEXcode IQ can open (Gen 2 Brain, Gen 1 devices).
+   Blocks with no match on the other side are left out, with a note.
+   ===================================================================== */
+const IQ_NUMS = ["math_number", "math_whole_number", "math_positive_number", "math_number_string", "math_integer"];
+const ROT_IN = { deg: "degrees", rev: "turns" }, ROT_OUT = { degrees: "deg", turns: "rev" };
+const NODONTWAIT = { anddontwait_mutator: "false" }, PCT = { UNITS: "pct" };
+// [VEXcode IQ type, sim type, {IQ field/input name: sim name}, {add: fields only VEXcode has, sh: VEXcode shadow types, vals: field value maps}]
+const IQ_MAP = [
+  ["iq_events_when_started", "pg_events_when_started"],
+  ["iq_drivetrain_drive", "pg_drivetrain_drive"],
+  ["iq_drivetrain_drive_for", "pg_drivetrain_drive_for", {}, { add: NODONTWAIT }],
+  ["iq_drivetrain_turn", "pg_drivetrain_turn"],
+  ["iq_drivetrain_turn_for", "pg_drivetrain_turn_for", {}, { add: NODONTWAIT }],
+  ["iq_drivetrain_turn_to_heading", "pg_drivetrain_turn_to_heading", {}, { add: NODONTWAIT }],
+  ["iq_drivetrain_turn_to_rotation", "pg_drivetrain_turn_to_rotation", { HEADING: "ROTATION" }, { add: NODONTWAIT }],
+  ["iq_motion_stop_driving", "pg_drivetrain_stop_driving"],
+  ["iq_drivetrain_set_drive_velocity", "pg_drivetrain_set_drive_velocity", {}, { add: PCT }],
+  ["iq_drivetrain_set_turn_velocity", "pg_drivetrain_set_turn_velocity", {}, { add: PCT }],
+  ["iq_motion_spin", "iq_motor_spin", { MOTOR: "DEVICE" }],
+  ["iq_motion_spin_for", "iq_motor_spin_for", { MOTOR: "DEVICE" }, { add: NODONTWAIT, vals: { UNITS: ROT_IN } }],
+  ["iq_motion_stop_motor", "iq_motor_stop", { MOTOR: "DEVICE" }],
+  ["iq_motion_spin_to_position", "iq_motor_spin_to_position", { MOTOR: "DEVICE", AMOUNT: "POSITION" }, { add: NODONTWAIT, vals: { UNITS: ROT_IN } }],
+  ["iq_motion_set_motor_torque", "iq_motion_set_motor_torque", { MOTOR: "DEVICE" }],
+  ["iq_drivetrain_set_drive_stopping", "iq_drivetrain_set_drive_stopping"],
+  ["iq_looks_set_touchled_fade", "iq_looks_set_touchled_fade", { TOUCHLED: "DEVICE" }],
+  ["iq_looks_set_color_sensor_brightness", "iq_looks_set_color_sensor_brightness", { COLORSENSOR: "DEVICE" }, { sh: { LEVEL: "math_whole_number" } }],
+  ["iq_sensing_inertial_calibrate", "iq_sensing_inertial_calibrate"],
+  ["iq_operator_remainder", "iq_operator_remainder"],
+  ["iq_operator_function", "iq_operator_function"],
+  ["iq_sensing_pressing_touchled", "iq_touchled_pressed", { TOUCHLED: "DEVICE" }],
+  ["iq_motion_set_motor_position", "iq_motor_set_position", { MOTOR: "DEVICE", DEGS: "POSITION" }, { vals: { UNITS: ROT_IN } }],
+  ["iq_motion_set_motor_velocity", "iq_motor_set_velocity", { MOTOR: "DEVICE" }, { add: PCT }],
+  ["iq_sensing_position_of_motor", "iq_motor_position", { MOTOR: "DEVICE" }, { vals: { UNITS: ROT_IN } }],
+  ["iq_sensing_velocity_of_motor", "iq_motor_velocity", { MOTOR: "DEVICE" }, { add: PCT }],
+  ["iq_looks_set_touchled_brightness", "iq_touchled_set_brightness", { TOUCHLED: "DEVICE", VALUE: "BRIGHTNESS" }, { sh: { VALUE: "math_whole_number" } }],
+  ["iq_console_print", "pg_looks_print", { DATA: "VALUE" }, { add: { andsetcursortonextrow_mutator: "true" } }],
+  ["iq_control_wait", "pg_control_wait", { DURATION: "TIME" }, { sh: { DURATION: "math_positive_number" } }],
+  ["iq_control_repeat", "pg_control_repeat", {}, { sh: { TIMES: "math_whole_number" } }],
+  ["iq_control_forever", "pg_control_forever"],
+  ["iq_control_if_then", "pg_control_if"],
+  ["iq_control_if_then_else", "pg_control_ifelse"],
+  ["iq_control_wait_until", "pg_control_wait_until"],
+  ["iq_control_repeat_until", "pg_control_repeat_until"],
+  ["iq_control_while", "pg_control_while"],
+  ["iq_control_break", "pg_control_break"],
+  ["iq_control_stop_project", "pg_control_stop_project"],
+  ["iq_operator_not", "pg_operators_not", { OPERAND: "BOOL" }],
+  ["iq_operator_random", "pg_operators_random"],
+  ["iq_operator_round", "pg_operators_round"],
+  ["iq_sensing_pressing_bumper", "pg_sensing_bumper_pressed", { BUMPER: "DEVICE" }],
+  ["iq_sensing_distance_from", "pg_sensing_distance_from", { SONAR: "DEVICE" }],
+  ["iq_sensing_object_in_front", "pg_sensing_distance_found", { SONAR: "DEVICE" }],
+  ["iq_operator_color_detects_color", "iq_color_detects", { COLORSENSOR: "DEVICE", color: "COLORS" }],
+  ["iq_sensing_color_of", "iq_color_name", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_brightness_of", "iq_color_brightness", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_hue_of", "iq_color_hue", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_object_is_near", "iq_color_found", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_timer_value", "pg_sensing_timer"],
+  ["iq_sensing_reset_timer", "pg_sensing_reset_timer"],
+  ["iq_variables_set_variable", "variables_set", { VARIABLE: "VAR" }, { sh: { VALUE: "math_number_string" } }],
+  ["iq_variables_change_variable", "math_change", { VARIABLE: "VAR", VALUE: "DELTA" }],
+  ["iq_variables_variable", "variables_get", { VARIABLE: "VAR" }],
+];
+const IQ_IN = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [a, { to: b, names: n, ...o }]));
+const IQ_OUT = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [b, { to: a, names: Object.fromEntries(Object.entries(n).map(([k, v]) => [v, k])),
+  add: o.add, sh: o.sh, vals: o.vals && Object.fromEntries(Object.entries(o.vals).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([x, y]) => [y, x]))])) }]));
+const MATH_OPS = { "+": "add", "-": "subtract", "*": "multiply", "/": "divide" }, CMP_OPS = { "==": "equal", "<": "less_than", ">": "greater_than" };
+const BRAIN_GYRO_NAME = "BrainInertial";
+const GYRO_IN = { iq_sensing_heading_of_gyro: ["iq_brain_heading", "iq_gyro_heading"], iq_sensing_rotation_of_gyro: ["iq_brain_rotation", "iq_gyro_rotation"],
+  iq_sensing_set_gyro_heading: ["iq_brain_set_heading", "iq_gyro_set_heading", "HEADING"], iq_sensing_set_gyro_rotation: ["iq_brain_set_rotation", "iq_gyro_set_rotation", "ROTATION"] };
+
+// Rewrites the blocks in Blockly XML text. dir "in" = VEXcode IQ -> sim, "out" = sim -> VEXcode IQ.
+function iqTranslate(xmlText, dir) {
+  const src = Blockly.utils.xml.textToDom(xmlText), doc = src.ownerDocument, left = new Map();
+  const el = (tag, attrs = {}, text) => { const e = doc.createElementNS(src.namespaceURI, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== undefined) e.textContent = text; return e; };
+  const kids = (e, tag) => [...e.children].filter(c => !tag || c.tagName === tag);
+  const field = (e, name) => { const f = kids(e, "field").find(f => f.getAttribute("name") === name); return f ? f.textContent : null; };
+  const num = (v, type = "math_number") => { const s = el("shadow", { type }); s.appendChild(el("field", { name: "NUM" }, v)); return s; };
+  const note = t => left.set(t, (left.get(t) || 0) + 1);
+
+  // work out the target type and naming for one block
+  function plan(b) {
+    const t = b.getAttribute("type");
+    if (dir === "in") {
+      if (IQ_IN[t]) return IQ_IN[t];
+      if (t === "iq_operator_math" && MATH_OPS[field(b, "MATH")]) return { to: "pg_operators_" + MATH_OPS[field(b, "MATH")], drop: ["MATH"] };
+      if (t === "iq_operator_comparison" && CMP_OPS[field(b, "COMPARISON")]) return { to: "pg_operators_" + CMP_OPS[field(b, "COMPARISON")], drop: ["COMPARISON"] };
+      if (t === "iq_operator_and_or") return { to: field(b, "CHECK") === "or" ? "pg_operators_or" : "pg_operators_and", drop: ["CHECK"], names: { OPERAND1: "BOOL1", OPERAND2: "BOOL2" } };
+      if (GYRO_IN[t]) {
+        const g = field(b, "GYRO"), [brain, dev, inp] = GYRO_IN[t], isBrain = !g || g === BRAIN_GYRO_NAME;
+        return { to: isBrain ? brain : dev, names: { GYRO: "DEVICE", ...(inp ? { VALUE: inp } : {}) }, drop: isBrain ? ["GYRO"] : [] };
+      }
+      if (t === "iq_looks_set_touchled_color") return { to: "iq_touchled_set_color", names: { TOUCHLED: "DEVICE" }, colorIn: true };
+      return null;
+    }
+    if (IQ_OUT[t]) return IQ_OUT[t];
+    const op = t.replace("pg_operators_", "");
+    const m = Object.entries(MATH_OPS).find(([, v]) => v === op); if (m) return { to: "iq_operator_math", add: { MATH: m[0] } };
+    const c = Object.entries(CMP_OPS).find(([, v]) => v === op); if (c) return { to: "iq_operator_comparison", add: { COMPARISON: c[0] }, sh: { NUM1: "math_number_string", NUM2: "math_number_string" } };
+    if (t === "pg_operators_and" || t === "pg_operators_or") return { to: "iq_operator_and_or", add: { CHECK: op }, names: { BOOL1: "OPERAND1", BOOL2: "OPERAND2" } };
+    const gyroOut = { iq_brain_heading: "iq_sensing_heading_of_gyro", iq_brain_rotation: "iq_sensing_rotation_of_gyro", iq_brain_set_heading: "iq_sensing_set_gyro_heading", iq_brain_set_rotation: "iq_sensing_set_gyro_rotation",
+      iq_gyro_heading: "iq_sensing_heading_of_gyro", iq_gyro_rotation: "iq_sensing_rotation_of_gyro", iq_gyro_set_heading: "iq_sensing_set_gyro_heading", iq_gyro_set_rotation: "iq_sensing_set_gyro_rotation" };
+    if (gyroOut[t]) return { to: gyroOut[t], names: { DEVICE: "GYRO", HEADING: "VALUE", ROTATION: "VALUE" }, add: t.startsWith("iq_brain") ? { GYRO: BRAIN_GYRO_NAME } : {} };
+    // drivetrain heading/rotation come from the Brain's gyro on a Gen 2 Brain
+    if (t === "pg_sensing_drivetrain_heading") return { to: "iq_sensing_heading_of_gyro", add: { GYRO: BRAIN_GYRO_NAME } };
+    if (t === "pg_sensing_drivetrain_rotation") return { to: "iq_sensing_rotation_of_gyro", add: { GYRO: BRAIN_GYRO_NAME } };
+    if (t === "iq_touchled_set_color") return { to: "iq_looks_set_touchled_color", names: { DEVICE: "TOUCHLED" }, colorOut: true };
+    return null;
+  }
+  // a block (or shadow) -> translated element, or null if it has no match
+  function conv(b, shType) {
+    const t = b.getAttribute("type");
+    if (t === "text") return b.cloneNode(true);
+    if (IQ_NUMS.includes(t)) {
+      const v = field(b, "NUM") ?? "0";
+      if (dir === "in" && t === "math_number_string" && v.trim() !== "" && isNaN(+v)) { const s = el(b.tagName, { type: "text" }); s.appendChild(el("field", { name: "TEXT" }, v)); return s; }
+      const s = num(v, dir === "in" ? "math_number" : shType || "math_number"); if (b.tagName === "block") { const blk = el("block", { type: s.getAttribute("type") }); blk.appendChild(s.firstChild); return blk; } return s;
+    }
+    const p = plan(b);
+    if (!p) { note(t); return null; }
+    const out = el(b.tagName, { type: p.to });
+    for (const a of ["id", "x", "y"]) if (b.hasAttribute(a)) out.setAttribute(a, b.getAttribute(a));
+    const nm = n => (p.names && p.names[n]) || n;
+    const dropIn = new Set([...(p.drop || []), ...(dir === "in" ? Object.keys(p.add || {}) : [])]);
+    if (dir === "in" && p.to.startsWith("iq_motor") && !["iq_motor_spin_for", "iq_motor_spin_to_position", "iq_motor_set_position", "iq_motor_position"].includes(p.to)) dropIn.add("UNITS");
+    if (dir === "in" && p.to.startsWith("pg_operators_round")) dropIn.add("DECIMAL");
+    for (const c of kids(b)) {
+      const name = c.getAttribute("name");
+      if (c.tagName === "field") {
+        if (dropIn.has(name)) continue;
+        const f = el("field", { name: nm(name) }, (p.vals && p.vals[name] && p.vals[name][c.textContent]) || c.textContent);
+        if (c.hasAttribute("id")) f.setAttribute("id", c.getAttribute("id"));
+        if (c.hasAttribute("variabletype")) f.setAttribute("variabletype", c.getAttribute("variabletype"));
+        out.appendChild(f);
+      } else if (c.tagName === "value") {
+        if (dropIn.has(name)) continue;
+        if (p.colorIn && name === "COLOR") { const sh = kids(c)[0]; out.appendChild(el("field", { name: "COLOR" }, (sh && field(sh, "COLOR")) || "none")); continue; }
+        const v = el("value", { name: nm(name) });
+        for (const inner of kids(c)) { const r = conv(inner, p.sh && p.sh[nm(name)]); if (r) v.appendChild(r); }
+        if (v.children.length) out.appendChild(v);
+      } else if (c.tagName === "statement") {
+        const first = chain(kids(c, "block")[0]);
+        if (first) { const s = el("statement", { name: nm(name) }); s.appendChild(first); out.appendChild(s); }
+      } else if (c.tagName === "next") {
+        if (dir === "in" && ["pg_control_break", "pg_control_stop_project", "pg_control_forever"].includes(p.to)) { note("blocks after " + p.to.replace("pg_control_", "").replace("_", " ")); continue; }
+        const n = chain(kids(c, "block")[0]);
+        if (n) { const nx = el("next"); nx.appendChild(n); out.appendChild(nx); }
+      } else if (c.tagName === "mutation" && t.startsWith("procedures_")) out.appendChild(c.cloneNode(true));
+    }
+    if (dir === "out") {
+      const afterFields = () => { const fs = kids(out, "field"); return fs.length ? fs[fs.length - 1].nextSibling : out.firstChild; };
+      for (const [k, v] of Object.entries(p.add || {})) if (!kids(out, "field").some(f => f.getAttribute("name") === k)) out.insertBefore(el("field", { name: k }, v), afterFields());
+      if (p.colorOut) { const f = kids(out, "field").find(f => f.getAttribute("name") === "COLOR"); const color = f ? f.textContent : "none"; if (f) f.remove();
+        const v = el("value", { name: "COLOR" }), s = el("shadow", { type: "iq_looks_colorlist" }); s.appendChild(el("field", { name: "COLOR" }, color)); v.appendChild(s); out.insertBefore(v, afterFields()); }
+      if (p.to === "iq_operator_round" && !kids(out, "value").some(v => v.getAttribute("name") === "DECIMAL")) { const v = el("value", { name: "DECIMAL" }); v.appendChild(num("0", "math_whole_number")); out.appendChild(v); }
+    }
+    return out;
+  }
+  // a statement chain: blocks with no match are skipped and the rest stays connected
+  function chain(b) {
+    while (b) {
+      const r = conv(b);
+      if (r) return r;
+      const nx = kids(b, "next")[0]; b = nx && kids(nx, "block")[0];
+    }
+    return null;
+  }
+  const res = el("xml");
+  for (const c of kids(src)) {
+    if (c.tagName === "variables") res.appendChild(c.cloneNode(true));
+    else if (c.tagName === "block") { const r = chain(c); if (r) { if (!r.hasAttribute("x") && c.hasAttribute("x")) { r.setAttribute("x", c.getAttribute("x")); r.setAttribute("y", c.getAttribute("y")); } res.appendChild(r); } }
+  }
+  return { xml: Blockly.utils.xml.domToText(res), left };
+}
+const leftText = left => [...left.entries()].map(([t, n]) => t.replace(/^(iq_|pg_)/, "").replace(/_/g, " ") + (n > 1 ? ` (${n})` : "")).join(", ");
+
+// devices: VEXcode IQ robotConfig <-> sim Devices
+function iqDevicesIn(cfg) {
+  const out = [];
+  for (const d of cfg || []) {
+    const p = Array.isArray(d.port) ? d.port : [d.port], s = d.setting || {};
+    const base = { name: d.name };
+    if (d.deviceType === "Drivetrain") {
+      const mm = v => (s.unit === "inches" ? 25.4 : 1) * parseFloat(v);
+      const [a, b2] = String(s.gearRatio || "1:1").split(":").map(Number);
+      out.push({ type: "drivetrain", ...base, left: p[0], right: p[1], wheelTravel: parseFloat(s.wheelSize) || KIT.wheelTravel, track: mm(s.width) || KIT.track,
+        wheelbase: mm(s.wheelbase) || KIT.wheelbase, gear: a && b2 ? +(a / b2).toFixed(3) : 1, gyro: s.gyroType === "integrated" ? "brain" : "" });
+    } else if (d.deviceType === "Motor") out.push({ type: "motor", ...base, port: p[0], reverse: s.reversed === "true" || s.reversed === true });
+    else if (d.deviceType === "Color") out.push({ type: "color", ...base, port: p[0], facing: "down", mount: "front", offset: 0 });
+    else if (d.deviceType === "Distance") out.push({ type: "distance", ...base, port: p[0], mount: "front", offset: 0 });
+    else if (d.deviceType === "Bumper") out.push({ type: "bumper", ...base, port: p[0], mount: "front", offset: 0 });
+    else if (d.deviceType === "TouchLED") out.push({ type: "touchled", ...base, port: p[0] });
+    else if (d.deviceType === "Gyro") out.push({ type: "gyro", ...base, port: p[0] });
+  }
+  return out;
+}
+function iqDevicesOut() {
+  const out = [], cls = { color: ["Color", "colorsensor"], distance: ["Distance", "sonar"], bumper: ["Bumper", "bumper"], touchled: ["TouchLED", "touchled"], gyro: ["Gyro", "gyro"] };
+  for (const d of DEVICES) {
+    if (d.type === "drivetrain") {
+      const g = d.gyro && d.gyro !== "brain" ? devByName("gyro", d.gyro) : null;
+      out.push({ port: [d.left, d.right, g ? g.port : 0], name: d.name, customName: d.name !== "Drivetrain", deviceType: "Drivetrain", deviceClass: "smartdrive",
+        setting: { type: "2-motor", wheelSize: Math.round(d.wheelTravel) + "mm", gearRatio: (d.gear || 1) === 1 ? "1:1" : `${d.gear}:1`, direction: "fwd",
+          gyroType: d.gyro === "brain" ? "integrated" : g ? "gyro" : "none", width: String(d.track), unit: "mm", wheelbase: String(d.wheelbase || KIT.wheelbase), wheelbaseUnit: "mm", xOffset: "0", yOffset: "0", thetaOffset: "0" } });
+    } else if (d.type === "motor") out.push({ port: [d.port], name: d.name, customName: d.name !== "Motor" + d.port, deviceType: "Motor", deviceClass: "motor", setting: { reversed: String(!!d.reverse), fwd: "forward", rev: "reverse" } });
+    else if (cls[d.type]) out.push({ port: [d.port], name: d.name, customName: d.name !== DEVICE_TYPES[d.type].base + d.port, deviceType: cls[d.type][0], deviceClass: cls[d.type][1], setting: {} });
+  }
+  return out;
+}
+const isIqFile = data => data && (data.platform === "IQ" || /"iq_events_when_started"|type="iq_events_/.test(data.workspace || ""));
+function openIqProject(data) {
+  const devs = iqDevicesIn(data.robotConfig);
+  const sim = data.robotFieldSim || {};
+  DEVICES = Array.isArray(sim.robotConfig) && sim.robotConfig.length ? sim.robotConfig.filter(d => KNOWN_TYPES.includes(d.type)) : devs;
+  devicesChanged();
+  const r = iqTranslate(data.workspace, "in");
+  loadXml(r.xml);
+  if (sim.level && LEVELS.some(l => l.id === sim.level)) setLevel(sim.level, true);
+  if (LEVEL === "open" && sim.customLevel) loadCustomLevel(cleanCustom(sim.customLevel));
+  stopProgram(false); devicesChanged();
+  if (r.left.size) log(`Opened a VEXcode IQ program. These blocks aren't in the sim yet, so they were left out: ${leftText(r.left)}.`, "warn");
+  else log("Opened a VEXcode IQ program.");
+  if (!sim.robotConfig) log("Check Devices: VEXcode doesn't save where sensors are mounted, so they start on the front.", "warn");
+}
+// a VEXcode IQ project file for this program (the sim's own settings ride along in robotFieldSim)
+function iqProjectJSON() {
+  const r = iqTranslate(Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws)), "out");
+  return { left: r.left, text: JSON.stringify({ mode: "Blocks", hardwareTarget: "brain", workspace: r.xml, robotConfig: iqDevicesOut(), slot: 0, platform: "IQ",
+    sdkVersion: "20230818.11.00.00", appVersion: "4.68.0", fileFormat: "1.3.0", targetBrainGen: "Second", v5SoundsEnabled: false, downloadLanguage: "python",
+    robotFieldSim: { robotConfig: DEVICES, level: LEVEL, ...(LEVEL === "open" ? { customLevel: CUSTOM } : {}) } }) };
+}
+function downloadText(name, text) {
+  try {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "application/json" })); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    return true;
+  } catch (e) { return false; }
+}
+
+/* =====================================================================
    Save / open / misc wiring
    ===================================================================== */
 function projectJSON() {
@@ -1849,6 +2110,7 @@ function projectJSON() {
 }
 function openProject(text) {
   const data = JSON.parse(text);
+  if (isIqFile(data)) return openIqProject(data);
   if (!data.workspace) throw new Error("This file has no blocks in it.");
   loadXml(data.workspace);
   if (Array.isArray(data.robotConfig) && data.robotConfig.length && data.robotConfig[0].type) DEVICES = data.robotConfig.filter(d => KNOWN_TYPES.includes(d.type));
@@ -1871,7 +2133,12 @@ document.getElementById("tDefaults").onclick = () => { tDraft = defaultSettings(
 document.getElementById("tExport").onclick = () => { readTeacher(); textDialog("Settings code", "Copy this code and paste it into Teacher settings on another computer.", btoa(JSON.stringify(tDraft)), null); };
 document.getElementById("tImport").onclick = () => textDialog("Paste settings code", "Paste a settings code, then press Load.", "", txt => {
   tDraft = loadSettings(JSON.parse(atob(txt.trim()))); renderTeacher(); });
-document.getElementById("btnSave").onclick = () => textDialog("Save project", "Copy this text and save it as a file ending in .iqblocks, or paste it into your class assignment. Your work also saves automatically in this browser.", projectJSON(), null);
+document.getElementById("btnSave").onclick = () => {
+  const r = iqProjectJSON();
+  const left = r.left.size ? ` These blocks have no VEXcode IQ match yet, so they are not in the file: ${leftText(r.left)}.` : "";
+  textDialog("Save project", "Download this file (or copy the text into a file ending in .iqblocks). It opens here with Open, and in VEXcode IQ, so you can download it to the robot." + left + " Your work also saves automatically in this browser.",
+    r.text, null, { name: (LEVEL === "open" ? "MyProgram" : lvl().name.replace(/^\d+\.\s*/, "").replace(/(^|[^a-zA-Z0-9]+)([a-zA-Z0-9])/g, (m, a, c) => c.toUpperCase())) + ".iqblocks" });
+};
 document.getElementById("btnOpen").onclick = () => document.getElementById("fileIn").click();
 document.getElementById("fileIn").onchange = e => {
   const file = e.target.files[0]; if (!file) return;
@@ -1884,7 +2151,9 @@ document.getElementById("btnStop").onclick = () => stopProgram();
 document.getElementById("btnReset").onclick = () => { if (CHECKING) return; stopProgram(false); newWorld(); clearLog(); paintLeds(); draw(); };
 document.getElementById("showPath").onchange = draw;
 
-function textDialog(title, hint, text, onLoad) {
+function textDialog(title, hint, text, onLoad, download) {
+  const dl = document.getElementById("xDownload"); dl.hidden = !download;
+  if (download) dl.onclick = () => { if (!downloadText(download.name, text)) document.getElementById("xErr").textContent = "Downloads are blocked here. Use Copy instead."; };
   document.getElementById("xTitle").textContent = title;
   document.getElementById("xHint").textContent = hint;
   const ta = document.getElementById("xText"); ta.value = text; ta.readOnly = !onLoad;
