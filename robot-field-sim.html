@@ -35,6 +35,13 @@ body { background: var(--bg); color: var(--ink); font-family: var(--body); font-
 .btn.stop { background: var(--stop); color: #fff; border-color: var(--stop); }
 .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 460px); }
+.main.withcode { grid-template-columns: minmax(0, 1fr) minmax(240px, 32%) minmax(320px, 420px); }
+#codeview { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: #1b1f27; }
+#codeview[hidden] { display: none; }
+.codebar { display: flex; gap: 6px; padding: 6px 8px; background: #252a34; align-items: center; } .codebar .sp { flex: 1; }
+.codebar [aria-pressed="true"] { background: #4C97FF; color: #fff; border-color: #4C97FF; }
+#codeText { margin: 0; padding: 10px 12px; overflow: auto; flex: 1; color: #e6e9ef; font: 12.5px/1.5 var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre; tab-size: 4; }
+#btnCode[aria-pressed="true"] { background: #4C97FF; color: #fff; }
 #blockly { min-height: 0; min-width: 0; position: relative; }
 .side { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow: auto; min-width: 0; }
 .fieldwrap { position: relative; width: 100%; aspect-ratio: 1; max-width: 100%; }
@@ -177,10 +184,12 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
     <label class="lvl" for="level">Level <select id="level"></select></label>
     <span class="sp"></span>
     <button class="btn" id="btnSign" type="button" hidden>Sign in</button>
+    <button class="btn" id="btnCode" type="button" aria-pressed="false" title="See your program as Python or C++">Python / C++</button>
     <button class="btn" id="btnTeacher" type="button">Teacher settings</button>
   </div>
   <div class="main">
     <div id="blockly"></div>
+    <section id="codeview" hidden aria-label="Program as text"><div class="codebar"><button class="btn small" type="button" data-lang="py">Python</button><button class="btn small" type="button" data-lang="cpp">C++</button><span class="sp"></span><button class="btn small" type="button" id="codeCopy">Copy</button></div><pre id="codeText"></pre></section>
     <aside class="side">
       <div class="controls">
         <button class="btn go" id="btnRun" type="button">▶ Start</button>
@@ -359,7 +368,6 @@ Blockly.defineBlocksWithJsonArray([
   stmt({ type: "pg_drivetrain_stop_driving", message0: "stop driving", colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_velocity", message0: "set drive velocity to %1 %%", args0: [num("VELOCITY")], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_turn_velocity", message0: "set turn velocity to %1 %%", args0: [num("VELOCITY")], colour: C.drive }),
-  stmt({ type: "pg_drivetrain_set_stopping", message0: "set drive stopping to %1", args0: [dd("MODE", [["brake", "brake"], ["coast", "coast"], ["hold", "hold"]])], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_heading", message0: "set drive heading to %1 degrees", args0: [num("HEADING")], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_rotation", message0: "set drive rotation to %1 degrees", args0: [num("ROTATION")], colour: C.drive }),
   stmt({ type: "pg_drivetrain_set_drive_timeout", message0: "set drive timeout to %1 seconds", args0: [num("TIME")], colour: C.drive }),
@@ -499,7 +507,7 @@ function buildToolbox() {
     blk("pg_drivetrain_drive"), blk("pg_drivetrain_drive_for", { AMOUNT: N(200) }), blk("pg_drivetrain_turn"),
     blk("pg_drivetrain_turn_for", { AMOUNT: N(90) }), blk("pg_drivetrain_turn_to_heading", { HEADING: N(90) }),
     blk("pg_drivetrain_turn_to_rotation", { ROTATION: N(90) }), blk("pg_drivetrain_stop_driving"),
-    blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_stopping"),
+    blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }),
     blk("pg_drivetrain_set_drive_heading", { HEADING: N(0) }), blk("pg_drivetrain_set_drive_rotation", { ROTATION: N(0) }),
     blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }), blk("iq_drivetrain_set_drive_stopping"),
   ] : [lockLabel("Drivetrain")] });
@@ -1344,7 +1352,6 @@ function* exec(b) {
     case "pg_drivetrain_stop_driving": W.mode = "idle"; W.cmd = null; return;
     case "pg_drivetrain_set_drive_velocity": W.drivePct = Math.max(-100, Math.min(100, +v("VELOCITY"))); return;
     case "pg_drivetrain_set_turn_velocity": W.turnPct = Math.max(-100, Math.min(100, +v("VELOCITY"))); return;
-    case "pg_drivetrain_set_stopping": W.stopping = f("MODE"); return;
     case "pg_drivetrain_set_drive_heading": W.headingOffset += +v("HEADING") - rd_heading(); return;
     case "pg_drivetrain_set_drive_rotation": W.rotationOffset += +v("ROTATION") - rd_rotation(); return;
     case "pg_drivetrain_set_drive_timeout": W.timeout = Math.max(0, +v("TIME")); return;
@@ -1389,7 +1396,8 @@ function* exec(b) {
     case "pg_control_break": throw new Break();
     case "pg_control_stop_project": throw new Stop();
     case "pg_sensing_reset_timer": W.timer0 = W.t; return;
-    case "iq_drivetrain_set_drive_stopping": case "iq_looks_set_touchled_fade": case "iq_looks_set_color_sensor_brightness": case "iq_motion_set_motor_torque": return;
+    case "iq_drivetrain_set_drive_stopping": W.stopping = f("MODE"); return;
+    case "iq_looks_set_touchled_fade": case "iq_looks_set_color_sensor_brightness": case "iq_motion_set_motor_torque": return;
     case "iq_sensing_inertial_calibrate": { const end = W.t + 2; while (W.t < end) yield; return; }
     case "iq_brain_set_heading": W.brainH = +v("HEADING") - W.rot; return;
     case "iq_brain_set_rotation": W.brainR = +v("ROTATION") - W.rot; return;
@@ -3880,6 +3888,223 @@ function scoreCardHTML() {
   else if (S.lockOrder && CHECKS[LEVEL] && !(best && best.best >= 3)) { const nx = levelList()[levelList().findIndex(l => l.id === LEVEL) + 1]; if (nx && lockedIds().has(nx.id)) h += `<div class="lockhint">Score 3 or more to unlock the next level.</div>`; }
   return h;
 }
+
+/* =====================================================================
+   Code view: the program as VEXcode IQ-style Python or C++, so students
+   can see what their blocks look like as text. Close to VEXcode's own
+   output, but not guaranteed to match it line for line.
+   ===================================================================== */
+function genCode(lang) {
+  const py = lang === "py", IND = py ? "    " : "  ";
+  const id = n => String(n).replace(/[^A-Za-z0-9_]/g, "_").replace(/^(\d)/, "_$1");
+  const dev = n => py ? id(n).replace(/(\D)(\d+)$/, "$1_$2").toLowerCase() : id(n);
+  const camel = s => s.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
+  const call = (obj, pyName, args) => `${obj}.${py ? pyName : camel(pyName)}(${args})`;
+  const U = { fwd: ["FORWARD", "forward"], rev: ["REVERSE", "reverse"], right: ["RIGHT", "right"], left: ["LEFT", "left"], mm: ["MM", "mm"], in: ["INCHES", "inches"],
+    degrees: ["DEGREES", "degrees"], turns: ["TURNS", "turns"], brake: ["BRAKE", "brake"], coast: ["COAST", "coast"], hold: ["HOLD", "hold"] };
+  const u = k => (U[k] || [String(k).toUpperCase(), k])[py ? 0 : 1];
+  const PCT = py ? "PERCENT" : "percent", SEC = py ? "SECONDS" : "seconds", DEGS = py ? "DEGREES" : "degrees";
+  const DT = py ? "drivetrain" : "Drivetrain", BI = py ? "brain_inertial" : "BrainInertial";
+  const end = py ? "" : ";";
+  const vars = new Set(), procs = [];
+  const f = (b, n) => b.getFieldValue(n);
+  const varName = (b, n = "VAR") => { const m = b.workspace.getVariableById(f(b, n)); return id(m ? m.name : f(b, n)); };
+  function val(b, name, dflt = "0") {
+    const t = b && b.getInputTargetBlock(name);
+    return t ? expr(t) : dflt;
+  }
+  function expr(b) {
+    const t = b.type, v = n => val(b, n), d = () => dev(f(b, "DEVICE"));
+    const bin = op => `(${v("NUM1")} ${op} ${v("NUM2")})`;
+    switch (t) {
+      case "math_number": case "math_whole_number": case "math_positive_number": return String(f(b, "NUM"));
+      case "text": return JSON.stringify(f(b, "TEXT") || "");
+      case "variables_get": { const n = varName(b); if (!(b.__param)) vars.add(n); return n; }
+      case "pg_operators_add": return bin("+");
+      case "pg_operators_subtract": return bin("-");
+      case "pg_operators_multiply": return bin("*");
+      case "pg_operators_divide": return bin("/");
+      case "pg_operators_less_than": return bin("<");
+      case "pg_operators_greater_than": return bin(">");
+      case "pg_operators_equal": return bin("==");
+      case "pg_operators_and": return `(${val(b, "BOOL1", "False")} ${py ? "and" : "&&"} ${val(b, "BOOL2", "False")})`;
+      case "pg_operators_or": return `(${val(b, "BOOL1", "False")} ${py ? "or" : "||"} ${val(b, "BOOL2", "False")})`;
+      case "pg_operators_not": return py ? `not ${val(b, "BOOL", "False")}` : `!${val(b, "BOOL", "false")}`;
+      case "pg_operators_random": return py ? `urandom.randint(${v("FROM")}, ${v("TO")})` : `(${v("FROM")} + rand() % (${v("TO")} - ${v("FROM")} + 1))`;
+      case "pg_operators_round": return `round(${v("NUM")})`;
+      case "pg_operators_join": return py ? `str(${val(b, "STRING1", '""')}) + str(${val(b, "STRING2", '""')})` : `/* join is easier in Python */ ${val(b, "STRING1", '""')}`;
+      case "iq_operator_remainder": return py ? `(${v("NUM1")} % ${v("NUM2")})` : `fmod(${v("NUM1")}, ${v("NUM2")})`;
+      case "iq_operator_function": {
+        const x = v("NUM"), op = f(b, "OPERATOR"), rad = py ? `math.radians(${x})` : `(${x}) * M_PI / 180`;
+        const P = { abs: `abs(${x})`, floor: `math.floor(${x})`, ceiling: `math.ceil(${x})`, sqrt: `math.sqrt(${x})`, sin: `math.sin(${rad})`, cos: `math.cos(${rad})`, tan: `math.tan(${rad})`,
+          asin: `math.degrees(math.asin(${x}))`, acos: `math.degrees(math.acos(${x}))`, atan: `math.degrees(math.atan(${x}))`, ln: `math.log(${x})`, log: `math.log10(${x})`, "e ^": `math.exp(${x})`, "10 ^": `10 ** ${x}` };
+        const C2 = { abs: `fabs(${x})`, floor: `floor(${x})`, ceiling: `ceil(${x})`, sqrt: `sqrt(${x})`, sin: `sin(${rad})`, cos: `cos(${rad})`, tan: `tan(${rad})`,
+          asin: `asin(${x}) * 180 / M_PI`, acos: `acos(${x}) * 180 / M_PI`, atan: `atan(${x}) * 180 / M_PI`, ln: `log(${x})`, log: `log10(${x})`, "e ^": `exp(${x})`, "10 ^": `pow(10, ${x})` };
+        return (py ? P : C2)[op] || x;
+      }
+      case "pg_sensing_timer": return py ? "brain.timer.time(SECONDS)" : "Brain.Timer.time(seconds)";
+      case "pg_sensing_position": return py ? `0  # position ${f(b, "AXIS")} is sim only` : `0 /* position ${f(b, "AXIS")} is sim only */`;
+      case "pg_sensing_drivetrain_is_done": return call(DT, "is_done", "");
+      case "pg_sensing_drivetrain_is_moving": return call(DT, "is_moving", "");
+      case "pg_sensing_drivetrain_heading": return call(DT, "heading", DEGS);
+      case "pg_sensing_drivetrain_rotation": return call(DT, "rotation", DEGS);
+      case "pg_sensing_drivetrain_velocity": return call(DT, "velocity", PCT);
+      case "iq_brain_heading": return call(BI, "heading", DEGS);
+      case "iq_brain_rotation": return call(BI, "rotation", DEGS);
+      case "iq_motor_is_done": return call(d(), "is_done", "");
+      case "iq_motor_is_spinning": return call(d(), "is_spinning", "");
+      case "iq_motor_position": return call(d(), "position", u(f(b, "UNITS")));
+      case "iq_motor_velocity": return call(d(), "velocity", PCT);
+      case "iq_touchled_pressed": return call(d(), "pressing", "");
+      case "iq_gyro_heading": return call(d(), "heading", DEGS);
+      case "iq_gyro_rotation": return call(d(), "rotation", DEGS);
+      case "iq_gyro_rate": return call(d(), "rate", "");
+      case "pg_sensing_distance_found": return call(d(), "is_object_detected", "");
+      case "pg_sensing_distance_from": return call(d(), "distance", u(f(b, "UNITS")));
+      case "iq_color_detects": return `${call(d(), "color", "")} == ${py ? "Color." + f(b, "COLORS").toUpperCase() : f(b, "COLORS")}`;
+      case "iq_color_name": return call(d(), "color", "");
+      case "iq_color_found": return call(d(), "is_near_object", "");
+      case "iq_color_brightness": return call(d(), "brightness", "");
+      case "iq_color_hue": return call(d(), "hue", "");
+      case "pg_sensing_bumper_pressed": return call(d(), "pressing", "");
+      case "iq_controller_axis": return py ? `controller.axis${f(b, "AXIS")}.position()` : `Controller.Axis${f(b, "AXIS")}.position()`;
+      case "iq_controller_pressed": return py ? `controller.button${f(b, "BUTTON")}.pressing()` : `Controller.Button${f(b, "BUTTON")}.pressing()`;
+    }
+    return py ? `None  # ${t}` : `0 /* ${t} */`;
+  }
+  let loopDepth = 0;
+  function stack(b, ind) { const out = []; for (; b; b = b.getNextBlock()) if (b.isEnabled()) out.push(...stmt(b, ind)); return out; }
+  function body(b, name, ind) { const s = stack(b.getInputTargetBlock(name), ind + IND); return s.length ? s : [ind + IND + (py ? "pass" : "")].filter(x => x.trim()); }
+  function block(head, b, name, ind, extra = []) {
+    if (py) return [ind + head + ":", ...body(b, name, ind), ...extra.map(x => ind + IND + x)];
+    return [ind + head + " {", ...body(b, name, ind), ...extra.map(x => ind + IND + x), ind + "}"];
+  }
+  function stmt(b, ind) {
+    const t = b.type, v = n => val(b, n), d = () => dev(f(b, "DEVICE")), L = s => [ind + s + end];
+    const cond = n => val(b, n, py ? "False" : "false");
+    switch (t) {
+      case "pg_drivetrain_drive": return L(call(DT, "drive", u(f(b, "DIRECTION"))));
+      case "pg_drivetrain_drive_for": return L(call(DT, "drive_for", `${u(f(b, "DIRECTION"))}, ${v("AMOUNT")}, ${u(f(b, "UNITS"))}`));
+      case "pg_drivetrain_turn": return L(call(DT, "turn", u(f(b, "TURNDIRECTION"))));
+      case "pg_drivetrain_turn_for": return L(call(DT, "turn_for", `${u(f(b, "TURNDIRECTION"))}, ${v("AMOUNT")}, ${DEGS}`));
+      case "pg_drivetrain_turn_to_heading": return L(call(DT, "turn_to_heading", `${v("HEADING")}, ${DEGS}`));
+      case "pg_drivetrain_turn_to_rotation": return L(call(DT, "turn_to_rotation", `${v("ROTATION")}, ${DEGS}`));
+      case "pg_drivetrain_stop_driving": return L(call(DT, "stop", ""));
+      case "pg_drivetrain_set_drive_velocity": return L(call(DT, "set_drive_velocity", `${v("VELOCITY")}, ${PCT}`));
+      case "pg_drivetrain_set_turn_velocity": return L(call(DT, "set_turn_velocity", `${v("VELOCITY")}, ${PCT}`));
+      case "pg_drivetrain_set_drive_heading": return L(call(DT, "set_heading", `${v("HEADING")}, ${DEGS}`));
+      case "pg_drivetrain_set_drive_rotation": return L(call(DT, "set_rotation", `${v("ROTATION")}, ${DEGS}`));
+      case "pg_drivetrain_set_drive_timeout": return L(call(DT, "set_timeout", `${v("TIME")}, ${SEC}`));
+      case "iq_drivetrain_set_drive_stopping": return L(call(DT, "set_stopping", u(f(b, "MODE"))));
+      case "pg_looks_move_pen": return [ind + (py ? "# " : "// ") + `move pen ${f(b, "DIRECTIONS")} (the pen is sim only)`];
+      case "pg_looks_set_pen_color": return [ind + (py ? "# " : "// ") + `set pen color to ${f(b, "COLOR")} (sim only)`];
+      case "pg_looks_print": return py ? [ind + `brain.screen.print(${val(b, "VALUE", '""')})`, ind + "brain.screen.next_row()"] : [ind + `Brain.Screen.print(${val(b, "VALUE", '""')});`, ind + "Brain.Screen.newLine();"];
+      case "pg_looks_clear_all_rows": return L(py ? "brain.screen.clear_screen()" : "Brain.Screen.clearScreen()");
+      case "pg_control_wait": return L(`wait(${v("TIME")}, ${SEC})`);
+      case "pg_control_wait_until": return py ? [ind + `while not ${cond("CONDITION")}:`, ind + IND + "wait(5, MSEC)"] : L(`waitUntil(${cond("CONDITION")})`);
+      case "pg_control_repeat": { const i = "ijk"[loopDepth % 3]; loopDepth++; const r = block(py ? `for ${i} in range(${v("TIMES")})` : `for (int ${i} = 0; ${i} < ${v("TIMES")}; ${i}++)`, b, "SUBSTACK", ind, [py ? "wait(5, MSEC)" : "wait(5, msec);"]); loopDepth--; return r; }
+      case "pg_control_forever": return block(py ? "while True" : "while (true)", b, "SUBSTACK", ind, [py ? "wait(5, MSEC)" : "wait(5, msec);"]);
+      case "pg_control_while": return block(py ? `while ${cond("CONDITION")}` : `while (${cond("CONDITION")})`, b, "SUBSTACK", ind, [py ? "wait(5, MSEC)" : "wait(5, msec);"]);
+      case "pg_control_repeat_until": return block(py ? `while not ${cond("CONDITION")}` : `while (!${cond("CONDITION")})`, b, "SUBSTACK", ind, [py ? "wait(5, MSEC)" : "wait(5, msec);"]);
+      case "pg_control_if": return block(py ? `if ${cond("CONDITION")}` : `if (${cond("CONDITION")})`, b, "SUBSTACK", ind);
+      case "pg_control_ifelse": {
+        const a = block(py ? `if ${cond("CONDITION")}` : `if (${cond("CONDITION")})`, b, "SUBSTACK", ind);
+        if (py) return [...a, ind + "else:", ...body(b, "SUBSTACK2", ind)];
+        a[a.length - 1] = ind + "} else {"; return [...a, ...body(b, "SUBSTACK2", ind), ind + "}"];
+      }
+      case "pg_control_break": return L("break");
+      case "pg_control_stop_project": return L(py ? "brain.program_stop()" : "Brain.programStop()");
+      case "pg_sensing_reset_timer": return L(py ? "brain.timer.clear()" : "Brain.Timer.clear()");
+      case "iq_sensing_inertial_calibrate": return L(call(BI, "calibrate", ""));
+      case "iq_brain_set_heading": return L(call(BI, "set_heading", `${v("HEADING")}, ${DEGS}`));
+      case "iq_brain_set_rotation": return L(call(BI, "set_rotation", `${v("ROTATION")}, ${DEGS}`));
+      case "variables_set": { const n = varName(b); vars.add(n); return L(`${n} = ${val(b, "VALUE")}`); }
+      case "math_change": { const n = varName(b); vars.add(n); return L(`${n} += ${val(b, "DELTA")}`); }
+      case "iq_motor_spin": return L(call(d(), "spin", u(f(b, "DIRECTION"))));
+      case "iq_motor_spin_for": return L(call(d(), "spin_for", `${u(f(b, "DIRECTION"))}, ${v("AMOUNT")}, ${u(f(b, "UNITS"))}`));
+      case "iq_motor_spin_to_position": return L(call(d(), "spin_to_position", `${v("POSITION")}, ${u(f(b, "UNITS"))}`));
+      case "iq_motor_stop": return L(call(d(), "stop", ""));
+      case "iq_motor_set_position": return L(call(d(), "set_position", `${v("POSITION")}, ${u(f(b, "UNITS"))}`));
+      case "iq_motor_set_velocity": return L(call(d(), "set_velocity", `${v("VELOCITY")}, ${PCT}`));
+      case "iq_motor_set_timeout": return L(call(d(), "set_timeout", `${v("TIME")}, ${SEC}`));
+      case "iq_motion_set_motor_torque": return L(call(d(), "set_max_torque", `${v("TORQUE")}, ${PCT}`));
+      case "iq_touchled_set_color": return L(call(d(), "set_color", py ? "Color." + f(b, "COLOR").toUpperCase() : f(b, "COLOR")));
+      case "iq_touchled_set_brightness": return L(call(d(), "set_brightness", v("BRIGHTNESS")));
+      case "iq_looks_set_touchled_fade": return L(call(d(), "set_fade", py ? "FadeType." + f(b, "setting").toUpperCase() : f(b, "setting")));
+      case "iq_looks_set_color_sensor_brightness": return L(call(d(), "set_light", `${v("LEVEL")}, ${PCT}`));
+      case "iq_gyro_calibrate": return L(call(d(), "calibrate", ""));
+      case "iq_gyro_set_heading": return L(call(d(), "set_heading", `${v("HEADING")}, ${DEGS}`));
+      case "iq_gyro_set_rotation": return L(call(d(), "set_rotation", `${v("ROTATION")}, ${DEGS}`));
+      case "iq_controller_actions": return [ind + (py ? "# " : "// ") + `${f(b, "STATE")} Controller configured actions`];
+      case "procedures_callnoreturn": {
+        const name = id(b.getFieldValue("NAME")), args = (b.arguments_ || []).map((a, i) => val(b, "ARG" + i));
+        return L(`${py ? name.toLowerCase() : name}(${args.join(", ")})`);
+      }
+    }
+    return [ind + (py ? "# " : "// ") + `"${b.toString().slice(0, 40)}" has no text version here`];
+  }
+  // events and My Blocks
+  const tops = ws.getTopBlocks(true).filter(b => b.isEnabled());
+  const out = [], mains = [], events = [];
+  for (const d of tops.filter(b => b.type === "procedures_defnoreturn")) {
+    const name = id(d.getFieldValue("NAME")), params = d.getVars().map(id);
+    d.getDescendants(false).forEach(x => { if (x.type === "variables_get") { const m = x.workspace.getVariableById(x.getFieldValue("VAR")); if (m && d.getVars().includes(m.name)) x.__param = true; } });
+    const lines = stack(d.getInputTargetBlock("STACK"), IND);
+    procs.push(py ? [`def ${name.toLowerCase()}(${params.join(", ")}):`, ...(lines.length ? lines : [IND + "pass"]), ""] : [`void ${name}(${params.map(p => "float " + p).join(", ")}) {`, ...lines, "}", ""]);
+  }
+  let n = 0;
+  for (const b of tops.filter(x => x.type === "pg_events_when_started")) {
+    n++; const fn = py ? `when_started${n}` : `whenStarted${n}`, lines = stack(b.getNextBlock(), IND);
+    mains.push({ fn, lines });
+  }
+  for (const b of tops.filter(x => x.type === "iq_controller_when_button" || x.type === "iq_controller_when_axis")) {
+    const isAxis = b.type === "iq_controller_when_axis", what = isAxis ? "axis" + f(b, "AXIS") : "button" + f(b, "BUTTON");
+    const fn = py ? `on_${what.toLowerCase()}_${isAxis ? "changed" : f(b, "ACTION")}` : `on${what[0].toUpperCase() + what.slice(1)}${isAxis ? "Changed" : f(b, "ACTION") === "pressed" ? "Pressed" : "Released"}`;
+    events.push({ fn, lines: stack(b.getNextBlock(), IND), reg: py ? `controller.${what}.${isAxis ? "changed" : f(b, "ACTION")}(${fn})` : `Controller.${what[0].toUpperCase() + what.slice(1)}.${isAxis ? "changed" : f(b, "ACTION")}(${fn});` });
+  }
+  const globals = [...vars];
+  if (py) {
+    out.push("# Made from blocks in Robot Field Sim. Close to VEXcode IQ Python; small details may differ.", "# The robot setup (ports, drivetrain) lives in VEXcode's Devices window.", "#region VEXcode Generated Robot Configuration", "from vex import *", "import urandom, math", "brain = Brain()", "brain_inertial = Inertial()");
+    for (const d of DEVICES) {
+      const nm = dev(d.name);
+      if (d.type === "drivetrain") out.push(`left_drive_smart = Motor(Ports.PORT${d.left}, 1, False)`, `right_drive_smart = Motor(Ports.PORT${d.right}, 1, True)`, `drivetrain = SmartDrive(left_drive_smart, right_drive_smart, brain_inertial, ${d.wheelTravel || 200}, ${d.track || 176}, ${d.wheelbase || 156}, MM, ${d.gear || 1})`);
+      else if (d.type === "motor") out.push(`${nm} = Motor(Ports.PORT${d.port}, ${d.reverse ? "True" : "False"})`);
+      else if (d.type === "controller") out.push("controller = Controller()");
+      else out.push(`${nm} = ${{ gyro: "Gyro", distance: "Distance", color: "ColorSensor", touchled: "Touchled", bumper: "Bumper" }[d.type]}(Ports.PORT${d.port})`);
+    }
+    out.push("#endregion VEXcode Generated Robot Configuration", "");
+    globals.forEach(g => out.push(`${g} = 0`)); if (globals.length) out.push("");
+    procs.forEach(p => out.push(...p));
+    const gl = globals.length ? [IND + "global " + globals.join(", ")] : [];
+    for (const e of [...events, ...mains]) out.push(`def ${e.fn}():`, ...gl, ...(e.lines.length ? e.lines : [IND + "pass"]), "");
+    events.forEach(e => out.push(e.reg));
+    if (mains.length) { out.push(`${mains[0].fn}()`); mains.slice(1).forEach(m => out.splice(out.length - 1, 0, `Thread(${m.fn})`)); }
+  } else {
+    out.push("// Made from blocks in Robot Field Sim. Close to VEXcode IQ C++; small details may differ.", "// The robot setup (ports, drivetrain) lives in VEXcode's Devices window.", '#include "vex.h"', "using namespace vex;", "");
+    globals.forEach(g => out.push(`float ${g} = 0;`)); if (globals.length) out.push("");
+    procs.forEach(p => out.push(...p));
+    for (const e of events) out.push(`void ${e.fn}() {`, ...e.lines, "}", "");
+    for (const m of mains.slice(1)) out.push(`int ${m.fn}() {`, ...m.lines, IND + "return 0;", "}", "");
+    out.push("int main() {", IND + "vexcodeInit();");
+    events.forEach(e => out.push(IND + e.reg));
+    mains.slice(1).forEach(m => out.push(IND + `thread ${m.fn}Thread = thread(${m.fn});`));
+    out.push(...(mains[0] ? mains[0].lines : []), "}");
+  }
+  return out.join("\n");
+}
+let CODE_LANG = LS.get("rfs.codelang", "py");
+const codeView = document.getElementById("codeview"), codeText = document.getElementById("codeText");
+function showCode() { if (codeView.hidden) return; try { codeText.textContent = genCode(CODE_LANG); } catch (e) { codeText.textContent = "Couldn't make the text version: " + e.message; }
+  codeView.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === CODE_LANG)); }
+document.getElementById("btnCode").onclick = () => {
+  codeView.hidden = !codeView.hidden; document.querySelector(".main").classList.toggle("withcode", !codeView.hidden);
+  document.getElementById("btnCode").setAttribute("aria-pressed", !codeView.hidden); LS.set("rfs.codeview", !codeView.hidden); showCode();
+};
+codeView.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { CODE_LANG = b.dataset.lang; LS.set("rfs.codelang", CODE_LANG); showCode(); });
+document.getElementById("codeCopy").onclick = async () => { try { await navigator.clipboard.writeText(codeText.textContent); document.getElementById("codeCopy").textContent = "Copied"; setTimeout(() => document.getElementById("codeCopy").textContent = "Copy", 1200); } catch (e) {} };
+let codeTimer = 0;
+ws.addChangeListener(e => { if (e.isUiEvent || codeView.hidden) return; clearTimeout(codeTimer); codeTimer = setTimeout(showCode, 150); });
+if (LS.get("rfs.codeview", false)) document.getElementById("btnCode").onclick();
 
 /* ---- level picker ---- */
 const lvlSel = document.getElementById("level");
