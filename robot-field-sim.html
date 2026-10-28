@@ -241,7 +241,7 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="xTitle">
     <header><h2 id="xTitle">Save project</h2><button class="btn" type="button" data-close>Close</button></header>
     <div class="body"><p class="hint" id="xHint"></p><textarea id="xText" aria-label="Project text"></textarea><div class="err-text" id="xErr"></div></div>
-    <footer><button class="btn" type="button" id="xAction" hidden>Load</button><button class="btn primary" type="button" id="xCopy">Copy</button></footer>
+    <footer><button class="btn" type="button" id="xDownload" hidden>Download file</button><button class="btn" type="button" id="xAction" hidden>Load</button><button class="btn primary" type="button" id="xCopy">Copy</button></footer>
   </div>
 </div>
 
@@ -250,10 +250,10 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 "use strict";
 /* =====================================================================
    Settings (teacher) and device configuration (student)
-   Robot kit: VEX IQ, first generation (Gen 1) devices only.
+   Robot kit: VEX IQ Gen 2 Brain (with its built-in gyro) and first generation (Gen 1) motors and sensors.
    ===================================================================== */
 const KIT = {
-  name: "VEX IQ (Gen 1)", ports: 12, motorRPM: 120, wheelTravel: 200, track: 176, wheelbase: 156,
+  name: "VEX IQ (Gen 2 Brain, Gen 1 devices)", ports: 12, motorRPM: 120, wheelTravel: 200, track: 176, wheelbase: 156,
   wheels: [["160 mm wheel", 160], ["200 mm wheel", 200], ["250 mm wheel", 250]],
 };
 const PORT_ROLES = [   // the real robot's ports (teacher sets these)
@@ -270,7 +270,7 @@ function defaultSettings() {
     startX: 0, startY: 0, startH: 0,
     robotL: 230, robotW: 200,
     wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
-    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true,
+    rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false,
     ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8, bumper2: 9, bumper3: 11, touchled2: 12 },
     distanceMax: 1000,
   };
@@ -357,6 +357,15 @@ Blockly.defineBlocksWithJsonArray([
   // Sensing (no device needed)
   { type: "pg_sensing_timer", message0: "timer in seconds", output: "Number", colour: C.sensing },
   stmt({ type: "pg_sensing_reset_timer", message0: "reset timer", colour: C.sensing }),
+  // the Gen 2 Brain's built-in gyro
+  stmt({ type: "iq_drivetrain_set_drive_stopping", message0: "set drive stopping to %1", args0: [dd("MODE", [["brake", "brake"], ["coast", "coast"], ["hold", "hold"]])], colour: C.drive }),
+  stmt({ type: "iq_sensing_inertial_calibrate", message0: "calibrate Brain gyro", colour: C.sensing }),
+  { type: "iq_operator_remainder", message0: "remainder of %1 / %2", args0: [num("NUM1"), num("NUM2")], output: "Number", inputsInline: true, colour: C.ops },
+  { type: "iq_operator_function", message0: "%1 of %2", args0: [dd("OPERATOR", ["abs", "floor", "ceiling", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "e ^", "10 ^"].map(x => [x, x])), num("NUM")], output: "Number", inputsInline: true, colour: C.ops },
+  stmt({ type: "iq_brain_set_heading", message0: "set Brain heading to %1 degrees", args0: [num("HEADING")], colour: C.sensing }),
+  stmt({ type: "iq_brain_set_rotation", message0: "set Brain rotation to %1 degrees", args0: [num("ROTATION")], colour: C.sensing }),
+  { type: "iq_brain_heading", message0: "Brain heading in degrees", output: "Number", colour: C.sensing },
+  { type: "iq_brain_rotation", message0: "Brain rotation in degrees", output: "Number", colour: C.sensing },
   { type: "pg_sensing_position", message0: "position %1 in %2", args0: [dd("AXIS", [["X", "x"], ["Y", "y"]]), dd("UNITS", DIST_UNITS)], output: "Number", colour: C.sensing },
   { type: "pg_sensing_drivetrain_is_done", message0: "drive is done?", output: "Boolean", colour: C.sensing },
   { type: "pg_sensing_drivetrain_is_moving", message0: "drive is moving?", output: "Boolean", colour: C.sensing },
@@ -426,6 +435,10 @@ defDev("iq_gyro_set_rotation", "gyro", C.sensing, ["set", "@", "rotation to", ["
 defDev("iq_gyro_heading", "gyro", C.sensing, ["@", "heading in degrees"], "Number");
 defDev("iq_gyro_rotation", "gyro", C.sensing, ["@", "rotation in degrees"], "Number");
 defDev("iq_gyro_rate", "gyro", C.sensing, ["@", "rate in dps"], "Number");
+// blocks from VEXcode IQ that don't change anything in the sim (kept so programs open and save cleanly)
+defDev("iq_looks_set_touchled_fade", "touchled", C.looks, ["set", "@", "fade", ["dd", "setting", [["slow", "slow"], ["fast", "fast"], ["off", "off"]]]], "stmt");
+defDev("iq_looks_set_color_sensor_brightness", "color", C.looks, ["set", "@", "light to", ["value", "LEVEL", "Number"], "%"], "stmt");
+defDev("iq_motion_set_motor_torque", "motor", C.motion, ["set", "@", "torque to", ["value", "TORQUE", "Number"], "%"], "stmt");
 // Distance (Gen 1 ultrasonic)
 defDev("pg_sensing_distance_found", "distance", C.sensing, ["@", "found an object?"], "Boolean");
 defDev("pg_sensing_distance_from", "distance", C.sensing, ["@", "distance in", ["dd", "UNITS", DIST_UNITS]], "Number");
@@ -463,24 +476,25 @@ function buildToolbox() {
     blk("pg_drivetrain_turn_to_rotation", { ROTATION: N(90) }), blk("pg_drivetrain_stop_driving"),
     blk("pg_drivetrain_set_drive_velocity", { VELOCITY: N(50) }), blk("pg_drivetrain_set_turn_velocity", { VELOCITY: N(50) }),
     blk("pg_drivetrain_set_drive_heading", { HEADING: N(0) }), blk("pg_drivetrain_set_drive_rotation", { ROTATION: N(0) }),
-    blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }),
+    blk("pg_drivetrain_set_drive_timeout", { TIME: N(1) }), blk("iq_drivetrain_set_drive_stopping"),
   ] : [lockLabel("Drivetrain")] });
   cats.push({ kind: "category", name: "Motion", colour: C.motion, contents: has("motor") ? [
     blk("iq_motor_spin"), blk("iq_motor_spin_for", { AMOUNT: N(90) }), blk("iq_motor_spin_to_position", { POSITION: N(90) }),
     blk("iq_motor_stop"), blk("iq_motor_set_position", { POSITION: N(0) }), blk("iq_motor_set_velocity", { VELOCITY: N(50) }),
-    blk("iq_motor_set_timeout", { TIME: N(1) }),
+    blk("iq_motor_set_timeout", { TIME: N(1) }), blk("iq_motion_set_motor_torque", { TORQUE: N(50) }),
   ] : [lockLabel("Motor")] });
   const looks = [blk("pg_looks_print", { VALUE: sh("text", { TEXT: "Hello" }) }), blk("pg_looks_clear_all_rows"),
     blk("pg_looks_move_pen"), blk("pg_looks_set_pen_color")];
-  if (has("touchled")) looks.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_set_color"), blk("iq_touchled_set_brightness", { BRIGHTNESS: N(100) }));
+  if (has("touchled")) looks.push({ kind: "label", text: "Touch LED" }, blk("iq_touchled_set_color"), blk("iq_touchled_set_brightness", { BRIGHTNESS: N(100) }), blk("iq_looks_set_touchled_fade"));
+  if (has("color")) looks.push({ kind: "label", text: "Color sensor" }, blk("iq_looks_set_color_sensor_brightness", { LEVEL: N(50) }));
   cats.push({ kind: "category", name: "Looks", colour: C.looks, contents: looks });
   const ctl = !!controllerDev();
   cats.push({ kind: "category", name: "Events", colour: C.events, contents: [blk("pg_events_when_started")].concat(ctl ? [
     { kind: "label", text: "Controller" }, blk("iq_controller_when_button"), blk("iq_controller_when_axis")] : []) });
   cats.push({ kind: "category", name: "Control", colour: C.control, contents: [
     blk("pg_control_wait", { TIME: N(1) }), blk("pg_control_repeat", { TIMES: N(10) }), blk("pg_control_forever"),
-    blk("pg_control_if"), blk("pg_control_ifelse"), blk("pg_control_wait_until"), blk("pg_control_repeat_until"),
-    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ].concat(ctl ? [blk("iq_controller_actions")] : []) });
+    blk("pg_control_if"), blk("pg_control_ifelse"), blk("pg_control_wait_until")].concat(S.hideRepeatUntil ? [] : [blk("pg_control_repeat_until")]).concat([
+    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ]).concat(ctl ? [blk("iq_controller_actions")] : []) });
   const sensing = [];
   if (dt) sensing.push({ kind: "label", text: "Drivetrain" }, blk("pg_sensing_drivetrain_is_done"), blk("pg_sensing_drivetrain_is_moving"),
     blk("pg_sensing_drivetrain_heading"), blk("pg_sensing_drivetrain_rotation"), blk("pg_sensing_drivetrain_velocity"));
@@ -492,7 +506,8 @@ function buildToolbox() {
   if (has("distance")) sensing.push({ kind: "label", text: "Distance" }, blk("pg_sensing_distance_found"), blk("pg_sensing_distance_from"));
   if (has("color")) sensing.push({ kind: "label", text: "Color" }, blk("iq_color_detects"), blk("iq_color_name"), blk("iq_color_found"), blk("iq_color_brightness"), blk("iq_color_hue"));
   if (ctl) sensing.push({ kind: "label", text: "Controller" }, blk("iq_controller_axis"), blk("iq_controller_pressed"));
-  sensing.push({ kind: "label", text: "Brain" }, blk("pg_sensing_timer"), blk("pg_sensing_reset_timer"));
+  sensing.push({ kind: "label", text: "Brain" }, blk("pg_sensing_timer"), blk("pg_sensing_reset_timer"),
+    blk("iq_brain_heading"), blk("iq_brain_rotation"), blk("iq_sensing_inertial_calibrate"), blk("iq_brain_set_heading", { HEADING: N(0) }), blk("iq_brain_set_rotation", { ROTATION: N(0) }));
   if (S.allowPosition) sensing.push({ kind: "label", text: "Field position" }, blk("pg_sensing_position"));
   cats.push({ kind: "category", name: "Sensing", colour: C.sensing, contents: sensing });
   cats.push({ kind: "category", name: "Operators", colour: C.ops, contents: [
@@ -501,15 +516,30 @@ function buildToolbox() {
     blk("pg_operators_less_than", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_greater_than", { NUM1: N(0), NUM2: N(50) }),
     blk("pg_operators_equal", { NUM1: N(0), NUM2: N(50) }), blk("pg_operators_and"), blk("pg_operators_or"), blk("pg_operators_not"),
     blk("pg_operators_random", { FROM: N(1), TO: N(10) }), blk("pg_operators_round", { NUM: N(0) }),
+    blk("iq_operator_remainder", { NUM1: N(7), NUM2: N(2) }), blk("iq_operator_function", { NUM: N(0) }),
     blk("pg_operators_join", { STRING1: sh("text", { TEXT: "apple " }), STRING2: sh("text", { TEXT: "banana" }) }) ] });
   cats.push({ kind: "category", name: "Variables", colour: "#FF8C1A", custom: "VARIABLE" });
+  cats.push({ kind: "category", name: "My Blocks", colour: "#FF6680", custom: "MYBLOCKS" });
   return { kind: "categoryToolbox", contents: cats };
 }
 
+// My Blocks: VEXcode-style names and color for Blockly's procedure blocks
+Object.assign(Blockly.Msg, { PROCEDURES_HUE: "#FF6680", PROCEDURES_DEFNORETURN_TITLE: "define", PROCEDURES_DEFNORETURN_PROCEDURE: "myBlock",
+  PROCEDURES_BEFORE_PARAMS: "with:", PROCEDURES_CALL_BEFORE_PARAMS: "with:", PROCEDURES_DEFNORETURN_COMMENT: "" });
+for (const t of ["procedures_defnoreturn", "procedures_callnoreturn"]) {
+  const init = Blockly.Blocks[t].init;
+  Blockly.Blocks[t].init = function () { init.call(this); this.setColour("#FF6680"); };
+}
 const ws = Blockly.inject("blockly", {
   toolbox: buildToolbox(), renderer: "zelos", trashcan: false, sounds: false,
   zoom: { controls: false, wheel: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
   move: { scrollbars: true, drag: true, wheel: false }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
+});
+ws.registerToolboxCategoryCallback("MYBLOCKS", w => {
+  const items = Blockly.Procedures.flyoutCategory(w).filter(x => !/procedures_(defreturn|ifreturn|callreturn)/.test(x.getAttribute ? x.getAttribute("type") || "" : ""));
+  const tip = Blockly.utils.xml.createElement("label");
+  tip.setAttribute("text", "Make a block once, then use it as many times as you like.");
+  return [tip].concat(items);
 });
 window.addEventListener("resize", () => Blockly.svgResize(ws));
 new ResizeObserver(() => Blockly.svgResize(ws)).observe(document.getElementById("blockly"));
@@ -558,58 +588,96 @@ const MAZE2_PATH = [[-700, -1000], [-700, 700], [-200, 700], [-200, -200], [300,
 // counting maze: the medium maze flipped left to right (left, left, right, right, left, left)
 const MAZE3_PATH = MAZE2_PATH.map(([x, y]) => [-x, y]);
 const tile = (x, y, color, size = 160) => ({ rect: [x - size / 2, y - size / 2, size, size], color });
+// a guide is a dashed line (y, x1, x2) or a dashed outline (pts)
+const guidePts = g => g.pts || [[g.x1, g.y], [g.x2, g.y]];
+// drive-a-square levels: a 600 mm square, turning right from the start spot
+const SQ = 600, SQ_START = [0, -300, 0];
+const SQUARE_CW = [[0, 300], [600, 300], [600, -300], [0, -300]];
+const SQUARE_CCW = SQUARE_CW.map(([x, y]) => [-x, y]);
+const squareGuide = { pts: [[0, 300], [600, 300], [600, -300], [0, -300], [0, 300]], label: "600 mm square" };
+function circlePts(r, step = 4) { const pts = []; for (let a = 0; a <= 360; a += step) pts.push([r * Math.sin(a * DEG0), r * Math.cos(a * DEG0)]); return pts; }
+const DEG0 = Math.PI / 180;
+const RING_R = 800;
+const COUNT_LINES = [-500, -200, 100, 400, 700];   // y of each black line, the 3rd one is the goal
+// the staircase for My Blocks: every step is forward 400, turn right, forward 400, turn left
+const STAIR_PATH = [[-700, -1000], [-700, -480], [-300, -480], [-300, -80], [100, -80], [100, 320], [500, 320], [500, 870]];
+// the wall to follow: up the right side, then around the corner to the right
+const FOLLOW_WALLS = [{ x1: 200, y1: -1000, x2: 200, y2: 200 }, { x1: 200, y1: 200, x2: 1000, y2: 200 }];
 const LEVELS = [
   { id: "open", name: "Build your own", task: "" },
-  { id: "touch", name: "1. Go till touch", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
+  { id: "square", name: "Drive a square", start: SQ_START, walls: [], guides: [squareGuide],
+    task: "Drive a 600 mm square and end where you started, facing the same way. Use \"drive forward for 600 mm\" and \"turn right for 90 degrees\". Tip: a \"repeat 4\" loop makes the program short.", needs: "Drivetrain" },
+  { id: "gyro", name: "Gyro turns", start: SQ_START, walls: [], guides: [squareGuide], slip: 0.93,
+    task: "This floor is slippery, so every turn comes up a little short, just like worn wheels on a real robot. Drive the same square 2 times around and end where you started. First try your square program and watch it drift. Run it with the Drivetrain's gyro set to \"No gyro\" in Devices and watch it drift. Then set it to the Brain's built-in gyro and run it again.", needs: "Drivetrain using the Brain's gyro (or a Gyro sensor)" },
+  { id: "touch", name: "Go till touch", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
     task: "Drive forward until the Bumper touches the wall, then stop.", needs: "Drivetrain, Bumper on the front" },
-  { id: "waittouch", name: "2. Wait for touch", start: [0, -400, 0], walls: [],
+  { id: "waittouch", name: "Wait for touch", start: [0, -400, 0], walls: [],
     task: "Wait until the Bumper is pressed, then drive forward 500 mm. Hold the Bumper button under the field to press it.", needs: "Drivetrain, Bumper" },
-  { id: "distance", name: "3. Go till distance", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
+  { id: "counter", name: "Bumper counter", start: [0, -800, 0], walls: [],
+    guides: [1, 2, 3, 4, 5].map(k => ({ y: -800 + 200 * k, x1: -250, x2: 250, label: k + (k > 1 ? " presses" : " press") })),
+    task: "Count Bumper presses, then drive 200 mm for each one when the Touch LED is pressed. Example: press the Bumper 3 times, press the Touch LED, and the robot drives 600 mm. Tip: make a variable, add 1 for each press, and wait until the Bumper is let go before counting again. Hold Z for the Bumper and click the Touch LED below the field.", needs: "Drivetrain, Bumper, Touch LED" },
+  { id: "distance", name: "Go till distance", start: [0, -700, 0], walls: [{ x1: -500, y1: 600, x2: 500, y2: 600 }],
     guides: [{ y: 380, x1: -500, x2: 500, label: "200 mm from the wall" }],
     task: "Drive toward the wall and stop 200 mm away from it (the dashed line).", needs: "Drivetrain, Distance sensor on the front" },
-  { id: "stayaway", name: "4. Stay away", start: [0, -300, 0], walls: [{ x1: -400, y1: 300, x2: 400, y2: 300 }],
+  { id: "stayaway", name: "Stay away", start: [0, -300, 0], walls: [{ x1: -400, y1: 300, x2: 400, y2: 300 }],
     task: "Keep the robot 300 mm from the wall: back up when it is too close, drive forward when it is too far. While the program runs, drag the wall closer and farther.", needs: "Drivetrain, Distance sensor on the front" },
-  { id: "color", name: "5. Color detection", start: [0, -800, 0], walls: [],
+  { id: "wallfollow", name: "Wall follower", start: [-70, -850, 0], walls: FOLLOW_WALLS,
+    floor: [{ rect: [650, 300, 300, 300], color: "green" }],
+    task: "Follow the wall on the robot's right side, about 150 mm away, all the way around the corner to the green tile, without touching it. Tip: put a Distance sensor on the right side. Too far from the wall? Steer toward it. Too close? Steer away. Two Motors with \"set velocity\" steer smoothly, like in line tracing.", needs: "Distance sensor on the right side, plus 2 Motors or a Drivetrain" },
+  { id: "find", name: "Find the object", start: [0, 0, 0], walls: [], cubes: [{ x: 0, y: 450, color: "red" }],
+    place: list => { const a = (FORCE_ANGLE ?? Math.floor(Math.random() * 360)) * DEG0; list[0].x = Math.round(450 * Math.sin(a)); list[0].y = Math.round(450 * Math.cos(a)); list[0].rot = a / DEG0; },
+    task: "A cube is somewhere around the robot, and it moves every run! Turn until the Distance sensor sees something closer than 700 mm, then drive up to the cube and stop about 50 mm away without pushing it. The field walls are farther than 700 mm, so they won't fool you.", needs: "Drivetrain, Distance sensor on the front" },
+  { id: "color", name: "Color detection", start: [0, -800, 0], walls: [],
     floor: [{ rect: [-150, -550, 300, 300], color: "red" }, { rect: [-150, -150, 300, 300], color: "green" },
             { rect: [-150, 250, 300, 300], color: "blue" }, { rect: [-150, 630, 300, 300], color: "yellow" }],
     task: "Drive over the color tiles. Print each color the sensor sees, or stop on the color you choose.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "line", name: "6. Line tracing (oval)", start: [-200, -400, 90], walls: [],
+  { id: "countlines", name: "Count the lines", start: [0, -850, 0], walls: [],
+    floor: COUNT_LINES.map(y => ({ line: [[-300, y], [300, y]], width: 50, color: "black" })),
+    task: "Drive forward and stop on the 3rd black line. Tip: count with a variable. When the Color sensor sees a dark line, add 1, then wait until it sees white again before counting the next line.", needs: "Drivetrain, Color sensor pointing down" },
+  { id: "sumo", name: "Stay in the ring", start: [0, 0, 0], walls: [],
+    floor: [{ line: circlePts(RING_R), width: 50, color: "black" }],
+    task: "Keep driving around inside the black ring for 20 seconds without leaving it. Every time the Color sensor sees the black edge, back up, turn, and drive off again. This is how sumo robots stay in the ring.", needs: "Drivetrain, Color sensor pointing down" },
+  { id: "line", name: "Line tracing (oval)", start: [-200, -400, 90], walls: [],
     floor: [{ line: stadium(0, 0, 450, 400, 3), width: 25, color: "black" }],
     task: "Follow the black line all the way around. Tip: read the Color sensor's brightness. Dark means you are on the line, bright means you are off it.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "line2", name: "7. Line tracing (tricky)", start: [-750, -860, 0], walls: [],
+  { id: "line2", name: "Line tracing (tricky)", start: [-750, -860, 0], walls: [],
     floor: [{ line: trickyTrack(), width: 25, color: "black" }, { rect: [380, -760, 140, 110], color: "green" }],
     task: "Follow the line through the S-curves, the sharp corner, and the zigzag, and stop on the green finish tile. Tip: go slower and turn harder than on the oval.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "maze", name: "8. Color maze (easy)", start: [-700, -850, 0], walls: corridorWalls(MAZE_PATH, 200),
+  { id: "maze", name: "Color maze (easy)", start: [-700, -850, 0], walls: corridorWalls(MAZE_PATH, 200),
     floor: [tile(-700, 0, "blue"), tile(0, 0, "green"), tile(0, 700, "blue"), tile(700, 700, "blue"), tile(700, -300, "yellow", 300)],
     task: "Drive through the maze using the color tiles: green = turn left, blue = turn right, yellow = finish, so stop. Tip: when you see a tile, drive forward about 190 mm to reach the middle of the turn, turn 90 degrees, then drive off the tile before checking again.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "maze2", name: "9. Color maze (medium)", start: [-700, -850, 0], walls: corridorWalls(MAZE2_PATH, 200),
+  { id: "myblocks", name: "My Blocks: staircase", start: [-700, -880, 0], walls: corridorWalls(STAIR_PATH, 200),
+    floor: [tile(500, 720, "yellow", 200)],
+    task: "Climb the staircase to the yellow tile. Every step is the same: forward 400 mm, turn right, forward 400 mm, turn left. Make a My Block called \"step\" that does one step, use it 3 times (or inside a \"repeat 3\"), then drive the last 400 mm. My Blocks keep long programs short and easy to fix.", needs: "Drivetrain" },
+  { id: "maze2", name: "Color maze (medium)", start: [-700, -850, 0], walls: corridorWalls(MAZE2_PATH, 200),
     floor: [tile(-700, 700, "blue"), tile(-200, 700, "blue"), tile(-200, -200, "green"), tile(300, -200, "green"), tile(300, 700, "blue"), tile(700, 700, "blue"), tile(700, -500, "yellow", 300)],
     task: "A longer maze with more turns. Same rules: green = turn left, blue = turn right, yellow = finish, so stop.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "maze3", name: "10. Color maze (counting)", start: [700, -850, 0], walls: corridorWalls(MAZE3_PATH, 200),
+  { id: "maze3", name: "Color maze (counting)", start: [700, -850, 0], walls: corridorWalls(MAZE3_PATH, 200),
     floor: [tile(700, 700, "green"), tile(200, 700, "green"), tile(200, -200, "blue"), tile(-300, -200, "green"), tile(-300, 700, "blue"), tile(-700, 700, "blue"), tile(-700, -500, "yellow", 300)],
     task: "The colors change meaning! For the first 3 tiles, green = turn left and blue = turn right. From the 4th tile on they swap: green = turn right and blue = turn left. Yellow = finish. Tip: make a variable that counts the tiles you have turned on.", needs: "Drivetrain, Color sensor pointing down" },
-  { id: "rc1", name: "11. Remote control", start: [0, -200, 0], walls: [],
+  { id: "rc1", name: "Remote control", start: [0, -200, 0], walls: [],
     task: "Use two Bumpers as a remote. Hold the left one: turn left. Hold the right one: turn right. Hold both: drive forward. Hold nothing: stop. Tip: put it in a forever loop and check both together first. Hold the Z and X keys (or the buttons below) to press them.", needs: "Drivetrain, 2 Bumpers" },
-  { id: "rc2", name: "12. Remote control 2", start: [0, -200, 0], walls: [],
+  { id: "rc2", name: "Remote control 2", start: [0, -200, 0], walls: [],
     task: "Add a third Bumper for backwards. Hold it with the left one: back up turning left. With the right one: back up turning right. Alone: drive straight backwards. Everything from Remote control 1 still works. Keys: Z, X, C.", needs: "Drivetrain, 3 Bumpers" },
-  { id: "crc1", name: "13. Color remote control", start: [0, -200, 0], walls: [],
+  { id: "crc1", name: "Color remote control", start: [0, -200, 0], walls: [],
     task: "Remote control 1, but with two single Motors and a Touch LED for each motor. When a motor drives forward its LED is green. When it is stopped its LED is red. The LEDs show on the back of the robot and below the field.", needs: "LeftMotor and RightMotor (or a Drivetrain), 2 Bumpers, 2 Touch LEDs" },
-  { id: "crc2", name: "14. Color remote control 2", start: [0, -200, 0], walls: [],
+  { id: "crc2", name: "Color remote control 2", start: [0, -200, 0], walls: [],
     task: "Remote control 2 with the LEDs: green = that motor goes forward, red = stopped, yellow = backwards. Keys: Z, X, C.", needs: "LeftMotor and RightMotor (or a Drivetrain), 3 Bumpers, 2 Touch LEDs" },
-  { id: "pincher", name: "15. Pincher: move the cube", start: [0, -700, 0], walls: [], cubes: [{ x: 0, y: -100, color: "red" }],
+  { id: "pincher", name: "Pincher: move the cube", start: [0, -700, 0], walls: [], cubes: [{ x: 0, y: -100, color: "red" }],
     floor: [{ rect: [450, 400, 300, 300], color: "red" }],
     goal: () => W.cubes.every(cubeOnTile), done: "The cube is on the red square.",
     task: "Open the pincher, drive up so the cube is between the fingers, close it, carry the cube to the red square, then open the pincher and back away. Tip: use Robot builds in Devices to start from a Pincher bot.", needs: "Pincher bot (Drivetrain and ClawMotor)" },
-  { id: "lift", name: "16. Clawbot: up on the platform", start: [0, -700, 0], cubes: [{ x: 0, y: -250, color: "blue" }],
+  { id: "lift", name: "Clawbot: up on the platform", start: [0, -700, 0], cubes: [{ x: 0, y: -250, color: "blue" }],
     walls: [{ x1: -80, y1: 450, x2: 80, y2: 450, t: 200 }],
     goal: () => W.cubes.every(c => !c.held && c.z >= 150), done: "The cube is on the platform.",
     task: "Grab the cube with the claw, lift the arm high enough to clear the brown platform (150 mm tall), drive up to it, and let go so the cube sits on top. Tip: the arm must be down to grab, and up about 40 degrees or more to clear the platform.", needs: "Clawbot (Drivetrain, ArmMotor and ClawMotor)" },
-  { id: "sort", name: "17. Sort the cubes", start: [0, -750, 0], walls: [], shuffle: true,
+  { id: "sort", name: "Sort the cubes", start: [0, -750, 0], walls: [], shuffle: true,
     cubes: [{ x: 0, y: -350, color: "red" }, { x: 0, y: 250, color: "blue" }],
     floor: [{ rect: [-900, -150, 300, 300], color: "red" }, { rect: [600, -150, 300, 300], color: "blue" }],
     goal: () => W.cubes.every(cubeOnTile), done: "Both cubes are sorted.",
     task: "Each cube goes on the square of its own color, but the colors switch around every run! Use a Color sensor facing forward (it sees a cube right in front of it) to check each cube, then carry it to the matching square. Tip: the Sorter bot build has one.", needs: "Sorter bot (Pincher bot plus a Color sensor facing forward)" },
 ];
+LEVELS.forEach((l, i) => { if (i) l.name = i + ". " + l.name; });
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
 const lvl = () => LEVELS.find(l => l.id === LEVEL);
@@ -711,9 +779,11 @@ function portOk(dev, role) {
     (S.showPortMap ? ` Check the robot's port map in Devices.` : ""));
   return false;
 }
+const BRAIN_GYRO = { type: "gyro", name: "Brain" };
 function gyroDevice() {
   const dt = drivetrain();
   if (!dt || !dt.gyro) return null;
+  if (dt.gyro === "brain") return BRAIN_GYRO;   // the Gen 2 Brain has a gyro inside it
   const g = devByName("gyro", dt.gyro) || devOf("gyro")[0];
   if (!g) { warnOnce("nogyro", "The Drivetrain is set to use a gyro, but there is no Gyro sensor in Devices."); return null; }
   return portOk(g, "gyro") ? g : null;
@@ -849,6 +919,7 @@ function resetCubes() {
     for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; }
     list.forEach((c, i) => c.color = cols[i]);
   }
+  if (LEVEL !== "open" && lv.place) lv.place(list);
   W.cubes = list;
 }
 function inBounds(poly) { const hx = S.fieldW / 2, hy = S.fieldH / 2; return !S.walls || poly.every(([x, y]) => Math.abs(x) <= hx && Math.abs(y) <= hy); }
@@ -988,7 +1059,8 @@ function physicsStep() {
   // 4) move the robot
   const mL = realMM(wL), mR = realMM(wR);
   W.lastWL = mL; W.lastWR = mR;   // how far each side's wheels turned this tick (mm), for checks
-  const dCenter = (mL + mR) / 2, dRot = (mL - mR) / S.track / DEG;
+  const slip = LEVEL !== "open" && lvl().slip || 1;
+  const dCenter = (mL + mR) / 2, dRot = (mL - mR) / S.track / DEG * slip;
   const before = W.rot, ox0 = W.x, oy0 = W.y;
   if (dCenter || dRot) {
     const mid = (W.rot + dRot / 2) * DEG;
@@ -1071,7 +1143,16 @@ function val(block) {
     case "pg_operators_not": return !v("BOOL");
     case "pg_operators_random": { const a = Math.ceil(+v("FROM")), b = Math.floor(+v("TO")); return a + Math.floor(Math.random() * (b - a + 1)); }
     case "pg_operators_round": return Math.round(+v("NUM"));
+    case "iq_operator_remainder": { const d = +v("NUM2"); return d ? ((+v("NUM1") % d) + d) % d : 0; }
+    case "iq_operator_function": {
+      const x = +v("NUM"), r = DEG;
+      const fn = { abs: Math.abs, floor: Math.floor, ceiling: Math.ceil, sqrt: Math.sqrt, sin: a => Math.sin(a * r), cos: a => Math.cos(a * r), tan: a => Math.tan(a * r),
+        asin: a => Math.asin(a) / r, acos: a => Math.acos(a) / r, atan: a => Math.atan(a) / r, ln: Math.log, log: Math.log10, "e ^": Math.exp, "10 ^": a => Math.pow(10, a) }[f("OPERATOR")];
+      return fn ? +fn(x).toFixed(6) : 0;
+    }
     case "pg_operators_join": return fmtNum(v("STRING1")) + fmtNum(v("STRING2"));
+    case "iq_brain_heading": return +((((W.rot + (W.brainH || 0)) % 360) + 360) % 360).toFixed(2);
+    case "iq_brain_rotation": return +(W.rot + (W.brainR || 0)).toFixed(2);
     case "pg_sensing_timer": return +(W.t - W.timer0).toFixed(3);
     case "pg_sensing_position": { const p = f("AXIS") === "y" ? W.y : W.x; return f("UNITS") === "in" ? p / 25.4 : p; }
     case "pg_sensing_drivetrain_is_done": return W.mode === "idle" || W.mode === "spin";
@@ -1208,9 +1289,22 @@ function* exec(b) {
     case "pg_control_break": throw new Break();
     case "pg_control_stop_project": throw new Stop();
     case "pg_sensing_reset_timer": W.timer0 = W.t; return;
+    case "iq_drivetrain_set_drive_stopping": case "iq_looks_set_touchled_fade": case "iq_looks_set_color_sensor_brightness": case "iq_motion_set_motor_torque": return;
+    case "iq_sensing_inertial_calibrate": { const end = W.t + 2; while (W.t < end) yield; return; }
+    case "iq_brain_set_heading": W.brainH = +v("HEADING") - W.rot; return;
+    case "iq_brain_set_rotation": W.brainR = +v("ROTATION") - W.rot; return;
     case "iq_controller_actions": RUN.actionsOn = f("STATE") === "enable"; if (!RUN.actionsOn) releaseActions(); return;
     case "variables_set": { const m = b.workspace.getVariableById(f("VAR")); RUN.vars[m ? m.name : f("VAR")] = v("VALUE"); return; }
     case "math_change": { const m = b.workspace.getVariableById(f("VAR")); const k = m ? m.name : f("VAR"); RUN.vars[k] = (+RUN.vars[k] || 0) + +v("DELTA"); return; }
+    case "procedures_callnoreturn": {
+      const name = f("NAME"), def = Blockly.Procedures.getDefinition(name, b.workspace);
+      if (!def || !def.isEnabled()) { warnOnce("noproc" + name, `There is no "define ${name}" block, so "${name}" does nothing.`); return; }
+      if ((RUN.depth || 0) > 50) throw new Error(`"${name}" uses itself too many times.`);
+      def.getVars().forEach((p, i) => { RUN.vars[p] = val(b.getInputTargetBlock("ARG" + i)); });
+      RUN.depth = (RUN.depth || 0) + 1;
+      try { yield* runStack(def.getInputTargetBlock("STACK")); } finally { RUN.depth--; }
+      return;
+    }
   }
   if (!HAT_TYPES.includes(b.type)) log(`Block "${b.type}" is not supported yet; skipped.`, "warn");
 }
@@ -1233,7 +1327,7 @@ function startProgram() {
   const hats = controllerDev() ? all.filter(b => b.type === "iq_controller_when_button" || b.type === "iq_controller_when_axis") : [];
   const cd = controllerDev(), hasActions = !!cd && (cd.drive && cd.drive !== "none" && !!drivetrain() || Object.values(cd.buttons || {}).some(Boolean));
   if (!tops.length && !hats.length && !hasActions) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
-  const loose = all.filter(b => !HAT_TYPES.includes(b.type) && !b.isShadow());
+  const loose = all.filter(b => !HAT_TYPES.includes(b.type) && !b.type.startsWith("procedures_def") && !b.isShadow());
   if (loose.length) log(`${loose.length} loose stack${loose.length > 1 ? "s are" : " is"} not attached to a "when" block and won't run.`, "warn");
   if (all.some(b => b.type.startsWith("iq_controller_when")) && !cd) log("Controller event blocks need a Controller in Devices.", "warn");
   RUN = { vars: {}, current: new Set(), scripts: tops.map(t => runStack(t.getNextBlock())), last: 0, acc: 0,
@@ -1409,9 +1503,10 @@ function draw() {
     }
   }
   for (const g of lvl().guides || []) {
+    const pts = guidePts(g);
     ctx.strokeStyle = "#1f6fd1"; ctx.lineWidth = 2; ctx.setLineDash([10, 7]);
-    ctx.beginPath(); ctx.moveTo(X(g.x1), Y(g.y)); ctx.lineTo(X(g.x2), Y(g.y)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = "#1f6fd1"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(g.label, X(g.x1), Y(g.y) - 4); ctx.textBaseline = "middle";
+    ctx.beginPath(); pts.forEach(([px, py], i) => i ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py))); ctx.stroke(); ctx.setLineDash([]);
+    if (g.label) { ctx.fillStyle = "#1f6fd1"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(g.label, X(pts[0][0]) + 4, Y(pts[0][1]) - 4); ctx.textBaseline = "middle"; }
   }
   // cubes on the floor or on blocks (a held cube is drawn on top of the robot)
   for (const c of W.cubes) if (!c.held) drawCube(c, X, Y, sc);
@@ -1591,7 +1686,7 @@ const ROBOT_BUILDS = [
     buildDT(), { type: "motor", name: "ClawMotor", port: S.ports.claw || 4, reverse: false },
     { type: "color", name: "Color", port: S.ports.color || 3, facing: "forward", mount: "front", offset: 0 }] },
 ];
-function buildDT(gyro = "") { return { type: "drivetrain", name: "Drivetrain", left: S.ports.left || 1, right: S.ports.right || 6, wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro }; }
+function buildDT(gyro = "brain") { return { type: "drivetrain", name: "Drivetrain", left: S.ports.left || 1, right: S.ports.right || 6, wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro }; }
 function renderPicker() {
   let h = `<p class="hint">Pick a device to add.</p><div class="devgrid">`;
   for (const [t, m] of Object.entries(DEVICE_TYPES)) {
@@ -1608,7 +1703,7 @@ function renderPicker() {
     const realFree = r => r && !used.has(r) ? (used.add(r), r) : 0;
     let d;
     if (t === "controller") d = { type: t, name: "Controller", drive: drivetrain() ? "left_arcade" : "none", buttons: { E: "", F: "", L: "", R: "" } };
-    else if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: realFree(S.ports.left) || free(), right: realFree(S.ports.right) || free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "" };
+    else if (t === "drivetrain") d = { type: t, name: "Drivetrain", left: realFree(S.ports.left) || free(), right: realFree(S.ports.right) || free(), wheelTravel: KIT.wheelTravel, track: KIT.track, wheelbase: KIT.wheelbase, gear: 1, gyro: "brain" };
     else {
       // start on the real robot's port when it's free (motors: drive, arm, then claw ports)
       const p = t === "motor" ? (["left", "right", "arm", "claw"].map(k => S.ports[k]).find(r => r && !used.has(r) && used.add(r)) || free())
@@ -1629,7 +1724,7 @@ function renderEditor() {
   } else if (d.type === "drivetrain") {
     const wopts = KIT.wheels.map(([n, v]) => `<option value="${v}" ${Math.abs(v - d.wheelTravel) < .01 ? "selected" : ""}>${n} (${v} mm travel)</option>`).join("");
     const gyros = devOf("gyro");
-    const gopts = `<option value="">No gyro</option>` + gyros.map(g => `<option value="${esc(g.name)}" ${d.gyro === g.name ? "selected" : ""}>${esc(g.name)}</option>`).join("");
+    const gopts = `<option value="">No gyro</option><option value="brain" ${d.gyro === "brain" ? "selected" : ""}>Brain's built-in gyro</option>` + gyros.map(g => `<option value="${esc(g.name)}" ${d.gyro === g.name ? "selected" : ""}>${esc(g.name)}</option>`).join("");
     f += `<label>Left motor<select id="fLeft">${portOptions(d.left)}</select></label>
       <label>Right motor<select id="fRight">${portOptions(d.right)}</select></label>
       <label>Wheel size<select id="fWheel">${wopts}</select></label>
@@ -1705,7 +1800,7 @@ function portList(v) { let h = `<option value="0" ${!v ? "selected" : ""}>not on
 function renderTeacher() {
   const s = tDraft;
   tBody.innerHTML = `
-  <p class="hint">These settings describe the real robot (VEX IQ, Gen 1 parts) and the field. Students set up Devices to match. If their ports, wheel size, or motor direction don't match, the robot behaves like a real one would: a motor on the wrong port won't move. Settings are saved in this browser. Use "Copy settings code" to move them to another computer.</p>
+  <p class="hint">These settings describe the real robot (VEX IQ: Gen 2 Brain, Gen 1 motors and sensors) and the field. Students set up Devices to match. If their ports, wheel size, or motor direction don't match, the robot behaves like a real one would: a motor on the wrong port won't move. Settings are saved in this browser. Use "Copy settings code" to move them to another computer.</p>
   <fieldset><legend>Field</legend><div class="form">
     <label>Field width (mm)<input type="number" id="t_fieldW" value="${s.fieldW}" min="500" step="10"></label>
     <label>Field height (mm)<input type="number" id="t_fieldH" value="${s.fieldH}" min="500" step="10"></label>
@@ -1715,6 +1810,7 @@ function renderTeacher() {
     <label>Start Y (mm)<input type="number" id="t_startY" value="${s.startY}" step="10"></label>
     <label>Start heading (°)<input type="number" id="t_startH" value="${s.startH}" step="1"></label>
     <label class="chk"><input type="checkbox" id="t_allowPosition" ${s.allowPosition ? "checked" : ""}> Allow "position X/Y" blocks</label>
+    <label class="chk"><input type="checkbox" id="t_hideRepeatUntil" ${s.hideRepeatUntil ? "checked" : ""}> Hide the "repeat until" block (students use "while" like in C++)</label>
   </div></fieldset>
   <fieldset><legend>Robot build</legend><div class="form">
     <label>Robot length (mm)<input type="number" id="t_robotL" value="${s.robotL}" step="5"></label>
@@ -1742,7 +1838,7 @@ function renderTeacher() {
     <div class="form"><label class="full">Web app URL<input id="t_sheetUrl" value="${esc(s.sheetUrl || "")}" placeholder="https://script.google.com/macros/s/.../exec"></label></div>
     <p><button class="btn" type="button" id="tStudentLink">Copy student link</button> <span class="hint">Post this link (for example in Google Classroom) so students' browsers know where to send scores.</span></p>
   </fieldset>`;
-  document.getElementById("tCopyScript").onclick = () => textDialog("Score sheet script", "Copy all of this into Extensions › Apps Script in your Google Sheet.", SHEET_SCRIPT, null);
+  document.getElementById("tCopyScript").onclick = () => textDialog("Score sheet script", "Copy all of this into Extensions › Apps Script in your Google Sheet.", sheetScript(), null);
   document.getElementById("tStudentLink").onclick = () => {
     const u = document.getElementById("t_sheetUrl").value.trim();
     if (!validSheet(u)) { textDialog("Student link", "Paste the Web app URL first. It starts with https://script.google.com/ and ends with /exec.", "", null); return; }
@@ -1753,7 +1849,7 @@ function readTeacher() {
   const g = id => document.getElementById(id), n = id => +g(id).value;
   const s = tDraft;
   ["fieldW", "fieldH", "grid", "startX", "startY", "startH", "robotL", "robotW", "wheelTravel", "track", "gear", "motorRPM", "distanceMax"].forEach(k => { if (g("t_" + k)) s[k] = n("t_" + k); });
-  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
+  s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.hideRepeatUntil = g("t_hideRepeatUntil").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
   PORT_ROLES.forEach(([k]) => { s.ports[k] = n("p_" + k); });
   s.sheetUrl = g("t_sheetUrl").value.trim();
   s.grid = Math.max(50, s.grid); s.gear = s.gear || 1; s.fieldW = Math.max(500, s.fieldW); s.fieldH = Math.max(500, s.fieldH);
@@ -1764,14 +1860,264 @@ function applySettings(ns) {
 }
 
 /* =====================================================================
+   VEXcode IQ files (.iqblocks). VEXcode IQ uses its own block names, so
+   blocks are translated both ways: Open reads VEXcode IQ programs, and
+   Save writes a file VEXcode IQ can open (Gen 2 Brain, Gen 1 devices).
+   Blocks with no match on the other side are left out, with a note.
+   ===================================================================== */
+const IQ_NUMS = ["math_number", "math_whole_number", "math_positive_number", "math_number_string", "math_integer"];
+const ROT_IN = { deg: "degrees", rev: "turns" }, ROT_OUT = { degrees: "deg", turns: "rev" };
+const NODONTWAIT = { anddontwait_mutator: "false" }, PCT = { UNITS: "pct" };
+// [VEXcode IQ type, sim type, {IQ field/input name: sim name}, {add: fields only VEXcode has, sh: VEXcode shadow types, vals: field value maps}]
+const IQ_MAP = [
+  ["iq_events_when_started", "pg_events_when_started"],
+  ["iq_drivetrain_drive", "pg_drivetrain_drive"],
+  ["iq_drivetrain_drive_for", "pg_drivetrain_drive_for", {}, { add: NODONTWAIT }],
+  ["iq_drivetrain_turn", "pg_drivetrain_turn"],
+  ["iq_drivetrain_turn_for", "pg_drivetrain_turn_for", {}, { add: NODONTWAIT }],
+  ["iq_drivetrain_turn_to_heading", "pg_drivetrain_turn_to_heading", {}, { add: NODONTWAIT }],
+  ["iq_drivetrain_turn_to_rotation", "pg_drivetrain_turn_to_rotation", { HEADING: "ROTATION" }, { add: NODONTWAIT }],
+  ["iq_motion_stop_driving", "pg_drivetrain_stop_driving"],
+  ["iq_drivetrain_set_drive_velocity", "pg_drivetrain_set_drive_velocity", {}, { add: PCT }],
+  ["iq_drivetrain_set_turn_velocity", "pg_drivetrain_set_turn_velocity", {}, { add: PCT }],
+  ["iq_motion_spin", "iq_motor_spin", { MOTOR: "DEVICE" }],
+  ["iq_motion_spin_for", "iq_motor_spin_for", { MOTOR: "DEVICE" }, { add: NODONTWAIT, vals: { UNITS: ROT_IN } }],
+  ["iq_motion_stop_motor", "iq_motor_stop", { MOTOR: "DEVICE" }],
+  ["iq_motion_spin_to_position", "iq_motor_spin_to_position", { MOTOR: "DEVICE", AMOUNT: "POSITION" }, { add: NODONTWAIT, vals: { UNITS: ROT_IN } }],
+  ["iq_motion_set_motor_torque", "iq_motion_set_motor_torque", { MOTOR: "DEVICE" }],
+  ["iq_drivetrain_set_drive_stopping", "iq_drivetrain_set_drive_stopping"],
+  ["iq_looks_set_touchled_fade", "iq_looks_set_touchled_fade", { TOUCHLED: "DEVICE" }],
+  ["iq_looks_set_color_sensor_brightness", "iq_looks_set_color_sensor_brightness", { COLORSENSOR: "DEVICE" }, { sh: { LEVEL: "math_whole_number" } }],
+  ["iq_sensing_inertial_calibrate", "iq_sensing_inertial_calibrate"],
+  ["iq_operator_remainder", "iq_operator_remainder"],
+  ["iq_operator_function", "iq_operator_function"],
+  ["iq_sensing_pressing_touchled", "iq_touchled_pressed", { TOUCHLED: "DEVICE" }],
+  ["iq_motion_set_motor_position", "iq_motor_set_position", { MOTOR: "DEVICE", DEGS: "POSITION" }, { vals: { UNITS: ROT_IN } }],
+  ["iq_motion_set_motor_velocity", "iq_motor_set_velocity", { MOTOR: "DEVICE" }, { add: PCT }],
+  ["iq_sensing_position_of_motor", "iq_motor_position", { MOTOR: "DEVICE" }, { vals: { UNITS: ROT_IN } }],
+  ["iq_sensing_velocity_of_motor", "iq_motor_velocity", { MOTOR: "DEVICE" }, { add: PCT }],
+  ["iq_looks_set_touchled_brightness", "iq_touchled_set_brightness", { TOUCHLED: "DEVICE", VALUE: "BRIGHTNESS" }, { sh: { VALUE: "math_whole_number" } }],
+  ["iq_console_print", "pg_looks_print", { DATA: "VALUE" }, { add: { andsetcursortonextrow_mutator: "true" } }],
+  ["iq_control_wait", "pg_control_wait", { DURATION: "TIME" }, { sh: { DURATION: "math_positive_number" } }],
+  ["iq_control_repeat", "pg_control_repeat", {}, { sh: { TIMES: "math_whole_number" } }],
+  ["iq_control_forever", "pg_control_forever"],
+  ["iq_control_if_then", "pg_control_if"],
+  ["iq_control_if_then_else", "pg_control_ifelse"],
+  ["iq_control_wait_until", "pg_control_wait_until"],
+  ["iq_control_repeat_until", "pg_control_repeat_until"],
+  ["iq_control_while", "pg_control_while"],
+  ["iq_control_break", "pg_control_break"],
+  ["iq_control_stop_project", "pg_control_stop_project"],
+  ["iq_operator_not", "pg_operators_not", { OPERAND: "BOOL" }],
+  ["iq_operator_random", "pg_operators_random"],
+  ["iq_operator_round", "pg_operators_round"],
+  ["iq_sensing_pressing_bumper", "pg_sensing_bumper_pressed", { BUMPER: "DEVICE" }],
+  ["iq_sensing_distance_from", "pg_sensing_distance_from", { SONAR: "DEVICE" }],
+  ["iq_sensing_object_in_front", "pg_sensing_distance_found", { SONAR: "DEVICE" }],
+  ["iq_operator_color_detects_color", "iq_color_detects", { COLORSENSOR: "DEVICE", color: "COLORS" }],
+  ["iq_sensing_color_of", "iq_color_name", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_brightness_of", "iq_color_brightness", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_hue_of", "iq_color_hue", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_object_is_near", "iq_color_found", { COLORSENSOR: "DEVICE" }],
+  ["iq_sensing_timer_value", "pg_sensing_timer"],
+  ["iq_sensing_reset_timer", "pg_sensing_reset_timer"],
+  ["iq_variables_set_variable", "variables_set", { VARIABLE: "VAR" }, { sh: { VALUE: "math_number_string" } }],
+  ["iq_variables_change_variable", "math_change", { VARIABLE: "VAR", VALUE: "DELTA" }],
+  ["iq_variables_variable", "variables_get", { VARIABLE: "VAR" }],
+];
+const IQ_IN = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [a, { to: b, names: n, ...o }]));
+const IQ_OUT = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [b, { to: a, names: Object.fromEntries(Object.entries(n).map(([k, v]) => [v, k])),
+  add: o.add, sh: o.sh, vals: o.vals && Object.fromEntries(Object.entries(o.vals).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([x, y]) => [y, x]))])) }]));
+const MATH_OPS = { "+": "add", "-": "subtract", "*": "multiply", "/": "divide" }, CMP_OPS = { "==": "equal", "<": "less_than", ">": "greater_than" };
+const BRAIN_GYRO_NAME = "BrainInertial";
+const GYRO_IN = { iq_sensing_heading_of_gyro: ["iq_brain_heading", "iq_gyro_heading"], iq_sensing_rotation_of_gyro: ["iq_brain_rotation", "iq_gyro_rotation"],
+  iq_sensing_set_gyro_heading: ["iq_brain_set_heading", "iq_gyro_set_heading", "HEADING"], iq_sensing_set_gyro_rotation: ["iq_brain_set_rotation", "iq_gyro_set_rotation", "ROTATION"] };
+
+// Rewrites the blocks in Blockly XML text. dir "in" = VEXcode IQ -> sim, "out" = sim -> VEXcode IQ.
+function iqTranslate(xmlText, dir) {
+  const src = Blockly.utils.xml.textToDom(xmlText), doc = src.ownerDocument, left = new Map();
+  const el = (tag, attrs = {}, text) => { const e = doc.createElementNS(src.namespaceURI, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== undefined) e.textContent = text; return e; };
+  const kids = (e, tag) => [...e.children].filter(c => !tag || c.tagName === tag);
+  const field = (e, name) => { const f = kids(e, "field").find(f => f.getAttribute("name") === name); return f ? f.textContent : null; };
+  const num = (v, type = "math_number") => { const s = el("shadow", { type }); s.appendChild(el("field", { name: "NUM" }, v)); return s; };
+  const note = t => left.set(t, (left.get(t) || 0) + 1);
+
+  // work out the target type and naming for one block
+  function plan(b) {
+    const t = b.getAttribute("type");
+    if (dir === "in") {
+      if (IQ_IN[t]) return IQ_IN[t];
+      if (t === "iq_operator_math" && MATH_OPS[field(b, "MATH")]) return { to: "pg_operators_" + MATH_OPS[field(b, "MATH")], drop: ["MATH"] };
+      if (t === "iq_operator_comparison" && CMP_OPS[field(b, "COMPARISON")]) return { to: "pg_operators_" + CMP_OPS[field(b, "COMPARISON")], drop: ["COMPARISON"] };
+      if (t === "iq_operator_and_or") return { to: field(b, "CHECK") === "or" ? "pg_operators_or" : "pg_operators_and", drop: ["CHECK"], names: { OPERAND1: "BOOL1", OPERAND2: "BOOL2" } };
+      if (GYRO_IN[t]) {
+        const g = field(b, "GYRO"), [brain, dev, inp] = GYRO_IN[t], isBrain = !g || g === BRAIN_GYRO_NAME;
+        return { to: isBrain ? brain : dev, names: { GYRO: "DEVICE", ...(inp ? { VALUE: inp } : {}) }, drop: isBrain ? ["GYRO"] : [] };
+      }
+      if (t === "iq_looks_set_touchled_color") return { to: "iq_touchled_set_color", names: { TOUCHLED: "DEVICE" }, colorIn: true };
+      return null;
+    }
+    if (IQ_OUT[t]) return IQ_OUT[t];
+    const op = t.replace("pg_operators_", "");
+    const m = Object.entries(MATH_OPS).find(([, v]) => v === op); if (m) return { to: "iq_operator_math", add: { MATH: m[0] } };
+    const c = Object.entries(CMP_OPS).find(([, v]) => v === op); if (c) return { to: "iq_operator_comparison", add: { COMPARISON: c[0] }, sh: { NUM1: "math_number_string", NUM2: "math_number_string" } };
+    if (t === "pg_operators_and" || t === "pg_operators_or") return { to: "iq_operator_and_or", add: { CHECK: op }, names: { BOOL1: "OPERAND1", BOOL2: "OPERAND2" } };
+    const gyroOut = { iq_brain_heading: "iq_sensing_heading_of_gyro", iq_brain_rotation: "iq_sensing_rotation_of_gyro", iq_brain_set_heading: "iq_sensing_set_gyro_heading", iq_brain_set_rotation: "iq_sensing_set_gyro_rotation",
+      iq_gyro_heading: "iq_sensing_heading_of_gyro", iq_gyro_rotation: "iq_sensing_rotation_of_gyro", iq_gyro_set_heading: "iq_sensing_set_gyro_heading", iq_gyro_set_rotation: "iq_sensing_set_gyro_rotation" };
+    if (gyroOut[t]) return { to: gyroOut[t], names: { DEVICE: "GYRO", HEADING: "VALUE", ROTATION: "VALUE" }, add: t.startsWith("iq_brain") ? { GYRO: BRAIN_GYRO_NAME } : {} };
+    // drivetrain heading/rotation come from the Brain's gyro on a Gen 2 Brain
+    if (t === "pg_sensing_drivetrain_heading") return { to: "iq_sensing_heading_of_gyro", add: { GYRO: BRAIN_GYRO_NAME } };
+    if (t === "pg_sensing_drivetrain_rotation") return { to: "iq_sensing_rotation_of_gyro", add: { GYRO: BRAIN_GYRO_NAME } };
+    if (t === "iq_touchled_set_color") return { to: "iq_looks_set_touchled_color", names: { DEVICE: "TOUCHLED" }, colorOut: true };
+    return null;
+  }
+  // a block (or shadow) -> translated element, or null if it has no match
+  function conv(b, shType) {
+    const t = b.getAttribute("type");
+    if (t === "text") return b.cloneNode(true);
+    if (IQ_NUMS.includes(t)) {
+      const v = field(b, "NUM") ?? "0";
+      if (dir === "in" && t === "math_number_string" && v.trim() !== "" && isNaN(+v)) { const s = el(b.tagName, { type: "text" }); s.appendChild(el("field", { name: "TEXT" }, v)); return s; }
+      const s = num(v, dir === "in" ? "math_number" : shType || "math_number"); if (b.tagName === "block") { const blk = el("block", { type: s.getAttribute("type") }); blk.appendChild(s.firstChild); return blk; } return s;
+    }
+    const p = plan(b);
+    if (!p) { note(t); return null; }
+    const out = el(b.tagName, { type: p.to });
+    for (const a of ["id", "x", "y"]) if (b.hasAttribute(a)) out.setAttribute(a, b.getAttribute(a));
+    const nm = n => (p.names && p.names[n]) || n;
+    const dropIn = new Set([...(p.drop || []), ...(dir === "in" ? Object.keys(p.add || {}) : [])]);
+    if (dir === "in" && p.to.startsWith("iq_motor") && !["iq_motor_spin_for", "iq_motor_spin_to_position", "iq_motor_set_position", "iq_motor_position"].includes(p.to)) dropIn.add("UNITS");
+    if (dir === "in" && p.to.startsWith("pg_operators_round")) dropIn.add("DECIMAL");
+    for (const c of kids(b)) {
+      const name = c.getAttribute("name");
+      if (c.tagName === "field") {
+        if (dropIn.has(name)) continue;
+        const f = el("field", { name: nm(name) }, (p.vals && p.vals[name] && p.vals[name][c.textContent]) || c.textContent);
+        if (c.hasAttribute("id")) f.setAttribute("id", c.getAttribute("id"));
+        if (c.hasAttribute("variabletype")) f.setAttribute("variabletype", c.getAttribute("variabletype"));
+        out.appendChild(f);
+      } else if (c.tagName === "value") {
+        if (dropIn.has(name)) continue;
+        if (p.colorIn && name === "COLOR") { const sh = kids(c)[0]; out.appendChild(el("field", { name: "COLOR" }, (sh && field(sh, "COLOR")) || "none")); continue; }
+        const v = el("value", { name: nm(name) });
+        for (const inner of kids(c)) { const r = conv(inner, p.sh && p.sh[nm(name)]); if (r) v.appendChild(r); }
+        if (v.children.length) out.appendChild(v);
+      } else if (c.tagName === "statement") {
+        const first = chain(kids(c, "block")[0]);
+        if (first) { const s = el("statement", { name: nm(name) }); s.appendChild(first); out.appendChild(s); }
+      } else if (c.tagName === "next") {
+        if (dir === "in" && ["pg_control_break", "pg_control_stop_project", "pg_control_forever"].includes(p.to)) { note("blocks after " + p.to.replace("pg_control_", "").replace("_", " ")); continue; }
+        const n = chain(kids(c, "block")[0]);
+        if (n) { const nx = el("next"); nx.appendChild(n); out.appendChild(nx); }
+      } else if (c.tagName === "mutation" && t.startsWith("procedures_")) out.appendChild(c.cloneNode(true));
+    }
+    if (dir === "out") {
+      const afterFields = () => { const fs = kids(out, "field"); return fs.length ? fs[fs.length - 1].nextSibling : out.firstChild; };
+      for (const [k, v] of Object.entries(p.add || {})) if (!kids(out, "field").some(f => f.getAttribute("name") === k)) out.insertBefore(el("field", { name: k }, v), afterFields());
+      if (p.colorOut) { const f = kids(out, "field").find(f => f.getAttribute("name") === "COLOR"); const color = f ? f.textContent : "none"; if (f) f.remove();
+        const v = el("value", { name: "COLOR" }), s = el("shadow", { type: "iq_looks_colorlist" }); s.appendChild(el("field", { name: "COLOR" }, color)); v.appendChild(s); out.insertBefore(v, afterFields()); }
+      if (p.to === "iq_operator_round" && !kids(out, "value").some(v => v.getAttribute("name") === "DECIMAL")) { const v = el("value", { name: "DECIMAL" }); v.appendChild(num("0", "math_whole_number")); out.appendChild(v); }
+    }
+    return out;
+  }
+  // a statement chain: blocks with no match are skipped and the rest stays connected
+  function chain(b) {
+    while (b) {
+      const r = conv(b);
+      if (r) return r;
+      const nx = kids(b, "next")[0]; b = nx && kids(nx, "block")[0];
+    }
+    return null;
+  }
+  const res = el("xml");
+  for (const c of kids(src)) {
+    if (c.tagName === "variables") res.appendChild(c.cloneNode(true));
+    else if (c.tagName === "block") { const r = chain(c); if (r) { if (!r.hasAttribute("x") && c.hasAttribute("x")) { r.setAttribute("x", c.getAttribute("x")); r.setAttribute("y", c.getAttribute("y")); } res.appendChild(r); } }
+  }
+  return { xml: Blockly.utils.xml.domToText(res), left };
+}
+const leftText = left => [...left.entries()].map(([t, n]) => t.replace(/^(iq_|pg_)/, "").replace(/_/g, " ") + (n > 1 ? ` (${n})` : "")).join(", ");
+
+// devices: VEXcode IQ robotConfig <-> sim Devices
+function iqDevicesIn(cfg) {
+  const out = [];
+  for (const d of cfg || []) {
+    const p = Array.isArray(d.port) ? d.port : [d.port], s = d.setting || {};
+    const base = { name: d.name };
+    if (d.deviceType === "Drivetrain") {
+      const mm = v => (s.unit === "inches" ? 25.4 : 1) * parseFloat(v);
+      const [a, b2] = String(s.gearRatio || "1:1").split(":").map(Number);
+      out.push({ type: "drivetrain", ...base, left: p[0], right: p[1], wheelTravel: parseFloat(s.wheelSize) || KIT.wheelTravel, track: mm(s.width) || KIT.track,
+        wheelbase: mm(s.wheelbase) || KIT.wheelbase, gear: a && b2 ? +(a / b2).toFixed(3) : 1, gyro: s.gyroType === "integrated" ? "brain" : "" });
+    } else if (d.deviceType === "Motor") out.push({ type: "motor", ...base, port: p[0], reverse: s.reversed === "true" || s.reversed === true });
+    else if (d.deviceType === "Color") out.push({ type: "color", ...base, port: p[0], facing: "down", mount: "front", offset: 0 });
+    else if (d.deviceType === "Distance") out.push({ type: "distance", ...base, port: p[0], mount: "front", offset: 0 });
+    else if (d.deviceType === "Bumper") out.push({ type: "bumper", ...base, port: p[0], mount: "front", offset: 0 });
+    else if (d.deviceType === "TouchLED") out.push({ type: "touchled", ...base, port: p[0] });
+    else if (d.deviceType === "Gyro") out.push({ type: "gyro", ...base, port: p[0] });
+  }
+  return out;
+}
+function iqDevicesOut() {
+  const out = [], cls = { color: ["Color", "colorsensor"], distance: ["Distance", "sonar"], bumper: ["Bumper", "bumper"], touchled: ["TouchLED", "touchled"], gyro: ["Gyro", "gyro"] };
+  for (const d of DEVICES) {
+    if (d.type === "drivetrain") {
+      const g = d.gyro && d.gyro !== "brain" ? devByName("gyro", d.gyro) : null;
+      out.push({ port: [d.left, d.right, g ? g.port : 0], name: d.name, customName: d.name !== "Drivetrain", deviceType: "Drivetrain", deviceClass: "smartdrive",
+        setting: { type: "2-motor", wheelSize: Math.round(d.wheelTravel) + "mm", gearRatio: (d.gear || 1) === 1 ? "1:1" : `${d.gear}:1`, direction: "fwd",
+          gyroType: d.gyro === "brain" ? "integrated" : g ? "gyro" : "none", width: String(d.track), unit: "mm", wheelbase: String(d.wheelbase || KIT.wheelbase), wheelbaseUnit: "mm", xOffset: "0", yOffset: "0", thetaOffset: "0" } });
+    } else if (d.type === "motor") out.push({ port: [d.port], name: d.name, customName: d.name !== "Motor" + d.port, deviceType: "Motor", deviceClass: "motor", setting: { reversed: String(!!d.reverse), fwd: "forward", rev: "reverse" } });
+    else if (cls[d.type]) out.push({ port: [d.port], name: d.name, customName: d.name !== DEVICE_TYPES[d.type].base + d.port, deviceType: cls[d.type][0], deviceClass: cls[d.type][1], setting: {} });
+  }
+  return out;
+}
+const isIqFile = data => data && (data.platform === "IQ" || /"iq_events_when_started"|type="iq_events_/.test(data.workspace || ""));
+function openIqProject(data) {
+  const devs = iqDevicesIn(data.robotConfig);
+  const sim = data.robotFieldSim || {};
+  DEVICES = Array.isArray(sim.robotConfig) && sim.robotConfig.length ? sim.robotConfig.filter(d => KNOWN_TYPES.includes(d.type)) : devs;
+  devicesChanged();
+  const r = iqTranslate(data.workspace, "in");
+  loadXml(r.xml);
+  if (sim.level && LEVELS.some(l => l.id === sim.level)) setLevel(sim.level, true);
+  if (LEVEL === "open" && sim.customLevel) loadCustomLevel(cleanCustom(sim.customLevel));
+  stopProgram(false); devicesChanged();
+  if (r.left.size) log(`Opened a VEXcode IQ program. These blocks aren't in the sim yet, so they were left out: ${leftText(r.left)}.`, "warn");
+  else log("Opened a VEXcode IQ program.");
+  if (!sim.robotConfig) log("Check Devices: VEXcode doesn't save where sensors are mounted, so they start on the front.", "warn");
+}
+// a VEXcode IQ project file for this program (the sim's own settings ride along in robotFieldSim)
+function iqProjectJSON() {
+  const r = iqTranslate(Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws)), "out");
+  return { left: r.left, text: JSON.stringify({ mode: "Blocks", hardwareTarget: "brain", workspace: r.xml, robotConfig: iqDevicesOut(), slot: 0, platform: "IQ",
+    sdkVersion: "20230818.11.00.00", appVersion: "4.68.0", fileFormat: "1.3.0", targetBrainGen: "Second", v5SoundsEnabled: false, downloadLanguage: "python",
+    robotFieldSim: { robotConfig: DEVICES, level: LEVEL, ...(LEVEL === "open" ? { customLevel: CUSTOM } : {}) } }) };
+}
+// in the Claude artifact viewer, files go through its downloads permission (it doesn't allow .iqblocks, so .json is added)
+async function downloadText(name, text) {
+  if (window.claude && window.claude.use) {
+    const d = await window.claude.use("downloads");
+    if (!d) return "blocked";
+    try { await d.save({ filename: name + ".json", data: text }); return "renamed"; }
+    catch (e) { return e && e.code === "declined" ? "declined" : "blocked"; }
+  }
+  try {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "application/json" })); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    return "ok";
+  } catch (e) { return "blocked"; }
+}
+
+/* =====================================================================
    Save / open / misc wiring
    ===================================================================== */
 function projectJSON() {
-  return JSON.stringify({ mode: "Blocks", platform: "RobotFieldSim", robotKit: "IQ Gen 1", robotConfig: DEVICES, level: LEVEL, fieldWalls: WALLS, ...(LEVEL === "open" ? { customLevel: CUSTOM } : {}),
+  return JSON.stringify({ mode: "Blocks", platform: "RobotFieldSim", robotKit: "IQ Gen 2 Brain, Gen 1 devices", robotConfig: DEVICES, level: LEVEL, fieldWalls: WALLS, ...(LEVEL === "open" ? { customLevel: CUSTOM } : {}),
     workspace: Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws)) });
 }
 function openProject(text) {
   const data = JSON.parse(text);
+  if (isIqFile(data)) return openIqProject(data);
   if (!data.workspace) throw new Error("This file has no blocks in it.");
   loadXml(data.workspace);
   if (Array.isArray(data.robotConfig) && data.robotConfig.length && data.robotConfig[0].type) DEVICES = data.robotConfig.filter(d => KNOWN_TYPES.includes(d.type));
@@ -1794,7 +2140,12 @@ document.getElementById("tDefaults").onclick = () => { tDraft = defaultSettings(
 document.getElementById("tExport").onclick = () => { readTeacher(); textDialog("Settings code", "Copy this code and paste it into Teacher settings on another computer.", btoa(JSON.stringify(tDraft)), null); };
 document.getElementById("tImport").onclick = () => textDialog("Paste settings code", "Paste a settings code, then press Load.", "", txt => {
   tDraft = loadSettings(JSON.parse(atob(txt.trim()))); renderTeacher(); });
-document.getElementById("btnSave").onclick = () => textDialog("Save project", "Copy this text and save it as a file ending in .iqblocks, or paste it into your class assignment. Your work also saves automatically in this browser.", projectJSON(), null);
+document.getElementById("btnSave").onclick = () => {
+  const r = iqProjectJSON();
+  const left = r.left.size ? ` These blocks have no VEXcode IQ match yet, so they are not in the file: ${leftText(r.left)}.` : "";
+  textDialog("Save project", "Download this file (or copy the text into a file ending in .iqblocks). It opens here with Open, and in VEXcode IQ, so you can download it to the robot." + left + " Your work also saves automatically in this browser.",
+    r.text, null, { name: (LEVEL === "open" ? "MyProgram" : lvl().name.replace(/^\d+\.\s*/, "").replace(/(^|[^a-zA-Z0-9]+)([a-zA-Z0-9])/g, (m, a, c) => c.toUpperCase())) + ".iqblocks" });
+};
 document.getElementById("btnOpen").onclick = () => document.getElementById("fileIn").click();
 document.getElementById("fileIn").onchange = e => {
   const file = e.target.files[0]; if (!file) return;
@@ -1807,7 +2158,13 @@ document.getElementById("btnStop").onclick = () => stopProgram();
 document.getElementById("btnReset").onclick = () => { if (CHECKING) return; stopProgram(false); newWorld(); clearLog(); paintLeds(); draw(); };
 document.getElementById("showPath").onchange = draw;
 
-function textDialog(title, hint, text, onLoad) {
+function textDialog(title, hint, text, onLoad, download) {
+  const dl = document.getElementById("xDownload"); dl.hidden = !download;
+  if (download) dl.onclick = async () => {
+    const r = await downloadText(download.name, text), msg = document.getElementById("xErr");
+    msg.textContent = r === "renamed" ? `Saved as ${download.name}.json. Rename it to ${download.name} (take off ".json") before opening it in VEXcode IQ.`
+      : r === "blocked" ? "Downloads are blocked here. Use Copy instead." : "";
+  };
   document.getElementById("xTitle").textContent = title;
   document.getElementById("xHint").textContent = hint;
   const ta = document.getElementById("xText"); ta.value = text; ta.readOnly = !onLoad;
@@ -2347,7 +2704,7 @@ function paintFloor() {
     if (f.rect) { const [rx, ry, rw, rh] = f.rect; g.fillStyle = col; g.fillRect(X(rx), Y(ry + rh), rw * sc, rh * sc); }
     else if (f.line) { g.strokeStyle = col; g.lineWidth = f.width * sc; g.lineJoin = g.lineCap = "round"; g.beginPath(); f.line.forEach(([px, py], i) => i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py))); g.stroke(); }
   }
-  for (const gd of lvl().guides || []) { g.strokeStyle = "#1f6fd1"; g.lineWidth = 6; g.setLineDash([24, 16]); g.beginPath(); g.moveTo(X(gd.x1), Y(gd.y)); g.lineTo(X(gd.x2), Y(gd.y)); g.stroke(); g.setLineDash([]); }
+  for (const gd of lvl().guides || []) { g.strokeStyle = "#1f6fd1"; g.lineWidth = 6; g.setLineDash([24, 16]); g.beginPath(); guidePts(gd).forEach(([px, py], i) => i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py))); g.stroke(); g.setLineDash([]); }
   g.lineCap = g.lineJoin = "round";
   for (const tr of W.trails) { g.strokeStyle = PEN[tr.color] || "#111"; g.lineWidth = 12; g.beginPath(); tr.pts.forEach(([px, py], i) => i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py))); g.stroke(); }
   V3.floorTex.needsUpdate = true;
@@ -2540,6 +2897,7 @@ async function flushQueue() {
   LS.set("rfs.queue", left);
 }
 document.getElementById("btnSign").onclick = openSignIn;
+const sheetScript = () => SHEET_SCRIPT.replace(/var LEVEL_NAMES = \[[\s\S]*?\];/, "var LEVEL_NAMES = " + JSON.stringify(LEVELS.filter(l => CHECKS[l.id]).map(l => l.name)) + ";");
 const SHEET_SCRIPT = "// Robot Field Sim score sheet\n// Paste this into Extensions > Apps Script in a Google Sheet, run \"setup\" once,\n// then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).\n\nvar LEVEL_NAMES = [\"1. Go till touch\", \"2. Wait for touch\", \"3. Go till distance\", \"4. Stay away\", \"5. Color detection\",\n  \"6. Line tracing (oval)\", \"7. Line tracing (tricky)\", \"8. Color maze (easy)\", \"9. Color maze (medium)\", \"10. Color maze (counting)\",\n  \"11. Remote control\", \"12. Remote control 2\", \"13. Color remote control\", \"14. Color remote control 2\",\n  \"15. Pincher: move the cube\", \"16. Clawbot: up on the platform\", \"17. Sort the cubes\"];\n\nfunction setup() {\n  var ss = SpreadsheetApp.getActive();\n  var roster = ensureSheet_(ss, \"Roster\", [[\"Name\", \"Class\", \"PIN (optional)\"]]);\n  roster.setColumnWidth(1, 200);\n  ensureSheet_(ss, \"Attempts\", [[\"Time\", \"Name\", \"Class\", \"Level\", \"Score\", \"What happened\", \"Hint\", \"Program\"]]);\n  var best = ensureSheet_(ss, \"Best scores\", [[\"Name\", \"Class\"].concat(LEVEL_NAMES)]);\n  best.setColumnWidth(1, 200);\n  var range = best.getRange(2, 3, 500, LEVEL_NAMES.length);\n  best.setConditionalFormatRules([\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(4).setBackground(\"#c8ecd4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(3).setBackground(\"#eef3c4\").setRanges([range]).build(),\n    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(3).setBackground(\"#fbdcc8\").setRanges([range]).build()]);\n  var settings = ensureSheet_(ss, \"Settings\", [[\"Class code\", String(1000 + Math.floor(Math.random() * 9000))],\n    [\"\", \"Students type this code to sign in. Change it any time.\"]]);\n  settings.setColumnWidth(1, 120);\n  var extra = ss.getSheetByName(\"Sheet1\");\n  if (extra && extra.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(extra);\n}\n\nfunction ensureSheet_(ss, name, rows) {\n  var sh = ss.getSheetByName(name);\n  if (!sh) {\n    sh = ss.insertSheet(name);\n    sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);\n    sh.setFrozenRows(1);\n    sh.getRange(1, 1, 1, rows[0].length).setFontWeight(\"bold\");\n  }\n  return sh;\n}\n\nfunction sheet_(name) { return SpreadsheetApp.getActive().getSheetByName(name); }\nfunction classCode_() { return String(sheet_(\"Settings\").getRange(\"B1\").getValue()).trim(); }\nfunction roster_() {\n  return sheet_(\"Roster\").getDataRange().getValues().slice(1)\n    .filter(function (r) { return String(r[0]).trim() !== \"\"; })\n    .map(function (r) { return { name: String(r[0]).trim(), cls: String(r[1] || \"\").trim(), pin: String(r[2] || \"\").trim() }; });\n}\nfunction out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }\n\n// GET ?action=roster&code=1234 -> the names students pick from\nfunction doGet(e) {\n  var p = (e && e.parameter) || {};\n  if (String(p.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  if (p.action === \"roster\") return out_({ ok: true, students: roster_().map(function (s) { return { name: s.name, cls: s.cls, pin: s.pin !== \"\" }; }) });\n  return out_({ ok: false, error: \"Unknown request.\" });\n}\n\n// POST {action: \"signin\" | \"score\", code, name, pin, level, score, said, hint, program}\nfunction doPost(e) {\n  var d;\n  try { d = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: \"Bad request.\" }); }\n  if (String(d.code || \"\").trim() !== classCode_()) return out_({ ok: false, error: \"That class code isn't right.\" });\n  var st = roster_().filter(function (s) { return s.name === d.name; })[0];\n  if (!st) return out_({ ok: false, error: \"That name isn't on the roster.\" });\n  if (st.pin !== \"\" && st.pin !== String(d.pin || \"\").trim()) return out_({ ok: false, error: \"That PIN isn't right.\" });\n  if (d.action === \"signin\") return out_({ ok: true, name: st.name, cls: st.cls });\n  if (d.action !== \"score\") return out_({ ok: false, error: \"Unknown request.\" });\n  var score = Math.max(0, Math.min(4, Math.round(Number(d.score) || 0)));\n  var level = String(d.level || \"\").slice(0, 80);\n  var lock = LockService.getScriptLock();\n  lock.waitLock(10000);\n  try {\n    sheet_(\"Attempts\").appendRow([new Date(), st.name, st.cls, level, score, String(d.said || \"\").slice(0, 500), String(d.hint || \"\").slice(0, 500), String(d.program || \"\").slice(0, 45000)]);\n    updateBest_(st, level, score);\n  } finally { lock.releaseLock(); }\n  return out_({ ok: true });\n}\n\nfunction updateBest_(st, level, score) {\n  var sh = sheet_(\"Best scores\"), data = sh.getDataRange().getValues();\n  var col = data[0].indexOf(level);\n  if (col < 0) { col = data[0].length; sh.getRange(1, col + 1).setValue(level); }\n  var row = -1;\n  for (var i = 1; i < data.length; i++) if (data[i][0] === st.name) { row = i; break; }\n  if (row < 0) { row = data.length; sh.getRange(row + 1, 1, 1, 2).setValues([[st.name, st.cls]]); }\n  var cell = sh.getRange(row + 1, col + 1), cur = cell.getValue();\n  if (cur === \"\" || score > Number(cur)) cell.setValue(score);\n}\n";
 
 /* =====================================================================
@@ -2547,7 +2905,7 @@ const SHEET_SCRIPT = "// Robot Field Sim score sheet\n// Paste this into Extensi
    bumper presses or wall moves where the level needs them) and scores it 0-4
    with a hint. Each check returns { score, said, hint }.
    ===================================================================== */
-var CHECKING = false, FORCE_COLORS = null;   // var: newWorld() runs before this part of the file
+var CHECKING = false, FORCE_COLORS = null, FORCE_ANGLE = null;   // var: newWorld() runs before this part of the file
 const sumTo = (a, b) => Math.hypot(a, b);
 function frontAhead() { const p = toWorld(W.x, W.y, W.rot, S.robotL / 2 + 1, 0); return castRay(p.x, p.y, W.rot); }
 function downColor() { return devOf("color").find(d => d.facing === "down" && plugged(d, "color")); }
@@ -2650,6 +3008,8 @@ const CHECKS = {
     if (crossed.size) return result(2, "The robot drove over the tiles but didn't print or stop on a color.", 'Use "Color detects ___?" in an if block to print the color or stop on it.');
     return result(1, "The robot didn't reach the tiles.", "Drive forward over the colored tiles while checking the Color sensor.");
   },
+  square: () => squareCheck(1), gyro: () => squareCheck(2),
+  counter: counterCheck, wallfollow: wallCheck, find: findCheck, countlines: linesCheck, sumo: sumoCheck, myblocks: stairCheck,
   line: () => lineCheck(false),
   line2: () => lineCheck(true),
   maze: () => mazeCheck(MAZE_PATH), maze2: () => mazeCheck(MAZE2_PATH), maze3: () => mazeCheck(MAZE3_PATH),
@@ -2695,6 +3055,150 @@ const CHECKS = {
     return result(grabbed ? 1 : moved > 20 ? 1 : 0, said, "Start with one cube: grab it, read its color, and take it to the matching square.");
   },
 };
+const turnDiff = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+async function squareCheck(laps) {
+  // follow the corners in order, turning right or left, for each lap
+  const seqs = [SQUARE_CW, SQUARE_CCW].map(c => ({ pts: Array.from({ length: laps }, () => c).flat(), n: 0 }));
+  const st = await testRun({ secs: laps === 1 ? 40 : 80, settle: 1, each: () => {
+    for (const q of seqs) if (q.n < q.pts.length && Math.hypot(W.x - q.pts[q.n][0], W.y - q.pts[q.n][1]) < 80) q.n++;
+  } });
+  if (st.moved < 20) return nothing(st);
+  const q = seqs[0].n >= seqs[1].n ? seqs[0] : seqs[1], total = q.pts.length;
+  const home = Math.hypot(W.x - SQ_START[0], W.y - SQ_START[1]), off = turnDiff(W.rot, SQ_START[2]);
+  const hasGyro = !!gyroDevice() || devOf("gyro").length > 0;
+  const gyroHint = gyroDevice()
+    ? "Turn with the gyro: use \"turn to heading\" (90, 180, 270, 0), or check the heading in a loop."
+    : "Without a gyro the turns slip and come up short. In Devices, set the Drivetrain's gyro to the Brain's built-in gyro.";
+  const sides = laps === 1 ? "all 4 sides" : "both laps";
+  if (q.n === total && home <= (laps > 1 ? 100 : 60) && off <= (laps > 1 ? 10 : 8) && st.still) {
+    if (laps > 1 && !hasGyro) return result(3, "The robot made it around, but without a gyro.", "Guessing a bigger turn works on this floor only. A real robot slips a different amount each time, so turn the Brain's gyro on for the Drivetrain in Devices.");
+    return result(4, laps === 1 ? "The robot drove the square and ended where it started." : "The robot drove 2 laps and ended back at the start.");
+  }
+  if (q.n === total) return result(3, `The robot drove ${sides} but ended ${home.toFixed(0)} mm from the start, facing ${off.toFixed(0)} degrees off.`,
+    laps === 1 ? "Check that every turn is exactly 90 degrees and every side is 600 mm, and that the robot stops at the end." : gyroHint);
+  if (laps > 1 && q.n >= 4) return result(3, "The first lap was close, but the robot drifted off the square on the second lap.", gyroHint);
+  const said = `The robot reached ${q.n} of the ${total} corners.`;
+  if (q.n >= 2) return result(2, said, laps === 1 ? "Drive 600 mm, then turn 90 degrees, 4 times. A \"repeat 4\" loop around \"drive for\" and \"turn for\" does it." : gyroHint);
+  return result(1, said, "Start at the corner: drive forward 600 mm, turn right 90 degrees, and repeat that 4 times.");
+}
+async function counterCheck() {
+  const bump = devOf("bumper")[0], led = devOf("touchled")[0];
+  if (!bump || !led) return result(0, "This level needs a Bumper and a Touch LED in Devices.", "Add a Bumper and a Touch LED in Devices.");
+  const runs = [];
+  for (const n of [2, 4]) {
+    const ev = [], goT = 0.5 + 0.6 * n + 0.4; let early = 0;
+    for (let i = 0; i < n; i++) { const t = 0.5 + 0.6 * i; ev.push({ t, fn: () => { W.bumps[bump.name] = true; } }, { t: t + 0.3, fn: () => { W.bumps[bump.name] = false; } }); }
+    ev.push({ t: goT, fn: () => { W.leds[led.name].pressed = true; } }, { t: goT + 0.3, fn: () => { W.leds[led.name].pressed = false; } });
+    const st = await testRun({ secs: goT + 7, settle: 0.5, events: ev, each: s => { if (W.t < goT) early = Math.max(early, Math.hypot(W.x - s.x0, W.y - s.y0)); } });
+    if (st.noProgram) return nothing(st);
+    runs.push({ n, want: 200 * n, dist: W.y - st.y0, early });
+  }
+  newWorld();
+  if (runs.every(r => Math.abs(r.dist) < 20 && r.early < 20)) return result(0, "The robot didn't drive after the Touch LED was pressed.", "After counting, wait until the Touch LED is pressed, then drive forward for (count × 200) mm.");
+  if (runs.some(r => r.early > 20)) return result(1, "The robot started driving before the Touch LED was pressed.", "Count the presses in a loop that keeps going until the Touch LED is pressed (\"while not TouchLED pressed?\"), and drive after the loop.");
+  const ok = runs.filter(r => Math.abs(r.dist - r.want) <= 40).length;
+  const said = `The test pressed the Bumper 2 times, then 4 times. The robot drove ${runs[0].dist.toFixed(0)} mm and ${runs[1].dist.toFixed(0)} mm (goal 400 and 800 mm).`;
+  if (ok === 2) return result(4, said);
+  if (ok === 1) return result(3, said, "One count was right. Make sure the counter starts at 0 and adds exactly 1 for each press.");
+  if (runs.every(r => r.dist > r.want + 100)) return result(2, said, "The robot counted too many presses. While the Bumper is held down, the loop counts it again and again. After adding 1, wait until the Bumper is not pressed.");
+  if (Math.abs(runs[0].dist - runs[1].dist) < 30) return result(2, said, "The robot drove the same distance both times. Use your counter: drive forward for (count × 200) mm.");
+  return result(2, said, "Add 1 to a variable for each press, then drive forward for (count × 200) mm.");
+}
+async function wallCheck() {
+  if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor and mount it on the right side.");
+  let ok = 0, n = 0, fin = false, far = 0, touches = 0, was = false;
+  const st = await testRun({ secs: 60, settle: 0.5, each: () => {
+    if (fin) return;
+    if (W.x >= 650 && W.y >= 220 && W.y <= 800) { fin = true; return; }
+    if (W.blocked && !was) touches++; was = W.blocked;
+    const d = Math.min(...FOLLOW_WALLS.map(w => segDist(W.x, W.y, [w.x1, w.y1], [w.x2, w.y2]))) - S.robotW / 2 - WALL_T / 2;
+    n++; if (d >= 50 && d <= 300) ok++;
+    far = Math.max(far, W.y < 200 ? W.y + 1000 : 1200 + Math.max(0, W.x - 200));
+  } });
+  if (st.moved < 20) return nothing(st);
+  const pct = n ? Math.round(ok / n * 100) : 0;
+  if (fin && !touches && pct >= 85) return result(4, `The robot followed the wall around the corner to the green tile and stayed close ${pct}% of the time.`);
+  if (fin) return result(3, touches ? `The robot reached the green tile but touched the wall ${touches} time${touches > 1 ? "s" : ""}.` : `The robot reached the green tile but was only near the wall ${pct}% of the time.`,
+    "Steer gently: when the distance is a bit too far, turn slightly toward the wall, and when it is too close, turn slightly away. Smaller corrections and a slower speed help.");
+  if (far >= 600) return result(2, "The robot followed the wall for a while but didn't make it around the corner.", "At the corner the wall turns away, so the sensor sees far. Keep steering toward the wall (to the right) until it sees the wall again.");
+  return result(1, "The robot didn't follow the wall.", "Mount the Distance sensor on the right side. In a forever loop: if the distance is more than 150 mm, steer right; otherwise steer left.");
+}
+async function findCheck() {
+  if (!devOf("distance").length) return result(0, "There is no Distance sensor in Devices.", "Add a Distance sensor on the front.");
+  let good = 0, aimed = 0, pushed = 0, moved = 0;
+  for (const a of [120, 250]) {
+    FORCE_ANGLE = a;
+    const st = await testRun({ secs: 25, settle: 0.5 });
+    FORCE_ANGLE = null;
+    if (st.noProgram) return nothing(st);
+    moved = Math.max(moved, st.moved);
+    const c = W.cubes[0], shift = Math.hypot(c.x - 450 * Math.sin(a * DEG), c.y - 450 * Math.cos(a * DEG));
+    const L = toLocal(c.x, c.y), gap = L.f - S.robotL / 2 - CUBE / 2, facing = L.f > 0 && Math.abs(L.r) < 60;
+    if (shift > 30) pushed++;
+    else if (facing && gap >= 0 && gap <= 120 && st.still) good++;
+    else if (facing) aimed++;
+  }
+  newWorld();
+  if (moved < 20) return result(0, "The robot did not move.", 'Put your blocks under "when started".');
+  const said = `The test hid the cube in 2 places. The robot found it and stopped next to it ${good} of 2 times.`;
+  if (good === 2) return result(4, said);
+  if (good === 1) return result(3, said, "Make sure it works wherever the cube is: keep turning until the sensor sees something closer than 700 mm, then drive.");
+  if (pushed) return result(2, said + " It pushed the cube.", "Stop driving when the Distance sensor reads about 50 mm, so the robot doesn't bump the cube.");
+  if (aimed) return result(2, said + " It turned to the cube but stopped too far away.", "After you find the cube, drive forward until the distance is less than 50 mm, then stop.");
+  return result(1, said, "Turn (don't drive) until \"Distance found an object\" and the distance is less than 700 mm. Then drive toward it.");
+}
+async function linesCheck() {
+  let crossed = 0, onPrev = false;
+  const st = await testRun({ secs: 25, settle: 0.5, each: () => {
+    const c = downColor(); if (!c) return;
+    const p = mountWorld(c), on = floorAt(p.x, p.y) === "black";
+    if (on && !onPrev) crossed++; onPrev = on;
+  } });
+  if (!downColor()) return result(st.moved > 20 ? 1 : 0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  if (st.moved < 20) return nothing(st);
+  const p = mountWorld(downColor()), idx = COUNT_LINES.findIndex(y => Math.abs(p.y - y) <= 40);
+  if (!st.still) return result(1, `The robot crossed ${crossed} lines and never stopped.`, "Stop driving when your count reaches 3.");
+  if (idx === 2) return result(4, "The robot stopped on the 3rd line.");
+  if (Math.abs(p.y - COUNT_LINES[2]) <= 110) return result(3, "The robot stopped close to the 3rd line but not on it.", "Stop driving as soon as you count the 3rd line, before waiting for white.");
+  if (idx >= 0) return result(2, `The robot stopped on line ${idx + 1} instead of line 3.`, idx < 2 ? "It counted a line more than once. After adding 1, wait until the sensor sees white (bright) again before checking for the next line." : "It counted too few lines. Add 1 every time the sensor goes from white to dark, and stop when the count equals 3.");
+  return result(2, `The robot stopped between lines after crossing ${crossed}.`, "Stop right when the sensor sees the 3rd line: check the count as soon as you add 1.");
+}
+async function sumoCheck() {
+  if (!downColor()) return result(0, "There is no Color sensor pointing down.", "Add a Color sensor in Devices and set it to point down at the field.");
+  let out = false, bounces = 0, onPrev = false, path = 0, px = null, py = null;
+  const st = await testRun({ secs: 20, full: true, each: () => {
+    if (px !== null) path += Math.hypot(W.x - px, W.y - py); px = W.x; py = W.y;
+    if (Math.hypot(W.x, W.y) > RING_R) out = true;
+    const c = downColor(); if (!c) return;
+    const p = mountWorld(c), on = Math.abs(Math.hypot(p.x, p.y) - RING_R) <= 25;
+    if (on && !onPrev && !out) bounces++; onPrev = on;
+  } });
+  if (st.noProgram || st.moved < 20) return nothing(st);
+  if (out) return bounces ? result(2, `The robot saw the edge ${bounces} time${bounces > 1 ? "s" : ""} but then left the ring.`, "Every time the sensor sees the dark edge, back up first and then turn. Keep checking in a forever loop.")
+    : result(1, "The robot drove out of the ring.", "Check the Color sensor while you drive: when the brightness is low (dark), back up and turn.");
+  if (path < 1000) return result(2, "The robot stayed in the ring but hardly moved around.", "Keep driving forward between edges so the robot crosses the ring.");
+  if (st.lastMoveT < 17) return result(3, "The robot stayed in the ring but stopped moving before the 20 seconds were up.", "Put your drive and edge check in a forever loop so the robot keeps going.");
+  if (bounces < 3) return result(3, `The robot stayed in the ring but only reached the edge ${bounces} time${bounces === 1 ? "" : "s"}.`, "Drive forward until you see the edge, then back up and turn. Repeat it in a forever loop.");
+  return result(4, `The robot stayed in the ring for 20 seconds and turned back from the edge ${bounces} times.`);
+}
+async function stairCheck() {
+  const corners = STAIR_PATH.slice(1, -1); let reached = 0;
+  const st = await testRun({ secs: 60, settle: 1, each: () => { if (reached < corners.length && Math.hypot(W.x - corners[reached][0], W.y - corners[reached][1]) < 150) reached++; } });
+  if (st.moved < 20) return nothing(st);
+  const inFin = (x, y) => x >= 340 && x <= 660 && y >= 560 && y <= 880;
+  const done = reached === corners.length && inFin(W.x, W.y) && st.still;
+  const all = ws.getAllBlocks(false).filter(b => b.isEnabled());
+  const defs = all.filter(b => b.type === "procedures_defnoreturn" && b.getInputTargetBlock("STACK"));
+  const calls = all.filter(b => b.type === "procedures_callnoreturn" && defs.some(d => d.getFieldValue("NAME") === b.getFieldValue("NAME")));
+  const inLoop = calls.some(b => { for (let p = b.getSurroundParent(); p; p = p.getSurroundParent()) if (/repeat|forever|while/.test(p.type)) return true; return false; });
+  const usesMy = calls.length >= 2 || inLoop;
+  if (done && usesMy && st.bumps <= 2) return result(4, "The robot climbed the staircase using your My Block.");
+  if (done && !usesMy) return result(3, "The robot reached the top, but the program doesn't use a My Block more than once.", "Make a My Block called \"step\" with: forward 400 mm, turn right 90, forward 400 mm, turn left 90. Then use it 3 times.");
+  if (done) return result(3, `The robot reached the top but bumped the walls ${st.bumps} times.`, "Check the distances and turns inside your My Block.");
+  const said = `The robot got through ${reached} of ${corners.length} corners.`;
+  if (reached * 2 >= corners.length) return result(2, said, "Each step is forward 400 mm, turn right 90, forward 400 mm, turn left 90. After 3 steps, drive forward 400 mm more.");
+  return result(1, said, "Start with one step: forward 400 mm, turn right 90, forward 400 mm, turn left 90.");
+}
 async function lineCheck(tricky) {
   const line = lvl().floor[0].line, bins = new Set();
   let on = 0, n = 0, total = 1;
@@ -2785,7 +3289,7 @@ async function checkWork() {
   const lvAt = LEVEL;
   try { r = await fn(); }
   catch (e) { console.error(e); r = result(0, "The check could not finish: " + e.message, "Try running your program first to look for errors."); }
-  finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; }
+  finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; FORCE_ANGLE = null; }
   if (LEVEL !== lvAt) return;   // the level was changed while checking
   const prev = SCORES[LEVEL];
   SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now() };
