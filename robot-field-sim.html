@@ -132,6 +132,9 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 .score.s0, .score.s1, .score.s2 { border-color: #f0b38a; background: #fdf1e8; }
 .score.checking { color: var(--muted); }
 .score .hint2 { font-size: 12.5px; }
+.score .unlocked { font-size: 13px; font-weight: 600; color: #1d6b2f; }
+.lockhint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.lvpick { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; margin-bottom: 10px; }
 .score .saved { font-size: 12px; color: var(--muted); }
 .form1 { display: flex; flex-direction: column; gap: 10px; }
 .form1 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -278,6 +281,7 @@ function defaultSettings() {
     robotL: 230, robotW: 200,
     wheelTravel: KIT.wheelTravel, track: KIT.track, gear: 1, motorRPM: KIT.motorRPM,
     rightMirrored: true, checkPorts: true, showPortMap: true, allowPosition: true, hideRepeatUntil: false,
+    assigned: null, lockOrder: false,   // levels students see (null = all), and unlock in order at a score of 3+
     ports: { left: 1, right: 6, arm: 10, claw: 4, gyro: 5, distance: 7, color: 3, touchled: 2, bumper: 8, bumper2: 9, bumper3: 11, touchled2: 12 },
     distanceMax: 1000,
   };
@@ -1864,6 +1868,13 @@ function renderTeacher() {
     <label class="chk full"><input type="checkbox" id="t_showPortMap" ${s.showPortMap ? "checked" : ""}> Show students a map of the ports they have used in Devices, with wrong ports marked</label>
     ${PORT_ROLES.map(([k, label]) => `<label>${label}<select id="p_${k}">${portList(s.ports[k])}</select></label>`).join("")}
   </div></fieldset>
+  <fieldset><legend>Levels for students</legend>
+    <p class="hint">Pick the levels students can choose. With "unlock in order" on, each level opens after the student scores 3 or more on the one before it. Students' browsers get these choices from the student link, so copy the link again after a change.</p>
+    <p><button class="btn" type="button" id="tLvAll">All</button> <button class="btn" type="button" id="tLvNone">None</button></p>
+    <div class="form lvpick">${LEVELS.map(l => `<label class="chk"><input type="checkbox" data-lv="${l.id}" ${!s.assigned || s.assigned.includes(l.id) ? "checked" : ""}> ${esc(l.name)}</label>`).join("")}</div>
+    <div class="form"><label class="chk full"><input type="checkbox" id="t_lockOrder" ${s.lockOrder ? "checked" : ""}> Unlock in order (score 3 or more to open the next level)</label></div>
+    <p><button class="btn" type="button" id="tLevelLink">Copy student link</button> <span class="hint">Post this link (for example in Google Classroom). Opening it sets up the student's browser with these levels.</span></p>
+  </fieldset>
   <fieldset><legend>Score sheet (roster and scores)</legend>
     <p class="hint">Students sign in with a class code, and every Check my work score goes to a Google Sheet in your Drive. Student names stay in your Sheet, not on this website.</p>
     <ol class="steps">
@@ -1879,8 +1890,16 @@ function renderTeacher() {
   document.getElementById("tStudentLink").onclick = () => {
     const u = document.getElementById("t_sheetUrl").value.trim();
     if (!validSheet(u)) { textDialog("Student link", "Paste the Web app URL first. It starts with https://script.google.com/ and ends with /exec.", "", null); return; }
-    textDialog("Student link", "Give students this link. Opening it once sets up their browser to send scores to your Sheet.", location.origin + location.pathname + "?sheet=" + encodeURIComponent(u), null);
+    readTeacher();
+    textDialog("Student link", "Give students this link. Opening it once sets up their browser to send scores to your Sheet, with the levels you picked.", studentLink(tDraft), null);
   };
+  document.getElementById("tLevelLink").onclick = () => {
+    readTeacher();
+    textDialog("Student link", "Give students this link. Opening it once sets up their browser with the levels you picked" + (validSheet(tDraft.sheetUrl) ? " and your score sheet." : "."), studentLink(tDraft), null);
+  };
+  const pickAll = on => tBody.querySelectorAll("[data-lv]").forEach(c => c.checked = on);
+  document.getElementById("tLvAll").onclick = () => pickAll(true);
+  document.getElementById("tLvNone").onclick = () => pickAll(false);
 }
 function readTeacher() {
   const g = id => document.getElementById(id), n = id => +g(id).value;
@@ -1889,10 +1908,21 @@ function readTeacher() {
   s.walls = g("t_walls").checked; s.allowPosition = g("t_allowPosition").checked; s.hideRepeatUntil = g("t_hideRepeatUntil").checked; s.checkPorts = g("t_checkPorts").checked; s.rightMirrored = g("t_rightMirrored").checked; s.showPortMap = g("t_showPortMap").checked;
   PORT_ROLES.forEach(([k]) => { s.ports[k] = n("p_" + k); });
   s.sheetUrl = g("t_sheetUrl").value.trim();
+  const picked = [...tBody.querySelectorAll("[data-lv]")].filter(c => c.checked).map(c => c.dataset.lv);
+  s.assigned = picked.length && picked.length < LEVELS.length ? picked : null;
+  s.lockOrder = g("t_lockOrder").checked;
   s.grid = Math.max(50, s.grid); s.gear = s.gear || 1; s.fieldW = Math.max(500, s.fieldW); s.fieldH = Math.max(500, s.fieldH);
 }
+function studentLink(s) {
+  const q = new URLSearchParams();
+  if (validSheet(s.sheetUrl)) q.set("sheet", s.sheetUrl.trim());
+  q.set("levels", s.assigned ? s.assigned.join(",") : "all");
+  if (s.lockOrder) q.set("lock", "1");
+  return location.origin + location.pathname + "?" + q.toString();
+}
 function applySettings(ns) {
-  S = ns; LS.set("rfs.settings", S); renderSignBtn();
+  S = ns; LS.set("rfs.settings", S); renderSignBtn(); fillLevels();
+  if (!levelOpen(LEVEL)) setLevel(firstOpenLevel(), true);
   stopProgram(false); newWorld(); ws.updateToolbox(buildToolbox()); buildLeds(); draw();
 }
 
@@ -3346,10 +3376,12 @@ async function checkWork() {
   catch (e) { console.error(e); r = result(0, "The check could not finish: " + e.message, "Try running your program first to look for errors."); }
   finally { if (LEVEL === lvAt) CHECKING = false; FORCE_COLORS = null; FORCE_ANGLE = null; }
   if (LEVEL !== lvAt) return;   // the level was changed while checking
-  const prev = SCORES[LEVEL];
+  const prev = SCORES[LEVEL], wasLocked = lockedIds();
   SCORES[LEVEL] = { best: Math.max(r.score, prev ? prev.best : 0), last: r.score, at: Date.now() };
   LS.set("rfs.scores", SCORES);
-  CHECK_RESULT = { level: LEVEL, ...r };
+  const opened = levelList().find(l => wasLocked.has(l.id) && !lockedIds().has(l.id));
+  CHECK_RESULT = { level: LEVEL, ...r, unlocked: opened ? opened.name : "" };
+  if (opened) fillLevels();
   renderTask(); draw();
   if (typeof reportScore === "function") reportScore(LEVEL, r);
 }
@@ -3359,13 +3391,37 @@ function scoreCardHTML() {
   if (CHECKING) return `<div class="score checking">Checking your program…</div>`;
   const r = CHECK_RESULT && CHECK_RESULT.level === LEVEL ? CHECK_RESULT : null, best = SCORES[LEVEL];
   let h = `<div class="checkrow"><button class="btn primary" type="button" id="btnCheck">Check my work</button>${best ? `<span class="best">Best: ${best.best} / 4</span>` : ""}</div>`;
-  if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${r.hint ? `<span class="hint2">Hint: ${esc(r.hint)}</span>` : ""}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}</div>`;
+  if (r) h += `<div class="score s${r.score}"><b>Score: ${r.score} / 4</b><span>${esc(r.said)}</span>${r.hint ? `<span class="hint2">Hint: ${esc(r.hint)}</span>` : ""}${r.saved ? `<span class="saved">${esc(r.saved)}</span>` : ""}${r.unlocked ? `<span class="unlocked">Unlocked: ${esc(r.unlocked)}. Pick it from the Level menu.</span>` : ""}</div>`;
+  else if (S.lockOrder && CHECKS[LEVEL] && !(best && best.best >= 3)) { const nx = levelList()[levelList().findIndex(l => l.id === LEVEL) + 1]; if (nx && lockedIds().has(nx.id)) h += `<div class="lockhint">Score 3 or more to unlock the next level.</div>`; }
   return h;
 }
 
 /* ---- level picker ---- */
 const lvlSel = document.getElementById("level");
-lvlSel.innerHTML = LEVELS.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+(function readLevelParam() {   // the student link carries the teacher's level choices
+  try {
+    const q = new URLSearchParams(location.search), v = q.get("levels");
+    if (v === null) return;
+    const ids = v === "all" ? [] : v.split(",").filter(id => LEVELS.some(l => l.id === id));
+    S.assigned = ids.length ? ids : null; S.lockOrder = q.get("lock") === "1";
+    LS.set("rfs.settings", S);
+  } catch (e) {}
+})();
+function levelList() { return S.assigned ? LEVELS.filter(l => S.assigned.includes(l.id)) : LEVELS; }
+function lockedIds() {   // levels after the first one without a score of 3+
+  const locked = new Set(); if (!S.lockOrder) return locked;
+  let blocked = false;
+  for (const l of levelList()) { if (blocked) locked.add(l.id); else if (CHECKS[l.id] && !(SCORES[l.id] && SCORES[l.id].best >= 3)) blocked = true; }
+  return locked;
+}
+const levelOpen = id => levelList().some(l => l.id === id) && !lockedIds().has(id);
+const firstOpenLevel = () => (levelList().find(l => levelOpen(l.id)) || LEVELS[0]).id;
+function fillLevels() {
+  const locked = lockedIds();
+  lvlSel.innerHTML = levelList().map(l => `<option value="${l.id}" ${locked.has(l.id) ? "disabled" : ""}>${locked.has(l.id) ? "🔒 " : ""}${esc(l.name)}</option>`).join("");
+  lvlSel.value = LEVEL;
+}
+fillLevels();
 function renderTask() {
   const l = lvl(), box = document.getElementById("task");
   lvlSel.value = LEVEL;
@@ -3386,7 +3442,7 @@ function setLevel(id, quiet) {
   newWorld(); if (!quiet) clearLog(); paintLeds(); renderTask(); updateWallButtons(); draw();
 }
 lvlSel.onchange = () => setLevel(lvlSel.value);
-renderTask();
+if (!levelOpen(LEVEL)) setLevel(firstOpenLevel(), true); else renderTask();
 
 updateWallButtons(); buildLeds(); buildPad(); renderSignBtn();
 if (!DEVICES.length) log("Start by opening Devices and adding a Drivetrain or Motors.");
