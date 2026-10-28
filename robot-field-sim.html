@@ -909,7 +909,7 @@ const TASK_STEPS = {
   countlines: { goal: "Stop on the 3rd black line.", steps: ["Drive forward.", "Count each black line you cross.", "Stop on line 3."], tip: "Make a variable. When the sensor sees dark, add 1. Then wait until it sees white again." },
   sumo: { goal: "Stay inside the black ring for 20 seconds.", steps: ["Drive forward.", "See the black edge? Back up.", "Turn.", "Drive forward again.", "Keep doing this forever."] },
   line: { goal: "Follow the black line all the way around.", steps: ["Read the Color sensor's brightness.", "Dark? You are on the line. Turn one way.", "Bright? You are off the line. Turn the other way.", "Keep doing this forever."], tip: "Go slow." },
-  smoothline: { goal: "Follow the oval smoothly, with no wobble, in under 40 seconds.", steps: ["Use two Motors.", "Brightness 50 means you are on the edge of the line.", "Left speed = 30 + (brightness − 50) × 0.5", "Right speed = 30 − (brightness − 50) × 0.5", "Keep setting the speeds forever."], tip: "Far off the line = steer a lot. Close = steer a little. This is called proportional control." },
+  smoothline: { goal: "Follow the oval smoothly, with no wobble, in under 40 seconds.", steps: ["Use two Motors.", "Brightness 50 means you are on the edge of the line.", "Make a variable called steer. Set steer to (brightness − 50) × 0.5", "Set the left motor velocity to 30 + steer.", "Set the right motor velocity to 30 − steer.", "Keep doing this forever."], tip: "Blocks do the inside block first. So build (brightness − 50) × 0.5 first. Then put it inside 30 + ___. Far off the line = steer a lot. Close = steer a little. This is called proportional control." },
   line2: { goal: "Follow the tricky line. Stop on the green tile.", steps: ["Follow the line like on the oval.", "Go slower.", "Turn harder.", "Stop when you see green."] },
   maze: { goal: "Drive through the maze. The colors tell you where to turn.", steps: ["Green = turn left.", "Blue = turn right.", "Yellow = stop. You are done."], tip: "When you see a tile, drive 190 mm more. Turn 90 degrees. Drive off the tile before you check again." },
   myblocks: { goal: "Climb the stairs to the yellow tile.", steps: ['Make a My Block called "step".', "Inside it: forward 400 mm, turn right 90, forward 400 mm, turn left 90.", 'Use "step" 3 times.', "Then drive forward 400 mm."], tip: "My Blocks make long programs short." },
@@ -3771,7 +3771,15 @@ async function smoothCheck() {
   const said = done ? `The robot finished a lap in ${lapT.toFixed(0)} s. Wobble: ${wob.toFixed(0)} (smooth is under ${WOBBLE_OK}).` : `The robot followed ${Math.round(bins.size / 50 * 100)}% of the oval in 40 s.`;
   if (done && wob < WOBBLE_OK) return result(4, said);
   if (done) return result(3, said + " That's a wobble.", "Instead of hard left/right turns, make the steering depend on how far off you are: each wheel's speed = base ± (brightness − 50) × 0.5.");
-  return result(bins.size >= 25 ? 2 : 1, said, "Use two Motors. In a forever loop, set the left motor velocity to 30 + (brightness − 50) × 0.5 and the right one to 30 − (brightness − 50) × 0.5, and keep both spinning.");
+  if (timesOutside()) return result(bins.size >= 25 ? 2 : 1, said, 'The "× 0.5" block is on the outside, so it also cuts the 30 in half. Put "(brightness − 50) × 0.5" inside the "30 + ___" block. A variable called steer makes this easier.');
+  return result(bins.size >= 25 ? 2 : 1, said, "Use two Motors. In a forever loop, set steer to (brightness − 50) × 0.5. Set the left motor velocity to 30 + steer and the right one to 30 − steer. Keep both spinning.");
+}
+// a "×" block with "base ± brightness" inside it: (30 + (brightness − 50)) × 0.5 instead of 30 + (brightness − 50) × 0.5
+function timesOutside() {
+  const PW = progWs(); if (!PW) return false;
+  return PW.getAllBlocks(false).some(b => b.type === "pg_operators_multiply" && [b.getInputTargetBlock("NUM1"), b.getInputTargetBlock("NUM2")]
+    .some(c => c && /^pg_operators_(add|subtract)$/.test(c.type) && c.getDescendants(false).some(d => d.type === "iq_color_brightness")
+      && [c.getInputTargetBlock("NUM1"), c.getInputTargetBlock("NUM2")].some(n => n && /^math_/.test(n.type))));
 }
 const turnDiff = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
 async function squareCheck(laps) {
@@ -4042,7 +4050,7 @@ const PLANS = {
   timeout: ["Drive forward.", "Wait until (distance < 150 mm) OR (timer > 4 seconds).", "Stop driving."],
   garage: ["Drive forward.", "Wait until the distance is less than 200 mm. Stop driving.", "Turn left 90 degrees.", "Drive forward.", "Wait until the distance is less than 100 mm. Stop driving."],
   patrol: ["Drive forward.", "Forever:", "  if the distance is less than 300 mm:", "    turn right 90 degrees", "    drive forward"],
-  smoothline: ["Spin both Motors forward.", "Forever:", "  error = brightness − 50", "  set left velocity to 30 + error × 0.5", "  set right velocity to 30 − error × 0.5", "If it turns the wrong way, swap the + and −."],
+  smoothline: ["Spin both Motors forward.", "Forever:", "  set steer to (brightness − 50) × 0.5", "  set left velocity to 30 + steer", "  set right velocity to 30 − steer", "If it turns the wrong way, swap the + and −."],
   skills: ["Pick the 2 cubes closest to each other first.", "For each cube: drive to it, push or carry it into its color zone, back away.", "Use the gyro for exact turns, and the Distance sensor to line up.", "Save the last 8 seconds to drive back to the green square."],
   sort: ["For each cube:", "  grab it", "  read its color with the Color sensor", "  if red: carry it to the red square, else carry it to the blue square", "  let go and come back"],
 };
