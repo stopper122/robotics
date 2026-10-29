@@ -180,7 +180,8 @@ textarea { width: 100%; min-height: 140px; font: 12px var(--mono); border: 1px s
 ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
 .led.bump button { border-radius: 6px; background: #d23a2f; border-color: #a52a21; }
 .led.bump button.down { background: #8f2219; }
-#field3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 6px; }
+#field3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 6px; touch-action: none; cursor: grab; }
+.viewhint { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; pointer-events: none; }
 .views { display: flex; gap: 0; }
 .views .btn { border-radius: 0; margin-left: -1px; }
 .views .btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
@@ -293,10 +294,11 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
         <button class="btn" type="button" data-view="top" aria-pressed="true">Top</button>
         <button class="btn" type="button" data-view="chase" aria-pressed="false">Behind robot</button>
         <button class="btn" type="button" data-view="field3d" aria-pressed="false">3D field</button>
+        <button class="btn" type="button" id="btnResetView" hidden title="Put the 3D camera back where it started">⟲ Reset view</button>
         <button class="btn" type="button" id="btnBig" aria-pressed="false" title="Make the field as big as the screen allows">⤢ Bigger field</button>
         <button class="btn" type="button" id="btnPop" aria-pressed="false" title="Float the field over the blocks, so you can see your code and the robot at the same time">⧉ Pop out</button>
       </div>
-      <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas><canvas id="field3d" hidden aria-label="3D field view"></canvas></div>
+      <div class="fieldwrap"><canvas id="field" aria-label="Field view"></canvas><canvas id="field3d" hidden aria-label="3D field view. Drag to look around. Scroll to zoom."></canvas><div class="viewhint" id="viewHint" hidden>Drag to look around. Scroll to zoom. Right-drag to slide.</div></div>
       <div class="controls">
         <button class="btn" id="btnWalls" type="button">Edit field</button>
         <button class="btn" id="btnDelWall" type="button" hidden>Delete</button>
@@ -3437,6 +3439,9 @@ function setView(mode) {
   V3.mode = mode;
   document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === mode)));
   cv3.hidden = mode === "top";
+  const rv = document.getElementById("btnResetView"), vh = document.getElementById("viewHint");
+  if (rv) rv.hidden = mode === "top";
+  if (vh) vh.hidden = mode === "top";
   if (mode !== "top" && !V3.ready) { load3d(); return; }
   V3.cam = null; draw();
 }
@@ -3599,10 +3604,73 @@ function render3d() {
   }
   if (!V3.cam || !RUN) V3.cam = { pos: pos.clone(), look: look.clone() };
   else { V3.cam.pos.lerp(pos, 0.15); V3.cam.look.lerp(look, 0.2); }
-  V3.camera.position.copy(V3.cam.pos); V3.camera.lookAt(V3.cam.look);
+  // the student's own drag / zoom / slide, added on top of the normal camera
+  const o = orbitOf(V3.mode), tgt = V3.cam.look.clone().add(new T.Vector3(o.px, 0, o.pz));
+  const sph = new T.Spherical().setFromVector3(V3.cam.pos.clone().sub(V3.cam.look));
+  sph.theta += o.yaw;
+  sph.phi = Math.min(Math.PI / 2 - 0.03, Math.max(0.05, sph.phi + o.pitch));
+  sph.radius *= o.zoom;
+  V3.camera.position.copy(tgt).add(new T.Vector3().setFromSpherical(sph));
+  if (V3.camera.position.y < 30) V3.camera.position.y = 30;
+  V3.camera.lookAt(tgt);
   V3.renderer.render(V3.scene, V3.camera);
 }
 document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
+/* Drag the 3D view to look around. Right-drag, Shift-drag or two fingers slides it. Scroll or pinch zooms. */
+function orbitOf(mode) {
+  V3.orbit = V3.orbit || {};
+  return V3.orbit[mode] || (V3.orbit[mode] = { yaw: 0, pitch: 0, zoom: 1, px: 0, pz: 0 });
+}
+function resetOrbit() { if (V3.orbit) delete V3.orbit[V3.mode]; if (V3.ready) render3d(); }
+(function () {
+  const pts = new Map(); let last = null, slide = false;
+  const redraw = () => { if (V3.ready && V3.mode !== "top") render3d(); };
+  const zoomBy = f => { const o = orbitOf(V3.mode); o.zoom = Math.min(3, Math.max(0.15, o.zoom * f)); redraw(); };
+  const slideBy = (dx, dy) => {
+    const o = orbitOf(V3.mode), span = Math.max(S.fieldW, S.fieldH);
+    const k = span * 1.4 * o.zoom / Math.max(200, cv3.clientHeight);
+    const y = V3.camera ? Math.atan2(V3.camera.position.x - (V3.cam ? V3.cam.look.x + o.px : 0), V3.camera.position.z - (V3.cam ? V3.cam.look.z + o.pz : 0)) : 0;
+    const c = Math.cos(y), s = Math.sin(y);
+    o.px -= (dx * c + dy * s) * k; o.pz -= (-dx * s + dy * c) * k;
+    o.px = Math.max(-span, Math.min(span, o.px)); o.pz = Math.max(-span, Math.min(span, o.pz));
+    redraw();
+  };
+  const mid = () => { const a = [...pts.values()]; return { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2, d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) }; };
+  cv3.addEventListener("pointerdown", e => {
+    cv3.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    slide = e.button === 2 || e.shiftKey;
+    last = pts.size === 2 ? mid() : { x: e.clientX, y: e.clientY };
+    cv3.style.cursor = "grabbing";
+  });
+  cv3.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) {
+      const m = mid();
+      if (last && last.d) { zoomBy(last.d / Math.max(1, m.d)); slideBy(m.x - last.x, m.y - last.y); }
+      last = m; return;
+    }
+    if (!last) return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y; last = { x: e.clientX, y: e.clientY };
+    if (slide || e.shiftKey) { slideBy(dx, dy); return; }
+    const o = orbitOf(V3.mode);
+    o.yaw -= dx * 0.006;
+    o.pitch = Math.max(-1.5, Math.min(1.5, o.pitch - dy * 0.006));
+    redraw();
+  });
+  const up = e => {
+    pts.delete(e.pointerId);
+    last = pts.size === 1 ? (() => { const p = [...pts.values()][0]; return { x: p.x, y: p.y }; })() : null;
+    if (!pts.size) cv3.style.cursor = "";
+  };
+  cv3.addEventListener("pointerup", up); cv3.addEventListener("pointercancel", up);
+  cv3.addEventListener("wheel", e => { e.preventDefault(); zoomBy(Math.exp(e.deltaY * 0.0015)); }, { passive: false });
+  cv3.addEventListener("contextmenu", e => e.preventDefault());
+  cv3.addEventListener("dblclick", resetOrbit);
+  const rb = document.getElementById("btnResetView");
+  if (rb) rb.onclick = resetOrbit;
+})();
 
 /* =====================================================================
    Class sign-in and score saving to the teacher's Google Sheet.
