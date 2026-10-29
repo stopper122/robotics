@@ -204,8 +204,10 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 #cppText { background: transparent; color: transparent; caret-color: #fff; border: 0; outline: none; resize: none; overflow: auto; }
 #cppText::selection { background: rgba(76, 151, 255, .45); color: transparent; }
 .tk { color: #c792ea; } .tn { color: #f78c6c; } .ts { color: #c3e88d; } .tc { color: #697098; font-style: italic; } .tp { color: #89ddff; } .td { color: #82aaff; } .tf { color: #ffcb6b; }
-.cppsnips { width: 250px; flex: none; overflow: auto; background: #f5f7fa; border-left: 1px solid var(--line); padding: 8px; font-size: 13px; }
-.cppsnips[hidden] { display: none; }
+.cppsnips { width: 260px; flex: none; overflow: auto; background: #f5f7fa; padding: 8px; font-size: 13px; }
+.cppsnips[hidden], .cppsnipsplit[hidden] { display: none; }
+.cppsnipsplit { width: 7px; flex: none; cursor: col-resize; background: #d5dbe5; border-left: 1px solid var(--line); border-right: 1px solid #11141a; touch-action: none; }
+.cppsnipsplit:hover, .cppsnipsplit.drag, .cppsnipsplit:focus-visible { background: #4C97FF; outline: none; }
 .cppac { position: absolute; z-index: 5; min-width: 220px; max-width: 460px; background: #fff; color: #1f2633; border: 1px solid #4C97FF; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.35); padding: 3px; font: 13px/1.35 var(--mono, monospace); max-height: 260px; overflow-y: auto; }
 .cppac[hidden] { display: none; }
 .cppac .acrow { display: flex; gap: 12px; justify-content: space-between; padding: 4px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
@@ -258,10 +260,11 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
   <div class="main">
     <div id="blockly"></div>
     <section id="cppPane" hidden aria-label="C++ program">
-      <div class="cppbar"><button class="btn small" type="button" id="cppFromBlocks" title="Turn your blocks program into C++">Start from my blocks</button><button class="btn small" type="button" id="cppNew">New</button><span class="sp"></span><button class="btn small" type="button" id="cppSnipToggle" title="Show or hide a list of commands">Command list</button></div>
+      <div class="cppbar"><button class="btn small" type="button" id="cppFromBlocks" title="Turn your blocks program into C++">Start from my blocks</button><button class="btn small" type="button" id="cppNew">New</button><span class="sp"></span></div>
       <div class="cppbody">
-        <div class="cpped"><div class="cppgut"><div id="cppGutter"></div></div><div class="cppwrap"><pre id="cppHi" aria-hidden="true"></pre><textarea id="cppText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="C++ code"></textarea></div></div>
         <div class="cppsnips" id="cppSnips" hidden></div>
+        <div class="cppsnipsplit" id="cppSnipSplit" role="separator" aria-orientation="vertical" aria-label="Drag to make the command list wider or narrower" title="Drag to make the command list wider or narrower" tabindex="0" hidden></div>
+        <div class="cpped"><div class="cppgut"><div id="cppGutter"></div></div><div class="cppwrap"><pre id="cppHi" aria-hidden="true"></pre><textarea id="cppText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="C++ code"></textarea></div></div>
       </div>
       <div class="cppstatus" id="cppStatus"></div>
     </section>
@@ -5295,6 +5298,7 @@ function allowedModes() {
   return m.length ? m : ["blocks"];
 }
 let MODE = "blocks";
+const editorMode = () => MODE === "text" || MODE === "cpp";   // both use the code editor; Text blocks adds the command list
 const CPP_START = '#include "vex.h"\nusing namespace vex;\n\nint main() {\n  vexcodeInit();\n  \n}\n';
 let CPP_TEXT = LS.get("rfs.cpp", "");
 
@@ -5324,9 +5328,9 @@ function cppExamples() {
 buildToolbox = (orig => function () {
   const tb = orig();
   // Switch blocks (C++ typed inside a block): always in "Text blocks" mode, and on any page when the teacher turns them on
-  if (MODE === "text" || S.switchBlocks) {
+  if (S.switchBlocks) {
     const ex = cppExamples(), F = v => ({ CODE: v });
-    tb.contents[MODE === "text" ? "unshift" : "push"]({ kind: "category", name: "Switch", colour: "#2f3542", contents: [
+    tb.contents.push({ kind: "category", name: "Switch", colour: "#2f3542", contents: [
       { kind: "label", text: "Type C++ inside these blocks. Right-click a normal block to turn it into C++." },
       { kind: "block", type: "cpp_stmt", fields: F(ex.stmt) },
       { kind: "block", type: "cpp_stmt", fields: F("float count = 0;") },
@@ -5352,7 +5356,7 @@ try {
   Blockly.ContextMenuRegistry.registry.register({
     id: "rfsToCpp", scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK, weight: 5,
     displayText: () => "Turn into C++",
-    preconditionFn: s => (MODE === "text" || S.switchBlocks) && s.block && !s.block.type.startsWith("cpp_") && !HAT_TYPES.includes(s.block.type) && !s.block.type.startsWith("procedures_def") && !s.block.isShadow() ? "enabled" : "hidden",
+    preconditionFn: s => S.switchBlocks && s.block && !s.block.type.startsWith("cpp_") && !HAT_TYPES.includes(s.block.type) && !s.block.type.startsWith("procedures_def") && !s.block.isShadow() ? "enabled" : "hidden",
     callback: s => turnIntoCpp(s.block),
   });
 } catch (e) { /* already registered */ }
@@ -5390,7 +5394,7 @@ function markBlockError(e) {
 }
 function clearBlockErrors() { ws.getAllBlocks(false).forEach(b => { if (b.type.startsWith("cpp_") && b.warning) b.setWarningText(null); }); }
 function cppProgWs() {
-  if (MODE === "cpp") {
+  if (editorMode()) {
     try {
       const xml = CPP.compileProgram(CPP_TEXT || "");
       const hw = new Blockly.Workspace();
@@ -5417,7 +5421,7 @@ function cppProgWs() {
   }
 }
 function cppShowCurrent(ids) {
-  if (MODE !== "cpp") return false;
+  if (!editorMode()) return false;
   const lines = new Set(ids.map(id => +(String(id).match(/^L(\d+)_/) || [])[1]).filter(Boolean));
   cppEd.setRunning(lines);
   return true;
@@ -5461,7 +5465,7 @@ const cppEd = (() => {
   function check() {
     clearTimeout(checkT);
     checkT = setTimeout(() => {
-      if (MODE !== "cpp") return;
+      if (!editorMode()) return;
       try { CPP.compileProgram(ta.value); setError(null); status.className = "cppstatus ok"; status.textContent = "✓ The sim can run this."; }
       catch (e) { if (e instanceof CPP.CppError) setError(e); else { status.className = "cppstatus bad"; status.textContent = e.message; } }
     }, 450);
@@ -5481,7 +5485,12 @@ const cppEd = (() => {
   }
   function setText(t) { ta.value = t; CPP_TEXT = t; LS.set("rfs.cpp", t); render(); check(); }
   function insert(text) {
-    const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    let s = ta.selectionStart, e = ta.selectionEnd; const v = ta.value;
+    if (s === e && v.slice(s).trim() === "" && v.lastIndexOf("}") >= 0) {   // cursor after the program: add it at the end of main instead
+      const ls = v.lastIndexOf("\n", v.lastIndexOf("}") - 1) + 1;
+      s = e = Math.max(0, ls - 1);
+    }
+    ta.selectionStart = s; ta.selectionEnd = e;
     const lineStart = v.lastIndexOf("\n", s - 1) + 1, indent = (v.slice(lineStart, s).match(/^\s*/) || [""])[0];
     const onlySpace = v.slice(lineStart, s).trim() === "";
     let t = text.split("\n").map((l, i) => i ? indent + l : l).join("\n");
@@ -5613,8 +5622,9 @@ function setMode(m, quiet) {
   if (RUN) stopProgram();
   MODE = m; LS.set("rfs.codemode", m);
   document.querySelectorAll("#modeBar [data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
-  const cpp = m === "cpp";
+  const cpp = m === "cpp" || m === "text";
   document.getElementById("blockly").hidden = cpp;
+  document.getElementById("cppSnips").hidden = document.getElementById("cppSnipSplit").hidden = m !== "text";
   cppEd.pane.hidden = !cpp;
   document.getElementById("btnCode").hidden = cpp;
   if (cpp) {
@@ -5625,7 +5635,7 @@ function setMode(m, quiet) {
     ws.updateToolbox(buildToolbox());
     setTimeout(() => Blockly.svgResize(ws), 0);
   }
-  if (!quiet) log(m === "cpp" ? "C++ mode: type your program. The list on the right has the commands the sim knows." : m === "text" ? 'Text blocks: open the "Switch" category, or right-click a block and pick "Turn into C++".' : "Blocks mode.");
+  if (!quiet) log(m === "cpp" ? "C++ mode: type your program. A list of commands pops up as you type." : m === "text" ? "Text blocks: click a command on the left to add it, or drag it into your code." : "Blocks mode.");
 }
 (function setupModes() {
   if (!BETA) return;
@@ -5650,7 +5660,20 @@ function setMode(m, quiet) {
     cppEd.setText(genCode("cpp"));
   };
   document.getElementById("cppNew").onclick = () => { if (confirm("Start over with an empty program?")) cppEd.setText(CPP_START); };
-  document.getElementById("cppSnipToggle").onclick = () => { const s = document.getElementById("cppSnips"); s.hidden = !s.hidden; };
+  // drag the edge of the command list to make it wider or narrower
+  (function snipResize() {
+    const box = document.getElementById("cppSnips"), grip = document.getElementById("cppSnipSplit");
+    const setW = w => { w = Math.max(150, Math.min(w, box.parentElement.clientWidth * 0.7 || w)); box.style.width = w + "px"; return w; };
+    const saved = LS.get("rfs.snipw", 0); if (saved) box.style.width = saved + "px";
+    grip.addEventListener("pointerdown", e => {
+      e.preventDefault(); grip.setPointerCapture(e.pointerId); grip.classList.add("drag");
+      const x0 = e.clientX, w0 = box.getBoundingClientRect().width;
+      const mv = ev => setW(w0 + ev.clientX - x0);
+      const up = ev => { grip.releasePointerCapture(e.pointerId); grip.classList.remove("drag"); grip.removeEventListener("pointermove", mv); grip.removeEventListener("pointerup", up); LS.set("rfs.snipw", Math.round(box.getBoundingClientRect().width)); };
+      grip.addEventListener("pointermove", mv); grip.addEventListener("pointerup", up);
+    });
+    grip.addEventListener("keydown", e => { if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); LS.set("rfs.snipw", Math.round(setW(box.getBoundingClientRect().width + (e.key === "ArrowRight" ? 30 : -30)))); } });
+  })();
   MODE = allowedModes().includes(LS.get("rfs.codemode", "blocks")) ? LS.get("rfs.codemode", "blocks") : allowedModes()[0];
   setMode(MODE, true);
   draw();
@@ -5659,25 +5682,26 @@ function setMode(m, quiet) {
 /* saving and opening in C++ mode, and scores carry the C++ */
 projectJSON = (orig => function () {
   if (!BETA) return orig();
-  const j = JSON.parse(orig()); if (MODE === "cpp") j.codeMode = "cpp";
+  const j = JSON.parse(orig()); if (editorMode()) j.codeMode = MODE;
   if (CPP_TEXT.trim() && CPP_TEXT.trim() !== CPP_START.trim()) j.cpp = CPP_TEXT;
   return JSON.stringify(j);
 })(projectJSON);
 openProject = (orig => function (text) {
   const t = String(text).trim();
   if (BETA && !t.startsWith("{")) {   // plain C++ text
-    if (!allowedModes().includes("cpp")) throw new Error("C++ isn't turned on for you.");
-    cppEd.setText(String(text)); setMode("cpp", true); return;
+    const em = ["cpp", "text"].find(x => allowedModes().includes(x));
+    if (!em) throw new Error("C++ isn't turned on for you.");
+    cppEd.setText(String(text)); setMode(MODE === "text" || MODE === "cpp" ? MODE : em, true); return;
   }
   const data = JSON.parse(text);
   const r = orig(text);
-  if (BETA && data && typeof data.cpp === "string") { cppEd.setText(data.cpp); if (data.codeMode === "cpp" && allowedModes().includes("cpp")) setMode("cpp", true); }
+  if (BETA && data && typeof data.cpp === "string") { cppEd.setText(data.cpp); const em = [data.codeMode, "cpp", "text"].find(x => (x === "cpp" || x === "text") && allowedModes().includes(x)); if ((data.codeMode === "cpp" || data.codeMode === "text") && em) setMode(editorMode() ? MODE : em, true); }
   return r;
 })(openProject);
 (function hookSave() {
   const btn = document.getElementById("btnSave"), orig = btn.onclick;
   btn.onclick = () => {
-    if (!BETA || MODE !== "cpp") return orig();
+    if (!BETA || !editorMode()) return orig();
     textDialog("Save C++", "Download this file, or copy the code into main.cpp in a VEXcode IQ C++ project. It opens here with Open.", CPP_TEXT, null,
       { program: LEVEL === "open" ? "MyProgram" : camel(lvl().name.replace(/^\d+\w?\.\s*/, "")), ext: ".cpp" });
   };
