@@ -899,9 +899,9 @@ const LEVELS = [
     floor: [tile(700, 700, "green"), tile(200, 700, "green"), tile(200, -200, "blue"), tile(-300, -200, "green"), tile(-300, 700, "blue"), tile(-700, 700, "blue"), tile(-700, -500, "yellow", 300)],
     task: "The colors change meaning! For the first 3 tiles, green = turn left and blue = turn right. From the 4th tile on they swap: green = turn right and blue = turn left. Yellow = finish. Tip: make a variable that counts the tiles you have turned on.", needs: "Drivetrain, Color sensor pointing down" },
   { id: "rc1", name: "Remote control", start: [0, -200, 0], walls: [],
-    task: "Use two Bumpers as a remote. Hold the left one: turn left. Hold the right one: turn right. Hold both: drive forward. Hold nothing: stop. Tip: put it in a forever loop and check both together first. Hold the Z and X keys (or the buttons below) to press them.", needs: "Drivetrain, 2 Bumpers" },
+    task: "Use two Bumpers as a remote. Hold the left one: turn left. Hold the right one: turn right. Hold both: drive forward. Hold nothing: stop. Tip: put it in a forever loop and check both together first. Hold the Z and X keys (or the buttons below) to press them.", needs: "2 Motors (left and right), 2 Bumpers" },
   { id: "rc2", name: "Remote control 2", start: [0, -200, 0], walls: [],
-    task: "Add a third Bumper for backwards. Hold it with the left one: back up turning left. With the right one: back up turning right. Alone: drive straight backwards. Everything from Remote control 1 still works. Keys: Z, X, C.", needs: "Drivetrain, 3 Bumpers" },
+    task: "Add a third Bumper for backwards. Hold it with the left one: back up turning left. With the right one: back up turning right. Alone: drive straight backwards. Everything from Remote control 1 still works. Keys: Z, X, C.", needs: "2 Motors (left and right), 3 Bumpers" },
   { id: "crc1", name: "Color remote control", start: [0, -200, 0], walls: [],
     task: "Remote control 1, but with two single Motors and a Touch LED for each motor. When a motor drives forward its LED is green. When it is stopped its LED is red. The LEDs show on the back of the robot and below the field.", needs: "LeftMotor and RightMotor (or a Drivetrain), 2 Bumpers, 2 Touch LEDs" },
   { id: "crc2", name: "Color remote control 2", start: [0, -200, 0], walls: [],
@@ -946,7 +946,14 @@ const FIXES = [
     starter: () => XB(`<block type="pg_drivetrain_turn_for"><field name="TURNDIRECTION">right</field><value name="AMOUNT">${XN(120)}</value><next><block type="pg_drivetrain_drive"><field name="DIRECTION">fwd</field><next><block type="pg_control_wait_until"><value name="CONDITION"><block type="pg_operators_less_than"><value name="NUM1"><block type="pg_sensing_distance_from"><field name="DEVICE">${dname("distance", 0, 7)}</field><field name="UNITS">mm</field></block></value><value name="NUM2">${XN(50)}</value></block></value><next><block type="pg_drivetrain_stop_driving"></block></next></block></next></block></next></block>`) },
   { before: "rc1", id: "fixifs", name: "Fix it: the fighting if blocks",
     task: "This remote should drive forward when you hold both Bumpers, but it turns instead. Load the broken program, hold both Bumpers (Z and X), and Step through it to see which block wins. Then fix it.",
-    starter: () => XB(`<block type="pg_control_forever"><statement name="SUBSTACK"><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_and"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_drive"><field name="DIRECTION">fwd</field></block></statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(0, 8)}</value><statement name="SUBSTACK"><block type="pg_drivetrain_turn"><field name="TURNDIRECTION">left</field></block></statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(1, 9)}</value><statement name="SUBSTACK"><block type="pg_drivetrain_turn"><field name="TURNDIRECTION">right</field></block></statement><next><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_not"><value name="BOOL"><block type="pg_operators_or"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value></block></value><statement name="SUBSTACK"><block type="pg_drivetrain_stop_driving"></block></statement></block></next></block></next></block></next></block></statement></block>`) },
+    starter: () => {
+      const mot = port => (devOf("motor").find(m => m.port === port) || {}).name || "Motor" + port;
+      const spin = (port, dir) => `<block type="iq_motor_spin"><field name="DEVICE">${mot(port)}</field><field name="DIRECTION">${dir}</field>`;
+      const stop = port => `<block type="iq_motor_stop"><field name="DEVICE">${mot(port)}</field>`;
+      const two = (a, b) => `${a}<next>${b}</block></next></block>`;
+      const L = S.ports.left, R = S.ports.right;
+      return XB(`<block type="pg_control_forever"><statement name="SUBSTACK"><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_and"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value><statement name="SUBSTACK">${two(spin(L, "fwd"), spin(R, "fwd"))}</statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(0, 8)}</value><statement name="SUBSTACK">${two(stop(L), spin(R, "fwd"))}</statement><next><block type="pg_control_if"><value name="CONDITION">${XBUMP(1, 9)}</value><statement name="SUBSTACK">${two(spin(L, "fwd"), stop(R))}</statement><next><block type="pg_control_if"><value name="CONDITION"><block type="pg_operators_not"><value name="BOOL"><block type="pg_operators_or"><value name="BOOL1">${XBUMP(0, 8)}</value><value name="BOOL2">${XBUMP(1, 9)}</value></block></value></block></value><statement name="SUBSTACK">${two(stop(L), stop(R))}</statement></block></next></block></next></block></next></block></statement></block>`);
+    } },
 ];
 /* more practice levels, numbered as sub-levels (1b, 5c, ...) for the same reason */
 const HEX_CW = [[0, -100], [260, 50], [520, -100], [520, -400], [260, -550], [0, -400]];
@@ -1010,11 +1017,11 @@ const TASK_STEPS = {
   myblocks: { goal: "Climb the stairs to the yellow tile.", steps: ['Make a My Block called "step".', "Inside it: forward 400 mm, turn right 90, forward 400 mm, turn left 90.", 'Use "step" 3 times.', "Then drive forward 400 mm."], tip: "My Blocks make long programs short." },
   maze2: { goal: "Drive through a longer maze. Same color rules.", steps: ["Green = turn left.", "Blue = turn right.", "Yellow = stop."] },
   maze3: { goal: "Drive through the maze. The colors change after 3 tiles!", steps: ["Tiles 1, 2 and 3: green = left, blue = right.", "Tile 4 and after: green = right, blue = left.", "Yellow = stop."], tip: "Make a variable to count the tiles." },
-  rc1: { goal: "Use {B1} and {B2} as a remote control.", steps: ["{B1} pressed and {B2} pressed: drive forward.", "Only {B1} pressed: turn left.", "Only {B2} pressed: turn right.", "Nothing pressed: stop driving.", "Keep checking forever."], tip: 'Use "if / else if / else" inside a forever loop. Check "{B1} pressed and {B2} pressed" first.', keys: "{K1} key = {B1}. {K2} key = {B2}. You can also hold their buttons below the field." },
-  fixifs: { goal: "Fix the broken remote. Pressing {B1} and {B2} together should drive forward.", steps: ["What the program should do: {B1} and {B2} pressed = drive forward. Only {B1} = turn left. Only {B2} = turn right. Nothing pressed = stop.", 'Click "Load the broken program". Click Start.', "Hold the {K1} and {K2} keys to press {B1} and {B2}. The robot turns instead of driving forward.", "Keep holding both keys and click Step a few times. Watch which if block runs last. The last one wins.", 'Change the if blocks to one "if / else if / else". Put "{B1} pressed and {B2} pressed" first.'], keys: "{K1} key = {B1}. {K2} key = {B2}." },
-  rc2: { goal: "Add {B3} to drive backward.", steps: ["{B3} and {B1} pressed: turn left.", "{B3} and {B2} pressed: turn right.", "Only {B3} pressed: drive reverse.", "Everything from Remote control 1 still works."], tip: "A Drivetrain can do only one thing at a time: drive or turn. With 2 Motors, you can back up while turning (one motor reverse, one stopped).", keys: "{K1} key = {B1}. {K2} key = {B2}. {K3} key = {B3}." },
-  crc1: { goal: "Remote control 1, with lights.", steps: ["{LED1} shows {ML}. {LED2} shows {MR}.", "Motor going forward: its LED is green.", "Motor stopped: its LED is red.", "The remote works like Remote control 1: {B1} and {B2} together = forward, only {B1} = left, only {B2} = right."], keys: "{K1} key = {B1}. {K2} key = {B2}." },
-  crc2: { goal: "Remote control 2, with lights.", steps: ["{LED1} shows {ML}. {LED2} shows {MR}.", "Motor going forward: green.", "Motor stopped: red.", "Motor going backward: yellow.", "The remote works like Remote control 2. {B3} = backward."], keys: "{K1} key = {B1}. {K2} key = {B2}. {K3} key = {B3}." },
+  rc1: { goal: "Use {B1} and {B2} as a remote control.", steps: ["{B1} pressed and {B2} pressed: drive forward ({ML} and {MR} spin forward).", "Only {B1} pressed: turn left ({MR} spins forward, {ML} stops).", "Only {B2} pressed: turn right ({ML} spins forward, {MR} stops).", "Nothing pressed: stop ({ML} and {MR} stop).", "Keep checking forever."], tip: 'Use "if / else if / else" inside a forever loop. Check "{B1} pressed and {B2} pressed" first. One wheel stopped makes a turn. Wheels going opposite ways make a spin.', keys: "{K1} key = {B1}. {K2} key = {B2}. You can also hold their buttons below the field." },
+  fixifs: { goal: "Fix the broken remote. Pressing {B1} and {B2} together should drive forward.", steps: ["What the program should do: {B1} and {B2} pressed = drive forward. Only {B1} = turn left. Only {B2} = turn right. Nothing pressed = stop. It uses 2 Motors: {ML} and {MR}.", 'Click "Load the broken program". Click Start.', "Hold the {K1} and {K2} keys to press {B1} and {B2}. The robot turns instead of driving forward.", "Keep holding both keys and click Step a few times. Watch which if block runs last. The last one wins.", 'Change the if blocks to one "if / else if / else". Put "{B1} pressed and {B2} pressed" first.'], keys: "{K1} key = {B1}. {K2} key = {B2}." },
+  rc2: { goal: "Add {B3} to drive backward.", steps: ["Only {B3} pressed: drive backward ({ML} and {MR} spin reverse).", "{B3} and {B1} pressed: back up turning left ({MR} spins reverse, {ML} stops).", "{B3} and {B2} pressed: back up turning right ({ML} spins reverse, {MR} stops).", "Everything from Remote control 1 still works."], tip: "Check the 2-Bumper combinations first. Then the 1-Bumper ones. Then nothing pressed.", keys: "{K1} key = {B1}. {K2} key = {B2}. {K3} key = {B3}." },
+  crc1: { goal: "Remote control 1, with lights.", steps: ["{LED1} shows {ML}. {LED2} shows {MR}.", "Motor spinning forward: its LED is green.", "Motor stopped: its LED is red.", "{B1} and {B2} pressed: {ML} and {MR} spin forward.", "Only {B1} pressed: turn left ({MR} spins forward, {ML} stops).", "Only {B2} pressed: turn right ({ML} spins forward, {MR} stops).", "Nothing pressed: {ML} and {MR} stop."], tip: "Each time you spin or stop a motor, set its LED color too.", keys: "{K1} key = {B1}. {K2} key = {B2}." },
+  crc2: { goal: "Remote control 2, with lights.", steps: ["{LED1} shows {ML}. {LED2} shows {MR}.", "Motor spinning forward: green. Stopped: red. Spinning reverse: yellow.", "Only {B3} pressed: {ML} and {MR} spin reverse.", "{B3} and {B1} pressed: back up turning left ({MR} spins reverse, {ML} stops).", "{B3} and {B2} pressed: back up turning right ({ML} spins reverse, {MR} stops).", "Everything from Color remote control 1 still works."], tip: "Check the 2-Bumper combinations first. Each time you spin or stop a motor, set its LED color too.", keys: "{K1} key = {B1}. {K2} key = {B2}. {K3} key = {B3}." },
   pincher: { goal: "Move the cube to the red square.", steps: ["Open the pincher.", "Drive up so the cube is between the fingers.", "Close the pincher.", "Drive to the red square.", "Open the pincher. Back away."], tip: "In Devices, start from the Pincher bot build." },
   lift: { goal: "Put the cube on top of the brown platform.", steps: ["Arm down. Open the claw.", "Drive to the cube. Close the claw.", "Raise the arm about 45 degrees.", "Drive to the platform.", "Open the claw. Back away."], tip: "In Devices, start from the Clawbot build." },
   sort: { goal: "Put each cube on the square of its own color.", steps: ["The colors switch every run.", "Read each cube with the Color sensor. It faces forward on the Sorter bot.", "Red cube: take it to red. Blue cube: take it to blue."], tip: "In Devices, start from the Sorter bot build." },
@@ -1044,6 +1051,7 @@ const BUILD_WHY = {
   exact: ["Drivetrain", "It can drive an exact distance and turn an exact number of degrees."],
   simple: ["Drivetrain", "One block drives the whole robot. With 2 Motors you need 2 blocks for everything."],
   steer: ["2 Motors", "Each wheel gets its own speed. Then the robot can steer while it drives."],
+  turns: ["2 Motors", "Each wheel can spin by itself. Stop one wheel to make a turn, instead of spinning in place."],
   leds: ["2 Motors", "Each Touch LED shows what one motor is doing. So you need 2 Motors."],
   either: ["Drivetrain or 2 Motors", "Both work. 2 Motors can steer while driving, so they are faster on curves."],
   preset: ["Drivetrain", "Pick the robot build in Devices. It already has a Drivetrain."],
@@ -1052,7 +1060,7 @@ const BUILD_WHY = {
 const LEVEL_BUILD = {
   square: "exact", hexagon: "exact", gyro: "exact", myblocks: "exact", garage: "exact", line: "exact", maze: "exact", maze2: "exact", maze3: "exact",
   touch: "simple", waittouch: "simple", counter: "simple", fixcount: "simple", modemenu: "simple", distance: "simple", fixloop: "simple", timeout: "simple",
-  stayaway: "simple", patrol: "simple", find: "simple", fixfind: "simple", color: "simple", countlines: "simple", sumo: "simple", rc1: "simple", fixifs: "simple", rc2: "simple",
+  stayaway: "simple", patrol: "simple", find: "simple", fixfind: "simple", color: "simple", countlines: "simple", sumo: "simple", rc1: "turns", fixifs: "turns", rc2: "turns",
   wallfollow: "steer", smoothline: "steer", line2: "either", crc1: "leds", crc2: "leds",
   pincher: "preset", lift: "preset", sort: "preset", skills: "preset", driving: "controller",
 };
@@ -1080,7 +1088,7 @@ const LEVEL_SETUP = {
   wallfollow: ["ML", "MR", "DISTR"],
   color: ["DT", "COLOR"], countlines: ["DT", "COLOR"], sumo: ["DT", "COLOR"], line: ["DT", "COLOR"], line2: ["DT", "COLOR"], maze: ["DT", "COLOR"], maze2: ["DT", "COLOR"], maze3: ["DT", "COLOR"],
   smoothline: ["ML", "MR", "COLOR"],
-  rc1: ["DT", "B1", "B2"], fixifs: ["DT", "B1", "B2"], rc2: ["DT", "B1", "B2", "B3"],
+  rc1: ["ML", "MR", "B1", "B2"], fixifs: ["ML", "MR", "B1", "B2"], rc2: ["ML", "MR", "B1", "B2", "B3"],
   crc1: ["ML", "MR", "B1", "B2", "LED1", "LED2"], crc2: ["ML", "MR", "B1", "B2", "B3", "LED1", "LED2"],
   driving: ["DT", "CTRL"],
 };
@@ -3871,7 +3879,7 @@ for (const id of Object.keys(CHECKS)) {
   CHECKS[id] = async (...a) => {
     const r = await fn(...a), k = LEVEL_BUILD[lvl().id];
     if (!r || r.score >= 4 || r.score === 0 && !r.hint || /Drivetrain|2 Motors|Reverse/.test(r.hint || "")) return r;
-    const add = (k === "steer" || k === "leds") && drivetrain() ? "This level is easier with 2 Motors instead of a Drivetrain. Each wheel gets its own speed."
+    const add = (k === "steer" || k === "leds" || k === "turns") && drivetrain() ? "This level is easier with 2 Motors instead of a Drivetrain. Each wheel gets its own speed."
       : (k === "exact" || k === "simple") && usingMotors() ? "This level is easier with a Drivetrain. One block drives the whole robot." : "";
     if (add) r.hint = r.hint ? r.hint + " " + add : add;
     return r;
@@ -4263,16 +4271,16 @@ const PLANS = {
   myblocks: ["Make a My Block \"step\": forward 400, turn right 90, forward 400, turn left 90.", "Use step 3 times.", "Drive forward 400 mm."],
   maze2: ["Use your maze program. If it misses a turn, check the 190 mm number and drive off each tile before checking again."],
   maze3: ["Set tiles to 0.", "On each green or blue tile, change tiles by 1.", "If tiles is 3 or less: green = left, blue = right.", "Else: green = right, blue = left.", "Yellow = stop."],
-  rc1: ["Forever:", "  if {B1} pressed and {B2} pressed: drive forward", "  else if {B1} pressed: turn left", "  else if {B2} pressed: turn right", "  else: stop driving", "Check the 2-Bumper one first, or the single checks win."],
-  rc2: ["Forever:", "  if {B3} pressed and {B1} pressed: turn left", "  else if {B3} pressed and {B2} pressed: turn right", "  else if {B3} pressed: drive reverse", "  then the four checks from Remote control 1"],
-  crc1: ["Same if blocks as Remote control 1, with the two Motors.", "Inside each one, also set each motor's Touch LED: green if that motor spins forward, red if it is stopped."],
-  crc2: ["Same if blocks as Remote control 2.", "Inside each one, set each motor's LED: green = forward, red = stopped, yellow = backward."],
+  rc1: ["Forever:", "  if {B1} pressed and {B2} pressed: spin {ML} and {MR} forward", "  else if {B1} pressed: stop {ML}, spin {MR} forward", "  else if {B2} pressed: spin {ML} forward, stop {MR}", "  else: stop {ML} and {MR}", "Check the 2-Bumper one first, or the single checks win."],
+  rc2: ["Forever:", "  if {B3} pressed and {B1} pressed: stop {ML}, spin {MR} reverse", "  else if {B3} pressed and {B2} pressed: spin {ML} reverse, stop {MR}", "  else if {B3} pressed: spin {ML} and {MR} reverse", "  then the four checks from Remote control 1"],
+  crc1: ["Same if blocks as Remote control 1, with {ML} and {MR}.", "Inside each one, also set the LEDs: {LED1} for {ML}, {LED2} for {MR}.", "  spinning forward: green", "  stopped: red"],
+  crc2: ["Same if blocks as Remote control 2, with {ML} and {MR}.", "Inside each one, also set the LEDs: {LED1} for {ML}, {LED2} for {MR}.", "  spinning forward: green", "  stopped: red", "  spinning reverse: yellow"],
   pincher: ["Open the pincher.", "Drive forward until the cube is between the fingers.", "Close the pincher.", "Drive and turn to the red square.", "Open the pincher. Drive reverse."],
   lift: ["Lower the arm and open the claw.", "Drive to the cube and close the claw.", "Raise the arm about 45 degrees.", "Drive to the platform until the cube is over it.", "Open the claw and back away."],
   fixcount: ["The bug: while the Bumper is held, the loop adds 1 again and again.", "After \"change count by 1\", add:", "  wait until the Bumper is NOT pressed"],
   fixloop: ["The bug: the distance is always more than 0, so the while loop never ends.", "Change the condition to: distance > 200 mm."],
   fixfind: ["The bug: \"turn right for 120 degrees\" only works when the cube is in that one spot.", "Replace it with:", "  turn right", "  wait until the distance is less than 700 mm", "  stop driving", "Keep the rest."],
-  fixifs: ["The bug: every if runs, so the last one that matches wins.", "Use one if / else if / else chain:", "  if {B1} pressed and {B2} pressed: drive forward", "  else if {B1} pressed: turn left", "  else if {B2} pressed: turn right", "  else: stop driving"],
+  fixifs: ["The bug: every if runs, so the last one that matches wins.", "Use one if / else if / else chain:", "  if {B1} pressed and {B2} pressed: spin {ML} and {MR} forward", "  else if {B1} pressed: stop {ML}, spin {MR} forward", "  else if {B2} pressed: spin {ML} forward, stop {MR}", "  else: stop {ML} and {MR}"],
   hexagon: ["Move pen down.", "Repeat 6 times:", "  drive forward 300 mm", "  turn right (360 / 6) degrees"],
   modemenu: ["Set mode to 0.", "Forever:", "  if the Touch LED is pressed:", "    change mode by 1", "    if mode = 3: set mode to 0", "    wait until the Touch LED is NOT pressed", "  if mode = 0: stop driving, LED red", "  else if mode = 1: drive forward, LED green", "  else: turn right, LED blue"],
   timeout: ["Drive forward.", "Wait until (distance < 150 mm) OR (timer > 4 seconds).", "Stop driving."],
