@@ -206,6 +206,11 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 .tk { color: #c792ea; } .tn { color: #f78c6c; } .ts { color: #c3e88d; } .tc { color: #697098; font-style: italic; } .tp { color: #89ddff; } .td { color: #82aaff; } .tf { color: #ffcb6b; }
 .cppsnips { width: 250px; flex: none; overflow: auto; background: #f5f7fa; border-left: 1px solid var(--line); padding: 8px; font-size: 13px; }
 .cppsnips[hidden] { display: none; }
+.cppac { position: absolute; z-index: 5; min-width: 220px; max-width: 460px; background: #fff; color: #1f2633; border: 1px solid #4C97FF; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.35); padding: 3px; font: 13px/1.35 var(--mono, monospace); max-height: 260px; overflow-y: auto; }
+.cppac[hidden] { display: none; }
+.cppac .acrow { display: flex; gap: 12px; justify-content: space-between; padding: 4px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.cppac .acrow small { color: #6c7686; font: 11px system-ui, sans-serif; align-self: center; }
+.cppac .acrow.on { background: #4C97FF; color: #fff; } .cppac .acrow.on small { color: #e6efff; }
 .cppsnips summary { font-weight: 600; cursor: pointer; margin: 6px 0 4px; }
 .cppsnips .snip { display: block; width: 100%; text-align: left; font: 12px/1.35 var(--mono, monospace); background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; margin: 0 0 4px; cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1f2633; }
 .cppsnips .snip:hover { border-color: #4C97FF; }
@@ -253,10 +258,10 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
   <div class="main">
     <div id="blockly"></div>
     <section id="cppPane" hidden aria-label="C++ program">
-      <div class="cppbar"><button class="btn small" type="button" id="cppFromBlocks" title="Turn your blocks program into C++">Start from my blocks</button><button class="btn small" type="button" id="cppNew">New</button><span class="sp"></span><button class="btn small" type="button" id="cppSnipToggle">Commands</button></div>
+      <div class="cppbar"><button class="btn small" type="button" id="cppFromBlocks" title="Turn your blocks program into C++">Start from my blocks</button><button class="btn small" type="button" id="cppNew">New</button><span class="sp"></span><button class="btn small" type="button" id="cppSnipToggle" title="Show or hide a list of commands">Command list</button></div>
       <div class="cppbody">
         <div class="cpped"><div class="cppgut"><div id="cppGutter"></div></div><div class="cppwrap"><pre id="cppHi" aria-hidden="true"></pre><textarea id="cppText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="C++ code"></textarea></div></div>
-        <div class="cppsnips" id="cppSnips"></div>
+        <div class="cppsnips" id="cppSnips" hidden></div>
       </div>
       <div class="cppstatus" id="cppStatus"></div>
     </section>
@@ -422,6 +427,20 @@ const C = { events: "#FFBF00", drive: "#4C97FF", motion: "#4C97FF", looks: "#996
 const num = (name) => ({ type: "input_value", name, check: "Number" });
 const dd = (name, opts) => ({ type: "field_dropdown", name, options: opts });
 // operator dropdowns: the value is the block type it turns into
+// measure typed text as drawn: the page shows field text in a monospace font, but Blockly measures with its own font, so long text got cut off
+Blockly.FieldTextInput.prototype.updateSize_ = function (pad) {
+  const c = this.getConstants();
+  pad = pad !== undefined ? pad : this.isFullBlockField() ? 0 : c.FIELD_BORDER_RECT_X_PADDING;
+  let w = 0;
+  if (this.textElement_) {
+    try { w = this.textElement_.getComputedTextLength(); } catch (e) { w = 0; }
+    if (!w) w = Blockly.utils.dom.getFastTextWidth(this.textElement_, c.FIELD_TEXT_FONTSIZE, c.FIELD_TEXT_FONTWEIGHT, c.FIELD_TEXT_FONTFAMILY);
+  }
+  this.size_.height = this.isFullBlockField() ? c.FIELD_TEXT_HEIGHT : Math.max(c.FIELD_TEXT_HEIGHT, c.FIELD_BORDER_RECT_HEIGHT);
+  this.size_.width = 2 * pad + w;
+  this.positionTextElement_(pad, w);
+  this.positionBorderRect_();
+};
 const OP_MENU = {
   math: [["+", "add"], ["−", "subtract"], ["*", "multiply"], ["/", "divide"]],
   compare: [["=", "equal"], ["<", "less_than"], ["≤", "less_equal"], [">", "greater_than"], ["≥", "greater_equal"]],
@@ -713,6 +732,11 @@ const ws = Blockly.inject("blockly", {
   toolbox: buildToolbox(), renderer: "zelos", trashcan: false, sounds: false,
   zoom: { controls: false, wheel: false, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },   // zoom with the buttons (zoomBar); the mouse wheel scrolls instead of zooming
   move: { scrollbars: true, drag: true, wheel: true }, grid: { spacing: 40, length: 2, colour: "#dfe3ea", snap: false },
+});
+// once the code font has loaded, measure typed text again so blocks fit it
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+  ws.getAllBlocks(false).forEach(b => b.inputList.forEach(inp => inp.fieldRow.forEach(f => { if (f instanceof Blockly.FieldTextInput) f.forceRerender(); })));
+  const tb = ws.getToolbox && ws.getToolbox(); if (tb && tb.refreshSelection) tb.refreshSelection();
 });
 watchOpBlocks(ws);
 /* zoom buttons on the workspace: bigger, smaller, and find my code */
@@ -5465,6 +5489,68 @@ const cppEd = (() => {
     ta.setRangeText(t, s, e, "end"); ta.focus(); changed();
   }
   function changed() { CPP_TEXT = ta.value; LS.set("rfs.cpp", ta.value); render(); check(); if (typeof saveLevelProgSoon === "function") saveLevelProgSoon(); }
+  /* autocomplete: a short list of matching commands under the cursor while typing */
+  const wrap = ta.parentElement, ac = document.createElement("div");
+  ac.className = "cppac"; ac.hidden = true; ac.setAttribute("role", "listbox"); wrap.appendChild(ac);
+  let acItems = [], acSel = 0, acFrom = 0;
+  function acEntries() {
+    const out = [], seen = new Set(), add = (text, group) => { if (!seen.has(text)) { seen.add(text); out.push({ text, group }); } };
+    cppGroups().forEach(([g, list]) => list.forEach(c => add(c, g)));
+    const code = ta.value;   // the student's own variables and functions
+    for (const m of code.matchAll(/\b(?:int|float|double|bool|auto|long)\s+([A-Za-z_]\w*)\s*[=;]/g)) add(m[1], "Your variable");
+    for (const m of code.matchAll(/\bvoid\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/g)) if (m[1] !== "main") add(m[1] + "();", "Your function");
+    ["if", "else", "while", "for", "true", "false", "forward", "reverse", "left", "right", "degrees", "mm", "inches", "seconds", "msec", "percent", "turns"].forEach(w => add(w, "Word"));
+    return out;
+  }
+  function acClose() { ac.hidden = true; acItems = []; }
+  function acShow() {
+    const s = ta.selectionStart;
+    if (s !== ta.selectionEnd) return acClose();
+    const v = ta.value, ls = v.lastIndexOf("\n", s - 1) + 1, before = v.slice(ls, s);
+    if (/\/\/|\/\*/.test(before) || (before.match(/"/g) || []).length % 2) return acClose();   // not inside a comment or a string
+    const m = before.match(/[A-Za-z_][\w.]*$/);
+    if (!m || m[0].length < 2 && !m[0].includes(".")) return acClose();
+    const tok = m[0].toLowerCase();
+    acFrom = s - m[0].length;
+    acItems = acEntries().filter(e => e.text.toLowerCase().startsWith(tok) && e.text.toLowerCase() !== tok).slice(0, 12);
+    if (!acItems.length) return acClose();
+    acSel = 0;
+    ac.innerHTML = acItems.map((e, i) => `<div class="acrow${i ? "" : " on"}" role="option" data-i="${i}"><span>${H(e.text.split("\n")[0])}${e.text.includes("\n") ? " …" : ""}</span><small>${H(e.group)}</small></div>`).join("");
+    ac.querySelectorAll(".acrow").forEach(r => r.addEventListener("mousedown", e => { e.preventDefault(); acPick(+r.dataset.i); }));
+    const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 21;
+    const cx = document.createElement("canvas").getContext("2d"); cx.font = `${cs.fontSize} ${cs.fontFamily}`;
+    const cw = cx.measureText("M").width, line = v.slice(0, s).split("\n").length - 1, col = acFrom - ls;
+    ac.hidden = false;
+    let left = parseFloat(cs.paddingLeft) + col * cw - ta.scrollLeft, top = parseFloat(cs.paddingTop) + (line + 1) * lh - ta.scrollTop;
+    left = Math.max(4, Math.min(left, wrap.clientWidth - ac.offsetWidth - 4));
+    if (top + ac.offsetHeight > wrap.clientHeight - 4) top = Math.max(4, top - lh - ac.offsetHeight);   // no room below: show it above the line
+    ac.style.left = left + "px"; ac.style.top = top + "px";
+  }
+  function acMove(d) {
+    acSel = (acSel + d + acItems.length) % acItems.length;
+    ac.querySelectorAll(".acrow").forEach((r, i) => { r.classList.toggle("on", i === acSel); if (i === acSel) r.scrollIntoView({ block: "nearest" }); });
+  }
+  function acPick(i) {
+    const e = acItems[i]; if (!e) return;
+    const s = ta.selectionStart, v = ta.value, ls = v.lastIndexOf("\n", acFrom - 1) + 1, ind = (v.slice(ls, acFrom).match(/^\s*/) || [""])[0];
+    const after = v.slice(s).match(/^[\w.]*/)[0];   // replace the rest of the word too
+    const t = e.text.split("\n").map((l, k) => k ? ind + l : l).join("\n");
+    ta.setRangeText(t, acFrom, s + after.length, "end");
+    const k = t.indexOf("condition"), blank = t.indexOf("\n" + ind + "  \n");
+    if (k >= 0) { ta.selectionStart = acFrom + k; ta.selectionEnd = acFrom + k + 9; }   // type over "condition"
+    else if (blank >= 0) ta.selectionStart = ta.selectionEnd = acFrom + blank + 1 + ind.length + 2;
+    acClose(); ta.focus(); changed();
+  }
+  ta.addEventListener("keydown", e => {
+    if (ac.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); e.stopImmediatePropagation(); acMove(e.key === "ArrowDown" ? 1 : -1); }
+    else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); e.stopImmediatePropagation(); acPick(acSel); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); acClose(); }
+  }, true);
+  ta.addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("insert") && e.inputType !== "insertFromDrop") acShow(); else acClose(); });
+  ta.addEventListener("blur", () => setTimeout(acClose, 100));
+  ta.addEventListener("click", acClose);
+  ta.addEventListener("scroll", acClose);
   ta.addEventListener("input", changed);
   ta.addEventListener("scroll", sync);
   ta.addEventListener("keydown", e => {
@@ -5489,12 +5575,11 @@ const cppEd = (() => {
     }
   });
   ta.addEventListener("drop", () => setTimeout(changed, 0));
-  return { render, setError, setRunning, setText, insert, check, pane, ta };
+  return { render, setError, setRunning, setText, insert, check, pane, ta, acShow, acPick: i => acPick(i), acItems: () => acItems };
 })();
 
 /* the command list next to the editor: click to insert, or drag into the code */
-function renderSnippets() {
-  const box = document.getElementById("cppSnips"); if (!box) return;
+function cppGroups() {
   const nm = d => String(d.name).replace(/[^A-Za-z0-9_]/g, "_");
   const groups = [];
   if (drivetrain()) groups.push(["Drivetrain", ["Drivetrain.driveFor(forward, 200, mm);", "Drivetrain.turnFor(right, 90, degrees);", "Drivetrain.drive(forward);", "Drivetrain.turn(right);", "Drivetrain.stop();", "Drivetrain.turnToHeading(90, degrees);", "Drivetrain.setDriveVelocity(50, percent);", "Drivetrain.setTurnVelocity(50, percent);", "Drivetrain.setStopping(brake);", "Drivetrain.setTimeout(2, seconds);", "Drivetrain.heading(degrees)", "Drivetrain.isMoving()"]]);
@@ -5510,6 +5595,11 @@ function renderSnippets() {
   groups.push(["Variables", ["float count = 0;", "count = count + 1;", "count++;", "bool done = false;"]]);
   groups.push(["Brain", ['Brain.Screen.print("Hello");', "Brain.Screen.newLine();", "Brain.Screen.clearScreen();", "Brain.Timer.clear();", "Brain.Timer.time(seconds)", "BrainInertial.heading(degrees)"]]);
   groups.push(["My functions", ["void myFunction() {\n  \n}", "void driveSquare(float side) {\n  for (int i = 0; i < 4; i++) {\n    Drivetrain.driveFor(forward, side, mm);\n    Drivetrain.turnFor(right, 90, degrees);\n  }\n}"]]);
+  return groups;
+}
+function renderSnippets() {
+  const box = document.getElementById("cppSnips"); if (!box) return;
+  const groups = cppGroups();
   box.innerHTML = `<p class="hint">Click to add at the cursor, or drag into your code.</p>` + groups.map(([g, list]) => `<details open><summary>${esc(g)}</summary>${list.map(c => `<button type="button" class="snip" draggable="true" data-code="${esc(c)}">${esc(c.split("\n")[0])}${c.includes("\n") ? " …" : ""}</button>`).join("")}</details>`).join("");
   box.querySelectorAll(".snip").forEach(b => {
     b.onclick = () => cppEd.insert(b.dataset.code);
