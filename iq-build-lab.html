@@ -151,6 +151,7 @@ textarea{width:100%;box-sizing:border-box;min-height:70px;font-family:ui-monospa
       <button class="btn primary" id="spin">▶ Spin motors</button>
       <button class="btn" id="dlBtn">⬇ Download</button>
       <button class="btn" id="upBtn">⬆ Open file</button>
+      <button class="btn" id="simCode" title="Copy a code that Robot Field Sim can open, so you can program this robot">🤖 Use in Robot Field Sim</button>
       <input type="file" id="upFile" accept=".json,.txt,application/json,text/plain" hidden>
       <button class="btn danger" id="clear">Clear all</button>
     </div>
@@ -1060,7 +1061,7 @@ $('home').onclick=()=>{ camera.position.copy(HOME_POS); controls.target.copy(HOM
 function zoom(f){ const v=camera.position.clone().sub(controls.target).multiplyScalar(f); if(v.length()<6||v.length()>220) return; camera.position.copy(controls.target).add(v); }
 // ---------- Download and open a robot file ----------
 let dlCap=null; try{ window.claude&&claude.use&&claude.use('downloads').then(x=>{ dlCap=x; }).catch(()=>{}); }catch(e){}
-function robotFile(){ return JSON.stringify({app:'IQ Build Lab',version:1,saved:new Date().toISOString().slice(0,10),parts:serialize()}); }
+function robotFile(){ let sim=null; try{ sim=simSummary(); }catch(e){} return JSON.stringify({app:'IQ Build Lab',version:1,saved:new Date().toISOString().slice(0,10),parts:serialize(),sim}); }
 $('dlBtn').onclick=async()=>{ if(!PARTS.size){ setStatus('There is nothing to download yet. Add some parts first.','bad'); return; }
   const name='my-robot.json', data=robotFile();
   if(dlCap){ try{ await dlCap.save({filename:name,data}); setStatus('Robot file saved. Use Open file to load it again.','good'); }
@@ -1074,6 +1075,64 @@ $('upFile').onchange=()=>{ const f=$('upFile').files[0]; if(!f) return; const rd
       if(!Array.isArray(list)) throw 0; pushUndo(); loadList(list); stopSpin(); changed(); setStatus('Robot loaded from '+f.name+'.','good'); }
     catch(e){ setStatus('That file is not a robot file. Pick a file you saved with Download.','bad'); } };
   rd.onerror=()=>setStatus('That file could not be read.','bad'); rd.readAsText(f); };
+
+// ---------- Robot Field Sim export: drive, motors, sensors and a simple 3D shape ----------
+// Robot frame: f = forward, r = right, h = up from the floor (mm). The 3D shape uses x = right, y = up, z = back.
+function simSummary(){
+  const A=analyze(), U=6.35, up=AX.y.clone();
+  const list=A.list.filter(p=>!A.loose.has(p.id));
+  if(!list.length) return null;
+  const wheelMotor=new Map();
+  for(const [mid,ws] of A.motorWheels) ws.forEach(w=>{ if(!wheelMotor.has(w.id)) wheelMotor.set(w.id,{m:mid,ratio:A.om.has(w.id)?A.om.get(w.id).length():1}); });
+  const wheels=list.filter(p=>DEFS[p.type].kind==='wheel'), driven=wheels.filter(w=>wheelMotor.has(w.id));
+  const flatAxis=w=>{ const v=AX.z.clone().applyQuaternion(w.q); v.y=0; return v; };
+  let R=null; const base=driven.length?driven:wheels;
+  if(base.length){ R=flatAxis(base[0]); R=R.length()>.5?R.normalize():null; }
+  if(!R) R=new V3(1,0,0);
+  let F=up.clone().cross(R).normalize();
+  const box=new THREE.Box3(); list.forEach(p=>box.union(aabb(DEFS[p.type],p.p,p.q)));
+  const c=new V3(); if(driven.length>=2){ driven.forEach(w=>c.add(w.p)); c.multiplyScalar(1/driven.length); } else box.getCenter(c);
+  c.y=0;
+  // the front is where the extra motors and the Distance / Color sensors are
+  const driveM=new Set([...wheelMotor.values()].map(v=>v.m)), extra=A.motors.filter(m=>list.includes(m)&&!driveM.has(m.id));
+  let score=0; extra.forEach(m=>score+=m.p.clone().sub(c).dot(F)); list.filter(p=>p.type==='distance'||p.type==='color').forEach(p=>score+=p.p.clone().sub(c).dot(F));
+  if(score<-.01){ F.negate(); R.negate(); }
+  const fr=v=>{ const d=v.clone().sub(c); return {f:d.dot(F)*U,r:d.dot(R)*U,h:d.y*U}; };
+  const r1=x=>Math.round(x*10)/10;
+  // drive
+  const side=w=>fr(w.p).r;
+  const L=driven.filter(w=>side(w)<0), Rt=driven.filter(w=>side(w)>0);
+  const mean=a=>a.reduce((s,w)=>s+side(w),0)/a.length;
+  const travel=w=>DEFS[w.type].id==='wheel160'?160:200;
+  let drive=null;
+  if(L.length&&Rt.length){
+    const wf=driven.map(w=>fr(w.p).f), ratio=wheelMotor.get(driven[0].id).ratio||1;
+    drive={left:wheelMotor.get(L[0].id).m,right:wheelMotor.get(Rt[0].id).m,wheelTravel:travel(driven[0]),track:r1(mean(Rt)-mean(L)),
+      wheelbase:r1(Math.max(...wf)-Math.min(...wf)),gear:r1(1/ratio*100)/100};
+  }
+  const motors=A.motors.filter(m=>list.includes(m)).map(m=>({id:m.id,...fr(m.p),drive:!!drive&&(m.id===drive.left||m.id===drive.right),wheels:(A.motorWheels.get(m.id)||[]).length}));
+  const sensors=list.filter(p=>DEFS[p.type].kind==='sensor').map(p=>({type:p.type,...fr(p.p)}));
+  // footprint and height
+  const cs=[]; for(const x of [box.min.x,box.max.x]) for(const y of [box.min.y,box.max.y]) for(const z of [box.min.z,box.max.z]) cs.push(fr(new V3(x,y,z)));
+  const ext=k=>[Math.min(...cs.map(o=>o[k])),Math.max(...cs.map(o=>o[k]))];
+  // a simple 3D shape: one box (or wheel) per part
+  const basis=new THREE.Matrix4().makeBasis(R,up,F.clone().negate()), qB=new Q().setFromRotationMatrix(basis).invert();
+  const COL={motor:0x2b2f36,brain:0xcfd4da,sensor:0x2b2f36,wheel:0x3b3f46,gear:0x8a8f98};
+  const shape=list.filter(p=>{ const d=DEFS[p.type]; return d.kind!=='conn'&&d.kind!=='collar'||d.shaft; }).map(p=>{
+    const d=DEFS[p.type], cw=p.p.clone().add(offW(d,p.q)).sub(c).applyQuaternion(qB).multiplyScalar(U), q=qB.clone().multiply(p.q);
+    const o={k:d.kind==='wheel'?'w':d.kind==='gear'?'g':'b',c:d.color!=null?d.color:COL[d.kind]||0xbac0c8,p:[r1(cw.x),r1(cw.y),r1(cw.z)],q:[q.x,q.y,q.z,q.w].map(v=>Math.round(v*1e4)/1e4)};
+    if(d.kind==='wheel'||d.kind==='gear') o.s=[r1(d.r*U),r1((d.size[2]||1)*U)]; else o.s=d.size.map(v=>r1(v*U));
+    if(p.type==='touchled') o.c=0xe8e8e8;
+    return o; });
+  return {app:'IQ Build Lab',kind:'robot',version:1,drive,motors,sensors,length:r1(ext('f')[1]-ext('f')[0]),width:r1(ext('r')[1]-ext('r')[0]),
+    front:r1(ext('f')[1]),back:r1(-ext('f')[0]),height:r1(box.max.y*U),shape};
+}
+function simCode(){ const s=simSummary(); return s?'IQSIM1:'+btoa(JSON.stringify(s)):''; }
+$('simCode').onclick=()=>{
+  const v=simCode(); if(!v){ setStatus('Build a robot first.','bad'); return; }
+  const t=$('code'); t.value=v;
+  const ok=()=>setStatus('Copied! In Robot Field Sim, open Devices, click "My Build Lab robot", and paste.','good');
+  try{ navigator.clipboard.writeText(v).then(ok,()=>{ t.select(); setStatus('Press Ctrl+C to copy. Then paste it in Robot Field Sim (Devices, "My Build Lab robot").'); }); }catch(e){ t.select(); setStatus('Press Ctrl+C to copy. Then paste it in Robot Field Sim (Devices, "My Build Lab robot").'); } };
 
 // ---------- Build code + saving ----------
 function codeOf(){ return 'IQB1:'+btoa(JSON.stringify(serialize())); }
@@ -1498,7 +1557,7 @@ let saved=null; try{ saved=JSON.parse(localStorage.getItem('iqbuild.parts')||'nu
 if(saved&&saved.length) loadList(saved); else loadExample();
 renderCh(); refresh(); loop();
 setTimeout(()=>{ try{ makeThumbs(); }catch(e){} },30);
-window.__lab={dragErr:()=>drag&&drag.hinges?hingeError():null,DEFS,PARTS,analyze,computePlacement,contextFor,pick,holdPart,place,updateGhost,camera,controls,getA:()=>A,refresh,loadList,serialize,pegsOf,connList,fitPlacement,getGuide:()=>guide,addPart,removePart,holeW,connAxis,groupsOf,exHole,aabb,settle,floorGap,changed,V3,Q,AX,THREE,blocker,orderProblem,finish,holeGroups,getLast:()=>lastPlace,pegsOf,exOffset,VEX_EX};
+window.__lab={dragErr:()=>drag&&drag.hinges?hingeError():null,DEFS,PARTS,analyze,computePlacement,contextFor,pick,holdPart,place,updateGhost,camera,controls,getA:()=>A,refresh,loadList,serialize,pegsOf,connList,fitPlacement,getGuide:()=>guide,addPart,removePart,holeW,connAxis,groupsOf,exHole,aabb,settle,floorGap,changed,V3,Q,AX,THREE,blocker,orderProblem,finish,holeGroups,getLast:()=>lastPlace,pegsOf,exOffset,VEX_EX,simSummary,simCode};
 })();
 </script>
 
