@@ -1290,7 +1290,7 @@ function newWorld() {
   W.stopping = "brake"; W.glide = null; W.real = makeReal();
   for (const l of devOf("touchled")) W.leds[l.name] = { color: "none", bright: 100, pressed: false };
 }
-newWorld();
+// (the first newWorld() runs below, after the claw and cube helpers it uses are defined)
 
 const DEG = Math.PI / 180;
 function heading() { return ((W.rot % 360) + 360) % 360; }
@@ -1462,6 +1462,7 @@ function resetCubes() {
   const pre = CUBES.findIndex(c => c.preload);   // a Level Up robot starts holding its Preload
   if (pre >= 0 && hasPart("claw")) { const c = list[pre], g = gripAt(W.x, W.y, W.rot, c); Object.assign(c, { held: true, x: g.x, y: g.y, rot: W.rot }); W.claw = CLAW_HOLD; }
 }
+newWorld();
 function inBounds(poly) { const hx = FW() / 2, hy = FH() / 2; return !S.walls || poly.every(([x, y]) => Math.abs(x) <= hx && Math.abs(y) <= hy); }
 // smallest push that moves polygon b out of polygon a (or null if they don't touch)
 function pushOut(a, b) {
