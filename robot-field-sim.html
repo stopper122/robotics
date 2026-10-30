@@ -371,6 +371,9 @@ ol.steps { margin: 6px 0 10px 18px; padding: 0; font-size: 13px; display: flex; 
 </div>
 
 <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
+<script>/* If unpkg is down or blocked, load the same Blockly from a second site */
+window.Blockly || document.write('<script src="https://cdn.jsdelivr.net/npm/blockly@10.4.3/blockly.min.js"><\/script>');</script>
+<script>if (!window.Blockly) document.write('<div style="margin:40px auto;max-width:560px;padding:20px;border:2px solid #c0392b;border-radius:10px;font:18px system-ui;background:#fff">The block editor could not load. Check the internet connection, then reload the page. If it still does not work, the school network may be blocking unpkg.com and cdn.jsdelivr.net.</div>');</script>
 <script>
 "use strict";
 /* =====================================================================
@@ -6262,7 +6265,7 @@ const lvlSel = document.getElementById("level");
     ws.updateToolbox(buildToolbox());   // Switch blocks on or off
   } catch (e) {}
 })();
-function levelList() { return S.assigned ? LEVELS.filter(l => S.assigned.includes(l.id)) : LEVELS; }
+function levelList() { const l = S.assigned ? LEVELS.filter(l => S.assigned.includes(l.id)) : LEVELS; return l.length ? l : LEVELS; }   // never an empty list
 function lockedIds() {   // levels after the first one without a score of 3+
   const locked = new Set(); if (!S.lockOrder) return locked;
   let blocked = false;
