@@ -1145,7 +1145,10 @@ function simSummary(){
 }
 function simCode(){ const s=simSummary(); return s?'IQSIM1:'+btoa(JSON.stringify(s)):''; }
 $('simCode').onclick=()=>{
-  const v=simCode(); if(!v){ setStatus('Build a robot first.','bad'); return; }
+  const sm=simSummary();
+  if(!sm||!sm.drive){ setStatus(exWatch||!PARTS.size?'This robot cannot drive yet. It needs a motor that turns a wheel on each side.'
+    :'This robot cannot drive yet. It needs a motor that turns a wheel on each side. To use a VEX robot, click 👀 Show the robot first. Then click this button.','bad'); return; }
+  const v=simCode();
   const t=$('code'); t.value=v;
   const ok=()=>setStatus('Copied! In Robot Field Sim, open Devices, click "My Build Lab robot", and paste.','good');
   try{ navigator.clipboard.writeText(v).then(ok,()=>{ t.select(); setStatus('Press Ctrl+C to copy. Then paste it in Robot Field Sim (Devices, "My Build Lab robot").'); }); }catch(e){ t.select(); setStatus('Press Ctrl+C to copy. Then paste it in Robot Field Sim (Devices, "My Build Lab robot").'); } };
