@@ -415,7 +415,7 @@ function loadSettings(saved) {
 let S = loadSettings(LS.get("rfs.settings", null));
 /* A robot built in the IQ Build Lab: its size, wheels, gears and 3D shape replace the
    teacher's robot build while it is in use (null = use Teacher settings). */
-let ROBOT = LS.get("rfs.robot", null);
+let ROBOT = LS.get("rfs.robot", null); if (ROBOT && !ROBOT.drive) ROBOT = null;   // ignore a saved robot with no drive (a build with no motors turning wheels)
 const RS = k => ROBOT && S.allowBuildLab !== false && ROBOT[k] !== undefined ? ROBOT[k] : S[k];
 const KNOWN_TYPES = ["drivetrain", "motor", "gyro", "distance", "color", "touchled", "bumper", "controller"];
 let DEVICES = LS.get("rfs.devices", []).filter(d => KNOWN_TYPES.includes(d.type));
@@ -2364,6 +2364,7 @@ function parseBuildLab(text) {
   if (t.startsWith("IQSIM1:")) o = JSON.parse(atob(t.slice(7)));
   else { o = JSON.parse(t); if (o && o.sim) o = o.sim; else if (o && o.parts) throw new Error('This robot file is from an older Build Lab. Open it in the Build Lab and click "🤖 Use in Robot Field Sim".'); }
   if (!o || o.kind !== "robot" || !Array.isArray(o.motors)) throw new Error("That is not a Build Lab robot code.");
+  if (!o.drive) throw new Error(`This robot has no drive. It needs 2 motors that turn wheels, one on each side. This code has ${o.motors.length} motor${o.motors.length === 1 ? "" : "s"} and ${(o.shape || []).length} part${(o.shape || []).length === 1 ? "" : "s"}. In the Build Lab, open the robot you want, then click "🤖 Use in Robot Field Sim" again.`);
   return o;
 }
 // turn the Build Lab summary into Devices. roles: motor id -> "arm" | "claw" | "motor"
