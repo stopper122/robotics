@@ -848,6 +848,52 @@ const STAIR_PATH = [[-700, -1000], [-700, -480], [-300, -480], [-300, -80], [100
 // the wall to follow: up the right side, then around the corner to the right
 const FOLLOW_WALLS = [{ x1: 200, y1: -1000, x2: 200, y2: 200 }, { x1: 200, y1: 200, x2: 1000, y2: 200 }];
 const DRIVE_GATES = [[-250, -450, 250, -450], [350, 0, 800, 0], [350, 650, 800, 650], [-250, 750, 250, 750], [-800, 650, -350, 650], [-800, 0, -350, 0], [-250, -600, 250, -600]];
+/* ---- Level Up (VEX IQ Robotics Competition 2026-27), from the official field CAD and game manual ----
+   The field is 6 x 8 feet. Sim x = across the field, sim y = along it (the red Pyramid is at the bottom left).
+   Robots score bean bags: Floor Goal 1, L1 3, L2 6, L3 12, L4 16 (yellow only). A bag scores in a goal of its own
+   color, and yellow scores anywhere. */
+const LU = { fw: 1829, fh: 2438, pts: { L1: 3, L2: 6, L3: 12, L4: 16 } };
+// a solid block from (x0, y0) to (x1, y1), as a thick wall
+const luBox = (x0, y0, x1, y1, more) => ({ x1: x0 + 20, y1: (y0 + y1) / 2, x2: x1 - 20, y2: (y0 + y1) / 2, t: y1 - y0, ...more });
+function luSide(sg, color) {   // one half of the field; sg = -1 for the red (bottom) half, +1 for the blue (top) half
+  const m = (x0, y0, x1, y1, more) => sg < 0 ? luBox(x0, y0, x1, y1, more) : luBox(-x1, -y1, -x0, -y0, more);
+  const at = (x, y) => [sg < 0 ? x : -x, sg < 0 ? y : -y];
+  const sh = color === "red" ? ["#f4c2c2", "#ea8f8f", "#d65252", "#a01818"] : ["#c2d4f4", "#8fb0ea", "#5280d6", "#18449f"];
+  return [
+    // the Pyramid Goal in the corner: three steps, 75, 140 and 215 mm tall
+    m(-914, -1219, -438, -743, { h: 75, fill: sh[0], edge: sh[3], goal: color + ":L1", label: "L1 · 3", labelAt: at(-520, -820) }),
+    m(-914, -1219, -591, -895, { h: 140, fill: sh[1], edge: sh[3], goal: color + ":L2", label: "L2 · 6", labelAt: at(-670, -975) }),
+    m(-914, -1219, -743, -1048, { h: 215, fill: sh[2], edge: sh[3], goal: color + ":L3", label: "L3 · 12", labelAt: at(-828, -1133) }),
+    // a post, the L4 tower (620 mm tall) and the bar between the wall and the tower (191 to 212 mm off the floor)
+    m(-241, -393, -64, -216, { h: 244, fill: "#6b7280" }),
+    m(64, -394, 241, -216, { h: 620, fill: "#8b95a7", goal: ":L4", label: "L4 · 16" }),
+    m(-914, -315, 150, -294, { bar: [191, 212], fill: "#7c8698" }),
+  ];
+}
+const LU_BAGS = [
+  ...[[152, 0], [305, 914], [762, 457], [0, 457], [0, 914], [-305, 914], [-762, 457], [-762, 762]].map(([x, y]) => ({ x, y, color: "blue" })),
+  ...[[-152, 0], [-305, -914], [-762, -457], [762, -762], [0, -457], [0, -914], [305, -914], [762, -457]].map(([x, y]) => ({ x, y, color: "red" })),
+  ...[[152, 152], [-152, 152], [152, -152], [-152, -152]].map(([x, y]) => ({ x, y, color: "yellow" })),
+  { x: -630, y: -620, color: "yellow", preload: true },   // the Preload: in the claw, or next to a robot with no claw
+].map(b => ({ kind: "bag", rot: 0, ...b }));
+const LU_GOALS = [{ color: "red", rect: [-438, -1219, 888, 139] }, { color: "blue", rect: [-450, 1080, 888, 139] }];
+const LU_LOAD = [450, -1219, 464, 139];   // the red Load Zone, where the 8 Match Load bags come in
+const LEVEL_UP = {
+  field: [LU.fw, LU.fh], reach: 330, match: 60, start: [-789, -620, 180],
+  walls: [...luSide(-1, "red"), ...luSide(1, "blue")],
+  floor: [
+    { rect: LU_GOALS[0].rect, color: "red" }, { rect: LU_GOALS[1].rect, color: "blue" },
+    { rect: [-914, -322, 660, 77], color: "gray" }, { rect: [254, 245, 660, 77], color: "gray" },   // the low Floor barriers (robots drive over them)
+  ],
+  guides: [
+    { pts: [[450, -1219], [450, -1080], [914, -1080]], label: "Load zone" },
+    { pts: [[-450, 1219], [-450, 1080], [-914, 1080]] },
+  ],
+  cubes: LU_BAGS,
+  tick: luTick,
+  task: "Level Up! Score bean bags in 60 seconds. Red bags go to the red goals, blue bags to the blue goals, and yellow bags go anywhere. Floor Goal = 1 point, L1 = 3, L2 = 6, L3 = 12. The claw holds 1 bag at a time. New bags come into the red Load Zone when it is empty.",
+  needs: "Clawbot (Drivetrain, ArmMotor and ClawMotor)",
+};
 const LEVELS = [
   { id: "open", name: "Build your own", task: "" },
   { id: "square", name: "Drive a square", start: SQ_START, walls: [], guides: [squareGuide],
@@ -929,6 +975,8 @@ const LEVELS = [
     walls: [{ x1: 0, y1: -100, x2: 0, y2: 450 }, { x1: -1000, y1: -250, x2: -650, y2: -250 }, { x1: 650, y1: -250, x2: 1000, y2: -250 }],
     guides: DRIVE_GATES.map((g, i) => ({ pts: [[g[0], g[1]], [g[2], g[3]]], label: i === DRIVE_GATES.length - 1 ? "finish" : String(i + 1) })),
     task: "Drive through the numbered gates in order and back through the finish as fast as you can. Each wall touch adds 2 seconds. Add a Controller in Devices and pick a drive mode (for example Split arcade), press Start, then drive with the on-screen sticks or a real controller through Sim Link. No program needed.", needs: "Drivetrain, Controller with a drive mode" },
+  { id: "lu_auto", name: "Level Up: autonomous skills", game: "levelup", ...LEVEL_UP },
+  { id: "lu_drive", name: "Level Up: driving skills (controller)", game: "levelup", ...LEVEL_UP },
 ];
 /* "Fix it" warm-ups: a broken program to repair, on the same field and check as the main level right after them.
    They are numbered 5a, 6a... so the main levels keep their numbers (and their score sheet columns). */
@@ -989,6 +1037,9 @@ const levelByName = name => LEVELS.find(x => x.name === name) || LEVELS.find(x =
 let LEVEL = LS.get("rfs.level", "open");
 if (!LEVELS.some(l => l.id === LEVEL)) LEVEL = "open";
 const lvl = () => LEVELS.find(l => l.id === LEVEL);
+// a game level can bring its own field size (Level Up is 6 x 8 feet); every other level uses the teacher's size
+const FW = () => { const l = LEVEL !== "open" && lvl(); return l && l.field ? l.field[0] : S.fieldW; };
+const FH = () => { const l = LEVEL !== "open" && lvl(); return l && l.field ? l.field[1] : S.fieldH; };
 /* Task text in short steps: one idea per line, everyday words (many students read below grade level).
    goal = one sentence, steps = numbered, tip = optional help, keys = how to press things in the sim. */
 const TASK_STEPS = {
@@ -1028,6 +1079,12 @@ const TASK_STEPS = {
   lift: { goal: "Put the cube on top of the brown platform.", steps: ["Arm down. Open the claw.", "Drive to the cube. Close the claw.", "Raise the arm about 45 degrees.", "Drive to the platform.", "Open the claw. Back away."], tip: "In Devices, start from the Clawbot build." },
   sort: { goal: "Put each cube on the square of its own color.", steps: ["The colors switch every run.", "Read each cube with the Color sensor. It faces forward on the Sorter bot.", "Red cube: take it to red. Blue cube: take it to blue."], tip: "In Devices, start from the Sorter bot build." },
   skills: { goal: "Score as many points as you can in 60 seconds.", steps: ["Cube in the zone of its own color: 3 points.", "Cube in the other zone: 1 point.", "Parked on green at the end: 2 points.", "The best score is 14."] },
+  lu_auto: { goal: "Score as many points as you can in 60 seconds. Your program drives the robot.",
+    steps: ["Red bags go on the red Pyramid or in the red Floor Goal.", "Blue bags go on the blue Pyramid or in the blue Floor Goal.", "Yellow bags can go anywhere.", "Floor Goal = 1 point. L1 = 3. L2 = 6. L3 = 12.", "The robot starts in front of the red Pyramid, holding the yellow Preload in its claw.", "Lift ArmMotor higher to reach a higher step. The claw reaches out as the arm goes up."],
+    tip: "The Clawbot is too tall to fit under the gray bars. Drive around the open side." },
+  lu_drive: { goal: "Score as many points as you can in 60 seconds. You drive with the Controller.",
+    steps: ["Press Start.", "Red bags go to red goals. Blue bags go to blue goals. Yellow bags go anywhere.", "Floor Goal = 1 point. L1 = 3. L2 = 6. L3 = 12.", "New bags come into the red Load Zone when it is empty."],
+    tip: "In Devices, set the Controller buttons: L Up / L Down spin ArmMotor, R Up / R Down spin ClawMotor." },
   driving: { goal: "Drive through the gates in order, as fast as you can.", steps: ["Press Start.", "Drive through the gates in order, then the finish.", "Each wall touch adds 2 seconds."], tip: "No program needed. Use the sticks on screen or a real controller." },
 };
 const SCORE_WORDS = ["Not yet.", "Good start.", "Getting closer.", "Almost there!", "You did it!"];
@@ -1064,7 +1121,7 @@ const LEVEL_BUILD = {
   touch: "simple", waittouch: "simple", counter: "simple", fixcount: "simple", modemenu: "simple", distance: "simple", fixloop: "simple", timeout: "simple",
   stayaway: "simple", patrol: "simple", find: "simple", fixfind: "simple", color: "simple", countlines: "simple", sumo: "simple", rc1: "turns", fixifs: "turns", rc2: "turns",
   wallfollow: "steer", smoothline: "steer", line2: "either", crc1: "leds", crc2: "leds",
-  pincher: "preset", lift: "preset", sort: "preset", skills: "preset", driving: "controller",
+  pincher: "preset", lift: "preset", sort: "preset", skills: "preset", driving: "controller", lu_auto: "preset", lu_drive: "controller",
 };
 const buildFor = id => BUILD_WHY[LEVEL_BUILD[id]];
 function buildHTML(id) {
@@ -1082,7 +1139,7 @@ function taskNames() {
 }
 const fillNames = (str, N = taskNames()) => str && String(str).replace(/\{(\w+)\}/g, (m, k) => k in N ? N[k] : m);
 // what each level needs in Devices, shown as a checklist at the top of the steps
-const SETUP_PRESET = { pincher: "Pincher bot", lift: "Clawbot", sort: "Sorter bot", skills: "Pincher bot or Clawbot" };
+const SETUP_PRESET = { pincher: "Pincher bot", lift: "Clawbot", sort: "Sorter bot", skills: "Pincher bot or Clawbot", lu_auto: "Clawbot" };
 const LEVEL_SETUP = {
   square: ["DT"], hexagon: ["DT"], gyro: ["DT"], myblocks: ["DT"],
   touch: ["DT", "B1"], waittouch: ["DT", "B1"], counter: ["DT", "B1", "LED1"], fixcount: ["DT", "B1", "LED1"], modemenu: ["DT", "LED1"],
@@ -1093,6 +1150,7 @@ const LEVEL_SETUP = {
   rc1: ["ML", "MR", "B1", "B2"], fixifs: ["ML", "MR", "B1", "B2"], rc2: ["ML", "MR", "B1", "B2", "B3"],
   crc1: ["ML", "MR", "B1", "B2", "LED1", "LED2"], crc2: ["ML", "MR", "B1", "B2", "B3", "LED1", "LED2"],
   driving: ["DT", "CTRL"],
+  lu_drive: ["DT", "ARM", "CLAW", "CTRL"],
 };
 function setupItems(id) {
   const N = taskNames(), P = S.ports, items = [];
@@ -1100,6 +1158,8 @@ function setupItems(id) {
   for (const k of LEVEL_SETUP[id] || []) {
     const has = (t, n) => devOf(t).length >= n;
     if (k === "DT") items.push({ text: "a Drivetrain", ok: !!drivetrain() });
+    else if (k === "ARM") items.push({ text: `ArmMotor (a Motor on port ${P.arm})`, ok: hasPart("arm") });
+    else if (k === "CLAW") items.push({ text: `ClawMotor (a Motor on port ${P.claw})`, ok: hasPart("claw") });
     else if (k === "CTRL") items.push({ text: "a Controller with a drive mode", ok: !!controllerDev() && (controllerDev().drive || "none") !== "none" });
     else if (/^B\d$/.test(k)) items.push({ text: `${N[k]} (a Bumper)`, ok: has("bumper", +k[1]) });
     else if (/^LED\d$/.test(k)) items.push({ text: `${N[k]} (a Touch LED)`, ok: has("touchled", +k[3]) });
@@ -1134,7 +1194,7 @@ function startPose() {
 // floor paint the Color sensor can see when it points down
 const FLOOR_COLORS = { white: { hex: "#f7f8fa", b: 92, hue: 0 }, black: { hex: "#16181d", b: 4, hue: 0, name: "none" },
   red: { hex: "#e02020", b: 32, hue: 0 }, green: { hex: "#18a050", b: 38, hue: 120 }, blue: { hex: "#1f6fd1", b: 28, hue: 225 },
-  yellow: { hex: "#ffd21a", b: 78, hue: 55 } };
+  yellow: { hex: "#ffd21a", b: 78, hue: 55 }, gray: { hex: "#aab2c0", b: 62, hue: 0, name: "none" } };
 function segDist(px, py, [x1, y1], [x2, y2]) {
   const dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / L));
   return Math.hypot(px - x1 - t * dx, py - y1 - t * dy);
@@ -1298,7 +1358,7 @@ function rayPoly(px, py, dx, dy, poly) {
 function castRay(px, py, angDeg) {
   const a = angDeg * DEG, dx = Math.sin(a), dy = Math.cos(a);
   let best = distanceToWall(px, py, angDeg);
-  for (const w of WALLS) best = Math.min(best, rayPoly(px, py, dx, dy, wallPoly(w)));
+  for (const w of WALLS) if (!w.bar) best = Math.min(best, rayPoly(px, py, dx, dy, wallPoly(w)));   // low sensors see under bars
   if (W.cubes) best = Math.min(best, cubeRay(px, py, angDeg, 40).d);   // sensors sit low enough to see a cube on the floor
   return best;
 }
@@ -1322,9 +1382,9 @@ function bumperPressed(dev) {
   // a 50 mm wide pad that sticks 4 mm out from where the bumper is mounted
   const p = mountWorld(dev), a = p.ang * DEG, fx = Math.sin(a), fy = Math.cos(a), rx = Math.cos(a), ry = -Math.sin(a);
   const pad = [[-25, 0], [25, 0], [25, 4], [-25, 4]].map(([r, f]) => [p.x + rx * r + fx * f, p.y + ry * r + fy * f]);
-  const hx = S.fieldW / 2, hy = S.fieldH / 2;
+  const hx = FW() / 2, hy = FH() / 2;
   if (S.walls && pad.some(([x, y]) => Math.abs(x) > hx || Math.abs(y) > hy)) return true;
-  return WALLS.some(w => polysOverlap(pad, wallPoly(w))) || W.cubes.some(c => !c.held && c.z === 0 && polysOverlap(pad, cubePoly(c)));
+  return WALLS.some(w => !w.bar && polysOverlap(pad, wallPoly(w))) || W.cubes.some(c => !c.held && c.z === 0 && polysOverlap(pad, cubePoly(c)));
 }
 
 function corners(x, y, rot) {
@@ -1333,12 +1393,12 @@ function corners(x, y, rot) {
 }
 function poseOk(x, y, rot) {
   const body = corners(x, y, rot);
-  if (S.walls) { const hx = S.fieldW / 2, hy = S.fieldH / 2; if (!body.every(([px, py]) => Math.abs(px) <= hx && Math.abs(py) <= hy)) return false; }
-  return !WALLS.some(w => polysOverlap(body, wallPoly(w))) && heldCubeOk(x, y, rot);
+  if (S.walls) { const hx = FW() / 2, hy = FH() / 2; if (!body.every(([px, py]) => Math.abs(px) <= hx && Math.abs(py) <= hy)) return false; }
+  return !WALLS.some(w => !(w.bar && robotHeight() < w.bar[0]) && polysOverlap(body, wallPoly(w))) && heldCubeOk(x, y, rot);
 }
 function distanceToWall(x, y, rot) {
   if (!S.walls) return Infinity;
-  const a = rot * DEG, dx = Math.sin(a), dy = Math.cos(a), hx = S.fieldW / 2, hy = S.fieldH / 2;
+  const a = rot * DEG, dx = Math.sin(a), dy = Math.cos(a), hx = FW() / 2, hy = FH() / 2;
   let best = Infinity;
   if (dx > 1e-9) best = Math.min(best, (hx - x) / dx);
   if (dx < -1e-9) best = Math.min(best, (-hx - x) / dx);
@@ -1362,16 +1422,29 @@ const armAngle = () => W.arm / ARM_GEAR;
 const clawOpen = () => Math.max(0, Math.min(1, W.claw / 90));
 const liftHeight = () => hasPart("arm") ? ARM_LEN * Math.sin(Math.min(ARM_MAX, armAngle()) * DEG) : 0;
 const heldCube = () => W.cubes.find(c => c.held);
+// about how tall the robot is: a Clawbot's arm tower is too tall to fit under the Level Up bars
+const robotHeight = () => hasPart("arm") ? 240 + liftHeight() * 0.5 : 150;
 function toWorld(x, y, rot, f, r) { const a = rot * DEG, s = Math.sin(a), c = Math.cos(a); return { x: x + s * f + c * r, y: y + c * f - s * r }; }
 function toLocal(px, py) { const a = W.rot * DEG, s = Math.sin(a), c = Math.cos(a), dx = px - W.x, dy = py - W.y; return { f: s * dx + c * dy, r: c * dx - s * dy }; }
-const gripAt = (x, y, rot) => toWorld(x, y, rot, S.robotL / 2 + CUBE / 2 + 2, 0);
+// where the claw holds a piece. On a level with reach (Level Up), the arm swings out as it lifts.
+const gripAt = (x, y, rot, c) => { const l = LEVEL !== "open" && lvl(); return toWorld(x, y, rot, S.robotL / 2 + pieceD(c || heldCube()) / 2 + 2 + (l && l.reach ? l.reach * liftHeight() / ARM_LEN : 0), 0); };
 function squarePoly(x, y, rot, size) {
   const a = rot * DEG, s = Math.sin(a), c = Math.cos(a), h = size / 2;
   return [[h, h], [h, -h], [-h, -h], [-h, h]].map(([f, r]) => [x + s * f + c * r, y + c * f - s * r]);
 }
-const cubePoly = c => squarePoly(c.x, c.y, c.rot || 0, CUBE);
+// game pieces: 60 mm cubes, or Level Up bean bags (102 x 76 mm, 25 mm thick)
+const BAG = { w: 102, d: 76, h: 25 };
+const pieceW = c => c && c.kind === "bag" ? BAG.w : CUBE;   // across the robot when held
+const pieceD = c => c && c.kind === "bag" ? BAG.d : CUBE;   // front to back when held
+const pieceH = c => c && c.kind === "bag" ? BAG.h : CUBE;
+function rectPoly(x, y, rot, w, d) {
+  const a = rot * DEG, s = Math.sin(a), c = Math.cos(a), hw = w / 2, hd = d / 2;
+  return [[hd, hw], [hd, -hw], [-hd, -hw], [-hd, hw]].map(([f, r]) => [x + s * f + c * r, y + c * f - s * r]);
+}
+const cubePoly = c => c.kind === "bag" ? rectPoly(c.x, c.y, c.rot || 0, BAG.w, BAG.d) : squarePoly(c.x, c.y, c.rot || 0, CUBE);
+const wallTop = w => w.h || 150;   // how tall a wall or block is
 function resetCubes() {
-  const lv = lvl(), list = CUBES.map(c => ({ x: c.x, y: c.y, z: 0, rot: 0, color: c.color, held: false, ready: false }));
+  const lv = lvl(), list = CUBES.map(c => ({ x: c.x, y: c.y, z: 0, rot: c.rot || 0, color: c.color, held: false, ready: false, ...(c.kind ? { kind: c.kind } : {}) }));
   if (FORCE_COLORS) list.forEach((c, i) => { if (FORCE_COLORS[i]) c.color = FORCE_COLORS[i]; });   // a check picks the order
   else if (LEVEL !== "open" && lv.shuffle) {   // sorting levels mix up the colors each run
     const cols = list.map(c => c.color);
@@ -1380,8 +1453,10 @@ function resetCubes() {
   }
   if (LEVEL !== "open" && lv.place) lv.place(list);
   W.cubes = list;
+  const pre = CUBES.findIndex(c => c.preload);   // a Level Up robot starts holding its Preload
+  if (pre >= 0 && hasPart("claw")) { const c = list[pre], g = gripAt(W.x, W.y, W.rot, c); Object.assign(c, { held: true, x: g.x, y: g.y, rot: W.rot }); W.claw = CLAW_HOLD; }
 }
-function inBounds(poly) { const hx = S.fieldW / 2, hy = S.fieldH / 2; return !S.walls || poly.every(([x, y]) => Math.abs(x) <= hx && Math.abs(y) <= hy); }
+function inBounds(poly) { const hx = FW() / 2, hy = FH() / 2; return !S.walls || poly.every(([x, y]) => Math.abs(x) <= hx && Math.abs(y) <= hy); }
 // smallest push that moves polygon b out of polygon a (or null if they don't touch)
 function pushOut(a, b) {
   let best = null, bestD = Infinity;
@@ -1398,28 +1473,28 @@ function pushOut(a, b) {
   }
   return best;
 }
-const cubeFree = (c, others) => { const p = cubePoly(c); return inBounds(p) && !WALLS.some(w => polysOverlap(p, wallPoly(w))) && !others.some(o => o !== c && !o.held && o.z === c.z && polysOverlap(p, cubePoly(o))); };
+const cubeFree = (c, others) => { const p = cubePoly(c); return inBounds(p) && !WALLS.some(w => !w.bar && polysOverlap(p, wallPoly(w))) && !others.some(o => o !== c && !o.held && o.z === c.z && polysOverlap(p, cubePoly(o))); };
 // where a cube lands when the claw lets go: on top of a block or another cube if it is high enough
 function dropCube(c) {
   c.held = false; c.ready = false;
-  let z = 0;
-  for (const w of WALLS) if (w.t && pointInPoly(c.x, c.y, wallPoly(w)) && c.z >= 145) z = Math.max(z, 150);
-  for (const o of W.cubes) if (o !== c && !o.held && Math.hypot(o.x - c.x, o.y - c.y) < CUBE * 0.7 && c.z >= o.z + CUBE - 5) z = Math.max(z, o.z + CUBE);
-  c.z = z;
+  let z = 0, on = null;
+  for (const w of WALLS) if (w.t && !w.bar && pointInPoly(c.x, c.y, wallPoly(w)) && c.z >= wallTop(w) - 5 && wallTop(w) > z) { z = wallTop(w); on = w.goal || null; }
+  for (const o of W.cubes) if (o !== c && !o.held && Math.hypot(o.x - c.x, o.y - c.y) < Math.min(pieceW(o), pieceD(o)) * 0.7 && c.z >= o.z + pieceH(o) - 5 && o.z + pieceH(o) > z) { z = o.z + pieceH(o); on = o.on || null; }
+  c.z = z; c.on = on;
 }
 function cubesStep(ox, oy, orot) {
   if (!W.cubes.length) return;
   const claw = hasPart("claw");
   let held = heldCube();
   if (held && (!claw || W.claw > CLAW_LET_GO)) { dropCube(held); held = null; }
-  if (held) { const g = gripAt(W.x, W.y, W.rot); held.x = g.x; held.y = g.y; held.z = liftHeight(); held.rot = W.rot; }
+  if (held) { const g = gripAt(W.x, W.y, W.rot, held); held.x = g.x; held.y = g.y; held.z = liftHeight(); held.rot = W.rot; held.on = null; }
   else if (claw && (!hasPart("arm") || armAngle() < 12)) {
     // a cube between the open fingers gets grabbed when the claw closes on it
     for (const c of W.cubes) {
-      const L = toLocal(c.x, c.y), between = c.z === 0 && L.f > S.robotL / 2 && L.f < S.robotL / 2 + CUBE + 15 && Math.abs(L.r) < 25;
+      const L = toLocal(c.x, c.y), between = c.z === 0 && L.f > S.robotL / 2 && L.f < S.robotL / 2 + pieceD(c) + 15 && Math.abs(L.r) < 25;
       if (!between) { c.ready = false; continue; }
       if (W.claw >= CLAW_LET_GO) c.ready = true;
-      else if (c.ready && W.claw <= CLAW_HOLD + 1) { c.held = true; W.claw = CLAW_HOLD; const g = gripAt(W.x, W.y, W.rot); c.x = g.x; c.y = g.y; c.rot = W.rot; break; }
+      else if (c.ready && W.claw <= CLAW_HOLD + 1) { c.held = true; W.claw = CLAW_HOLD; const g = gripAt(W.x, W.y, W.rot, c); c.x = g.x; c.y = g.y; c.rot = W.rot; c.on = null; break; }
     }
   }
   // the robot pushes cubes that sit on the floor
@@ -1433,15 +1508,17 @@ function cubesStep(ox, oy, orot) {
   if (stuck) {   // the cube is pinned against something, so the robot can't move it
     W.cubes.forEach((c, i) => { c.x = saved[i][0]; c.y = saved[i][1]; });
     W.x = ox; W.y = oy; W.rot = orot; W.blocked = true;
-    const h = heldCube(); if (h) { const g = gripAt(W.x, W.y, W.rot); h.x = g.x; h.y = g.y; }
+    const h = heldCube(); if (h) { const g = gripAt(W.x, W.y, W.rot, h); h.x = g.x; h.y = g.y; }
   }
 }
 // a cube held low can't pass through walls
 function heldCubeOk(x, y, rot) {
   const h = W.cubes && heldCube();
-  if (!h || liftHeight() >= 150) return true;
-  const g = gripAt(x, y, rot), p = squarePoly(g.x, g.y, rot, CUBE);
-  return inBounds(p) && !WALLS.some(w => polysOverlap(p, wallPoly(w)));
+  if (!h) return true;
+  const z = liftHeight(), g = gripAt(x, y, rot, h), p = rectPoly(g.x, g.y, rot, pieceW(h), pieceD(h));
+  if (z < 150 && !inBounds(p)) return false;
+  // a held piece passes over anything lower than it, and under a bar it is lower than
+  return !WALLS.some(w => (w.bar ? z + pieceH(h) > w.bar[0] && z < w.bar[1] : z < wallTop(w)) && polysOverlap(p, wallPoly(w)));
 }
 function cubeRay(px, py, angDeg, maxZ) {
   const a = angDeg * DEG, dx = Math.sin(a), dy = Math.cos(a);
@@ -1554,6 +1631,7 @@ function physicsStep() {
       W.lastTrail.pts.push([W.x, W.y]);
     }
   }
+  if (LEVEL !== "open" && lvl().tick) lvl().tick();
   cubesStep(ox0, oy0, before);
   if (RUN && !W.done && LEVEL !== "open" && lvl().goal && lvl().goal()) { W.done = true; log("✓ Level complete! " + lvl().done, "ok"); }
   W.rate = (W.rot - before) / DT;
@@ -1884,6 +1962,7 @@ function loop(ts) {
     physicsStep();
     if (LEVEL === "driving") drivingTick(px, py);
     if (RUN.until && W.t >= RUN.until) alive = false;
+    if (LEVEL !== "open" && lvl().match && W.t >= lvl().match) { alive = false; matchOver(); }
     if (!alive) break;
     if (RUN.stepHit) { RUN.stepHit = false; setPaused(true); break; }
   }
@@ -1973,6 +2052,7 @@ function readouts() {
     items.push(["Gate", D ? (D.done !== null ? "finished" : `${D.next + 1 === DRIVE_GATES.length ? "finish" : D.next + 1} next`) : "1 next"],
       ["Time", D && D.t0 !== null ? ((D.done !== null ? D.done : W.t - D.t0 + 2 * D.touches).toFixed(1) + " s") : "–"], ["Best time", best !== null ? best + " s" : "–"]);
   }
+  if (lvl().game === "levelup") { const lp = luPoints(); items.push(["Points", `${lp.total} (time ${Math.max(0, lvl().match - W.t).toFixed(0)} s)`]); }
   if (LEVEL === "skills") { const sp = skillPoints(); items.push(["Points", `${sp.total} (time ${Math.max(0, 60 - W.t).toFixed(0)} s)`]); }
   const vars = RUN ? RUN.vars : LAST_VARS;
   (RUN_WS || ws).getAllVariables().forEach(m => { if (m.type === "") { const val = vars[m.name]; items.push(["var", m.name, val === undefined ? "–" : typeof val === "number" ? +val.toFixed(3) + "" : String(val)]); } });
@@ -2047,13 +2127,13 @@ new ResizeObserver(sizeCanvas).observe(cv);
 function draw() {
   if (!cv.width) return;
   const Wd = cv.width, Ht = cv.height, pad = Wd * 0.085;
-  const span = Math.max(S.fieldW, S.fieldH), sc = (Wd - 2 * pad) / span;
+  const span = Math.max(FW(), FH()), sc = (Wd - 2 * pad) / span;
   const X = x => Wd / 2 + x * sc, Y = y => Ht / 2 - y * sc;
   VIEW = { Wd, Ht, sc, dpr: Wd / cv.getBoundingClientRect().width };
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#8a8f98"; ctx.fillRect(0, 0, Wd, Ht);
-  const hx = S.fieldW / 2, hy = S.fieldH / 2;
-  ctx.fillStyle = "#f7f8fa"; ctx.fillRect(X(-hx), Y(hy), S.fieldW * sc, S.fieldH * sc);
+  const hx = FW() / 2, hy = FH() / 2;
+  ctx.fillStyle = "#f7f8fa"; ctx.fillRect(X(-hx), Y(hy), FW() * sc, FH() * sc);
   ctx.strokeStyle = "#d9dde4"; ctx.lineWidth = 1;
   for (let gx = Math.ceil(-hx / S.grid) * S.grid; gx <= hx; gx += S.grid) { ctx.beginPath(); ctx.moveTo(X(gx), Y(hy)); ctx.lineTo(X(gx), Y(-hy)); ctx.stroke(); }
   for (let gy = Math.ceil(-hy / S.grid) * S.grid; gy <= hy; gy += S.grid) { ctx.beginPath(); ctx.moveTo(X(-hx), Y(gy)); ctx.lineTo(X(hx), Y(gy)); ctx.stroke(); }
@@ -2066,7 +2146,7 @@ function draw() {
   ctx.textAlign = "right";
   for (let gy = Math.ceil(-hy / step) * step; gy <= hy; gy += step) ctx.fillText(gy, X(-hx) - pad * 0.15, Y(gy));
   ctx.strokeStyle = S.walls ? "#3a4252" : "rgba(58,66,82,.35)"; ctx.lineWidth = S.walls ? Math.max(3, Wd * 0.008) : 2;
-  ctx.setLineDash(S.walls ? [] : [8, 6]); ctx.strokeRect(X(-hx), Y(hy), S.fieldW * sc, S.fieldH * sc); ctx.setLineDash([]);
+  ctx.setLineDash(S.walls ? [] : [8, 6]); ctx.strokeRect(X(-hx), Y(hy), FW() * sc, FH() * sc); ctx.setLineDash([]);
   // floor paint (color tiles, lines) and level guides
   for (const f of FLOOR) {
     const col = FLOOR_COLORS[f.color].hex;
@@ -2087,9 +2167,20 @@ function draw() {
   // student walls
   WALLS.forEach((w, i) => {
     const poly = wallPoly(w);
-    ctx.fillStyle = EDIT.sel && EDIT.sel.k === "wall" && EDIT.sel.i === i ? "#1f6fd1" : w.t ? "#b5651d" : "#3a4252";
+    ctx.fillStyle = EDIT.sel && EDIT.sel.k === "wall" && EDIT.sel.i === i ? "#1f6fd1" : w.fill || (w.t ? "#b5651d" : "#3a4252");
+    if (w.bar) ctx.globalAlpha = 0.45;   // an overhead bar: the field shows through it
     ctx.beginPath(); poly.forEach(([px, py], k) => k ? ctx.lineTo(X(px), Y(py)) : ctx.moveTo(X(px), Y(py))); ctx.closePath(); ctx.fill();
+    if (w.edge) { ctx.strokeStyle = w.edge; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.globalAlpha = 1;
   });
+  WALLS.forEach(w => {   // goal labels (L1 3, L2 6 ...)
+    if (!w.label) return;
+    const poly = wallPoly(w), cx = poly.reduce((a, p) => a + p[0], 0) / 4, cy = poly.reduce((a, p) => a + p[1], 0) / 4;
+    const lx = w.labelAt ? w.labelAt[0] : cx, ly = w.labelAt ? w.labelAt[1] : cy;
+    ctx.fillStyle = "#1c2230"; ctx.font = `bold ${Math.max(10, Math.round(Wd * 0.018))}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(w.label, X(lx), Y(ly));
+  });
+  ctx.font = `${Math.max(10, Wd * 0.018)}px "IBM Plex Mono", monospace`;
   // the selected floor item gets a blue outline
   const fsel = EDIT.on && EDIT.sel && EDIT.sel.k === "floor" && FLOOR[EDIT.sel.i];
   if (fsel) {
@@ -3058,7 +3149,7 @@ cv.addEventListener("pointerdown", e => {
   e.preventDefault(); cv.setPointerCapture(e.pointerId);
   const [x, y] = toField(e);
   if (EDIT.tool === "start") {
-    const hx = S.fieldW / 2, hy = S.fieldH / 2;
+    const hx = FW() / 2, hy = FH() / 2;
     START = [Math.max(-hx, Math.min(hx, x)), Math.max(-hy, Math.min(hy, y)), +bHead.value];
     newWorld(); paintLeds(); saveCustom(); draw();
     if (WALLS.some(w => onRobot(w))) log("The robot starts on top of a wall there. Move the start spot or the wall.", "warn");
@@ -3488,13 +3579,13 @@ function init3d() {
 }
 const v3 = (x, y, h) => new THREE.Vector3(x, h || 0, -y);
 function paintFloor() {
-  const g = V3.floorCanvas.getContext("2d"), N = V3.floorCanvas.width, hx = S.fieldW / 2, hy = S.fieldH / 2;
-  const sc = N / Math.max(S.fieldW, S.fieldH), X = x => (x + hx) * sc, Y = y => (hy - y) * sc;
+  const g = V3.floorCanvas.getContext("2d"), N = V3.floorCanvas.width, hx = FW() / 2, hy = FH() / 2;
+  const sc = N / Math.max(FW(), FH()), X = x => (x + hx) * sc, Y = y => (hy - y) * sc;
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, N, N);
-  g.fillStyle = "#f7f8fa"; g.fillRect(0, 0, S.fieldW * sc, S.fieldH * sc);
+  g.fillStyle = "#f7f8fa"; g.fillRect(0, 0, FW() * sc, FH() * sc);
   g.strokeStyle = "#d9dde4"; g.lineWidth = 3;
-  for (let gx = Math.ceil(-hx / S.grid) * S.grid; gx <= hx; gx += S.grid) { g.beginPath(); g.moveTo(X(gx), 0); g.lineTo(X(gx), S.fieldH * sc); g.stroke(); }
-  for (let gy = Math.ceil(-hy / S.grid) * S.grid; gy <= hy; gy += S.grid) { g.beginPath(); g.moveTo(0, Y(gy)); g.lineTo(S.fieldW * sc, Y(gy)); g.stroke(); }
+  for (let gx = Math.ceil(-hx / S.grid) * S.grid; gx <= hx; gx += S.grid) { g.beginPath(); g.moveTo(X(gx), 0); g.lineTo(X(gx), FH() * sc); g.stroke(); }
+  for (let gy = Math.ceil(-hy / S.grid) * S.grid; gy <= hy; gy += S.grid) { g.beginPath(); g.moveTo(0, Y(gy)); g.lineTo(FW() * sc, Y(gy)); g.stroke(); }
   for (const f of FLOOR) {
     const col = FLOOR_COLORS[f.color].hex;
     if (f.rect) { const [rx, ry, rw, rh] = f.rect; g.fillStyle = col; g.fillRect(X(rx), Y(ry + rh), rw * sc, rh * sc); }
@@ -3505,9 +3596,9 @@ function paintFloor() {
   for (const tr of W.trails) { g.strokeStyle = PEN[tr.color] || "#111"; g.lineWidth = 12; g.beginPath(); tr.pts.forEach(([px, py], i) => i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py))); g.stroke(); }
   V3.floorTex.needsUpdate = true;
   // the texture is square; show only the field part of it
-  const u = S.fieldW * sc / N, v = S.fieldH * sc / N;
+  const u = FW() * sc / N, v = FH() * sc / N;
   V3.floorTex.repeat.set(u, v); V3.floorTex.offset.set(0, 1 - v);
-  V3.floor.scale.set(S.fieldW, S.fieldH, 1);
+  V3.floor.scale.set(FW(), FH(), 1);
 }
 function box(w, h, d, color) { return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color })); }
 function buildWalls3d() {
@@ -3515,14 +3606,15 @@ function buildWalls3d() {
   while (grp.children.length) { const c = grp.children.pop(); c.geometry.dispose(); c.material.dispose(); }
   const H = 150;
   for (const w of WALLS) {
-    const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) + WALL_T, m = box(len, H, w.t || WALL_T, w.t ? 0xb5651d : 0x3a4252);
-    m.position.copy(v3((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2, H / 2));
+    const lo = w.bar ? w.bar[0] : 0, hi = w.bar ? w.bar[1] : w.h || H;
+    const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) + WALL_T, m = box(len, hi - lo, w.t || WALL_T, new T.Color(w.fill || (w.t ? "#b5651d" : "#3a4252")).getHex());
+    m.position.copy(v3((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2, (lo + hi) / 2));
     m.rotation.y = Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
     grp.add(m);
   }
   if (S.walls) {
-    const hx = S.fieldW / 2, hy = S.fieldH / 2, t = 30, h = 120, col = 0x2b3446;
-    [[0, hy + t / 2, S.fieldW + 2 * t, t], [0, -hy - t / 2, S.fieldW + 2 * t, t], [hx + t / 2, 0, t, S.fieldH], [-hx - t / 2, 0, t, S.fieldH]].forEach(([x, y, a, b]) => {
+    const hx = FW() / 2, hy = FH() / 2, t = 30, h = 120, col = 0x2b3446;
+    [[0, hy + t / 2, FW() + 2 * t, t], [0, -hy - t / 2, FW() + 2 * t, t], [hx + t / 2, 0, t, FH()], [-hx - t / 2, 0, t, FH()]].forEach(([x, y, a, b]) => {
       const m = box(a, h, b, col); m.position.copy(v3(x, y, h / 2)); grp.add(m);
     });
   }
@@ -3568,22 +3660,22 @@ function render3d() {
   const T = THREE, wrap = cv3.parentElement, w = wrap.clientWidth, h = wrap.clientHeight;
   if (V3.w !== w || V3.h !== h) { V3.w = w; V3.h = h; V3.renderer.setSize(w, h, false); V3.camera.aspect = w / h; V3.camera.updateProjectionMatrix(); }
   // rebuild only what changed
-  const fsig = [LEVEL, FLOOR_VER, S.fieldW, S.fieldH, S.grid, W.trails.length, W.trails.reduce((n, t) => n + t.pts.length, 0) >> 3].join();
+  const fsig = [LEVEL, FLOOR_VER, FW(), FH(), S.grid, W.trails.length, W.trails.reduce((n, t) => n + t.pts.length, 0) >> 3].join();
   if (fsig !== V3.sig.floor) { V3.sig.floor = fsig; paintFloor(); }
-  const wsig = JSON.stringify([WALLS, S.walls, S.fieldW, S.fieldH]);
+  const wsig = JSON.stringify([WALLS, S.walls, FW(), FH()]);
   if (wsig !== V3.sig.walls) { V3.sig.walls = wsig; buildWalls3d(); }
   const rsig = JSON.stringify([DEVICES, S.robotL, S.robotW, Math.round(W.claw / 5), Math.round(armAngle() / 2)]);
   if (rsig !== V3.sig.robot) { V3.sig.robot = rsig; buildRobot3d(); }
   V3.robot.position.copy(v3(W.x, W.y, 0));
   V3.robot.rotation.y = -W.rot * DEG;
   // cubes
-  const csig = W.cubes.map(c => c.color).join();
+  const csig = W.cubes.map(c => c.color + (c.kind || "")).join();
   if (csig !== V3.sig.cubes) {
     V3.sig.cubes = csig;
     while (V3.cubes.children.length) { const c = V3.cubes.children.pop(); c.geometry.dispose(); c.material.dispose(); }
-    for (const c of W.cubes) V3.cubes.add(box(CUBE, CUBE, CUBE, new T.Color(CUBE_HEX[c.color]).getHex()));
+    for (const c of W.cubes) V3.cubes.add(box(pieceW(c), pieceH(c), pieceD(c), new T.Color(CUBE_HEX[c.color]).getHex()));
   }
-  W.cubes.forEach((c, i) => { const m = V3.cubes.children[i]; m.position.copy(v3(c.x, c.y, (c.held ? c.z + 30 : c.z) + CUBE / 2)); m.rotation.y = -(c.rot || 0) * DEG; });
+  W.cubes.forEach((c, i) => { const m = V3.cubes.children[i]; m.position.copy(v3(c.x, c.y, (c.held ? c.z + 30 : c.z) + pieceH(c) / 2)); m.rotation.y = -(c.rot || 0) * DEG; });
   // distance sensor beams
   while (V3.beams.children.length) { const c = V3.beams.children.pop(); c.geometry.dispose(); c.material.dispose(); }
   devOf("distance").forEach(d => {
@@ -3593,7 +3685,7 @@ function render3d() {
     V3.beams.add(new T.Line(geo, new T.LineBasicMaterial({ color: 0xe02020, transparent: true, opacity: 0.6 })));
   });
   // camera
-  const span = Math.max(S.fieldW, S.fieldH);
+  const span = Math.max(FW(), FH());
   let pos, look;
   if (V3.mode === "chase") {
     const a = W.rot * DEG, fx = Math.sin(a), fy = Math.cos(a);
@@ -3628,7 +3720,7 @@ function resetOrbit() { if (V3.orbit) delete V3.orbit[V3.mode]; if (V3.ready) re
   const redraw = () => { if (V3.ready && V3.mode !== "top") render3d(); };
   const zoomBy = f => { const o = orbitOf(V3.mode); o.zoom = Math.min(3, Math.max(0.15, o.zoom * f)); redraw(); };
   const slideBy = (dx, dy) => {
-    const o = orbitOf(V3.mode), span = Math.max(S.fieldW, S.fieldH);
+    const o = orbitOf(V3.mode), span = Math.max(FW(), FH());
     const k = span * 1.4 * o.zoom / Math.max(200, cv3.clientHeight);
     const y = V3.camera ? Math.atan2(V3.camera.position.x - (V3.cam ? V3.cam.look.x + o.px : 0), V3.camera.position.z - (V3.cam ? V3.cam.look.z + o.pz : 0)) : 0;
     const c = Math.cos(y), s = Math.sin(y);
@@ -3925,7 +4017,7 @@ const CHECKS = {
   },
 };
 LEVELS.filter(l => l.base).forEach(l => { CHECKS[l.id] = CHECKS[l.base]; });
-Object.assign(CHECKS, { skills: skillsCheck, hexagon: hexCheck, modemenu: modeCheck, timeout: timeoutCheck, garage: garageCheck, patrol: patrolCheck, smoothline: smoothCheck });
+Object.assign(CHECKS, { lu_auto: luCheck, skills: skillsCheck, hexagon: hexCheck, modemenu: modeCheck, timeout: timeoutCheck, garage: garageCheck, patrol: patrolCheck, smoothline: smoothCheck });
 // two single Motors with no Reverse on the right one: the robot circles, and the level's own hint would mislead
 function needsReverse() {
   if (!S.rightMirrored || drivetrain()) return null;
@@ -3969,6 +4061,59 @@ async function skillsCheck() {
   const r = p.total >= 12 ? result(4, said) : p.total >= 8 ? result(3, said, "Good run! Look for the slowest part of your route and make it shorter, or add the cubes you skipped.")
     : p.total >= 3 ? result(2, said, "Get one cube all the way into its zone first, then add the next one. Drive back to the green square at the end for 2 more points.")
     : result(1, said, "Start simple: push the nearest cube into its zone, then drive back to the green square.");
+  r.points = p.total;
+  return r;
+}
+/* ---- Level Up: loading, points, end of the match, check ---- */
+const rectPts = ([x, y, w, h]) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+// the Loader puts the next Match Load bag in the red Load Zone 2 seconds after the zone is empty
+function luTick() {
+  if (!W.lu) W.lu = { loads: ["red", "blue", "red", "blue", "red", "blue", "red", "blue"], emptySince: W.t };
+  const L = W.lu, zone = rectPts(LU_LOAD);
+  if (!L.loads.length) return;
+  if (W.cubes.some(c => !c.held && c.z === 0 && polysOverlap(cubePoly(c), zone)) || polysOverlap(corners(W.x, W.y, W.rot), zone)) { L.emptySince = W.t; return; }
+  if (W.t - L.emptySince < 2) return;
+  W.cubes.push({ kind: "bag", x: LU_LOAD[0] + LU_LOAD[2] / 2, y: LU_LOAD[1] + LU_LOAD[3] / 2, z: 0, rot: 0, color: L.loads.shift(), held: false, ready: false });
+  L.emptySince = W.t;
+}
+function luPoints() {
+  const n = { floor: 0, L1: 0, L2: 0, L3: 0, L4: 0 };
+  let total = 0;
+  for (const c of W.cubes || []) {
+    if (c.held || c.kind !== "bag") continue;
+    if (c.z === 0) {   // all of the bag inside a Floor Goal of its color (or a yellow bag)
+      const g = LU_GOALS.find(g => (g.color === c.color || c.color === "yellow") && cubePoly(c).every(([x, y]) => x >= g.rect[0] && x <= g.rect[0] + g.rect[2] && y >= g.rect[1] && y <= g.rect[1] + g.rect[3]));
+      if (g) { total += 1; n.floor++; }
+      continue;
+    }
+    if (!c.on) continue;
+    const [col, lev] = c.on.split(":");
+    if (lev === "L4" ? c.color === "yellow" : c.color === col || c.color === "yellow") { total += LU.pts[lev]; n[lev]++; }
+  }
+  return { total, n };
+}
+function luSaid(p) {
+  const parts = [["Floor Goal", p.n.floor], ["L1", p.n.L1], ["L2", p.n.L2], ["L3", p.n.L3], ["L4", p.n.L4]].filter(x => x[1]).map(([k, v]) => `${v} on ${k}`);
+  return `${p.total} point${p.total === 1 ? "" : "s"}${parts.length ? ": " + parts.join(", ") : ""}.`;
+}
+function matchOver() {
+  if (CHECKING) return;
+  const p = luPoints();
+  if (LEVEL === "lu_drive") {
+    const best = LS.get("rfs.lubest", null), isBest = p.total > 0 && (best === null || p.total > best);
+    if (isBest) LS.set("rfs.lubest", p.total);
+    log(`Time! ${luSaid(p)}${isBest ? " New best score!" : best !== null ? ` Your best is ${best} points.` : ""} Press Reset, then Start to play again.`, "ok");
+  } else log(`Time! ${luSaid(p)} Press "Check my work" to save your score.`, "ok");
+}
+async function luCheck() {
+  const st = await testRun({ label: "60-second match", secs: 60, full: true });
+  if (st.moved < 20) return nothing(st);
+  const p = luPoints(), said = luSaid(p);
+  st.rec.note = `${p.total} points`;
+  const r = p.total >= 24 ? result(4, said)
+    : p.total >= 12 ? result(3, said, "Good match! Find the slowest part of your route and make it shorter. Higher goals are worth more: L3 is 12 points.")
+    : p.total >= 3 ? result(2, said, "Score the Preload first. Lift the arm, drive up to the Pyramid of the bag's color, then open the claw. Then go get the next bag.")
+    : result(1, said, "Start with the yellow Preload in the claw. Lift ArmMotor, drive forward to the red Pyramid, then open ClawMotor.");
   r.points = p.total;
   return r;
 }
@@ -4355,6 +4500,7 @@ const PLANS = {
   garage: ["Drive forward.", "Wait until the distance is less than 200 mm. Stop driving.", "Turn left 90 degrees.", "Drive forward.", "Wait until the distance is less than 100 mm. Stop driving."],
   patrol: ["Drive forward.", "Forever:", "  if the distance is less than 300 mm:", "    turn right 90 degrees", "    drive forward"],
   smoothline: ["Spin both Motors forward.", "Forever:", "  set steer to (brightness − 50) × 0.5", "  set left velocity to 30 + steer", "  set right velocity to 30 − steer", "If it turns the wrong way, swap the + and −."],
+  lu_auto: ["The robot starts holding the yellow Preload.", "Spin ArmMotor forward 450 degrees to lift the arm all the way up.", "Drive forward 200 mm. The robot stops at the red Pyramid.", "Spin ClawMotor forward 90 degrees to open the claw. The bag drops on L3: 12 points!", "Back up, lower the arm, and go get the next bag."],
   skills: ["Pick the 2 cubes closest to each other first.", "For each cube: drive to it, push or carry it into its color zone, back away.", "Use the gyro for exact turns, and the Distance sensor to line up.", "Save the last 8 seconds to drive back to the green square."],
   sort: ["For each cube:", "  grab it", "  read its color with the Color sensor", "  if red: carry it to the red square, else carry it to the blue square", "  let go and come back"],
 };
