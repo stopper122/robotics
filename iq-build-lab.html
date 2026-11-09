@@ -1501,7 +1501,7 @@ function fillExSel(){ const vis=exVisible(); exSel.innerHTML='';
   const none=!vis.length; exSel.hidden=none; $('exNote').hidden=none; $('exBtns').hidden=none; $('exNone').hidden=!none;
   if(!none) renderEx(); }
 function renderEx(){ const ex=VEX_EX[exIdx]; exSel.value=exIdx; $('exNote').textContent=ex.note+` It has ${ex.rows.length} parts and ${ex.steps.length} steps.`; }
-const TEACHER_PIN_HASH='0959d4765b65c0282cda1bacde3633da65cc12dfbef853cb13f5700b156c8612'; // same PIN as the Robot Field Sim; only the hash is here
+const TEACHER_PIN_HASH='a246d812cf598a1bd7998b4bb1f6f37ab51d3222436d04686d9fc221eee61602'; // same PIN as the Robot Field Sim; only the hash is here
 let teacherOk=false; try{ teacherOk=sessionStorage.getItem('iqbuild.teacher')==='1'; }catch(e){}
 function classLink(){ const base=/github\.io$/.test(location.hostname)?location.origin+location.pathname:PAGES_URL;
   return base+'?robots='+(exOn?(exOn.join(',')||'none'):'all'); }
