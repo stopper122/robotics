@@ -3417,7 +3417,7 @@ const zeroAxes = () => ({ A: 0, B: 0, C: 0, D: 0 });
 const zeroBtns = () => Object.fromEntries(BTN_KEYS.map(k => [k, false]));
 const CTRL = { axes: zeroAxes(), btn: zeroBtns(), source: "" };
 const SCREEN = { axes: zeroAxes(), btn: zeroBtns() };
-const SER = { axes: zeroAxes(), btn: zeroBtns(), t: 0, ports: [], lines: 0, opened: 0 };
+const SER = { axes: zeroAxes(), btn: zeroBtns(), t: 0, ports: [], lines: 0, opened: 0, kind: "Brain" };
 const KEYS = new Set();
 const KEYMAP = { KeyW: ["A", 100], KeyS: ["A", -100], KeyA: ["B", -100], KeyD: ["B", 100],
   ArrowUp: ["D", 100], ArrowDown: ["D", -100], ArrowLeft: ["C", -100], ArrowRight: ["C", 100] };
@@ -3432,8 +3432,8 @@ function readCtrl() {
   for (const k of BTN_KEYS) press(k, SCREEN.btn[k], "screen");
   for (const c of KEYS) { if (KEYMAP[c]) take(KEYMAP[c][0], KEYMAP[c][1], "keys"); if (KEYBTN[c]) press(KEYBTN[c], true, "keys"); }
   if (performance.now() - SER.t < 300) {
-    for (const a in SER.axes) take(a, SER.axes[a], "brain");
-    for (const k of BTN_KEYS) press(k, SER.btn[k], "brain");
+    for (const a in SER.axes) take(a, SER.axes[a], SER.kind === "Arduino" ? "arduino" : "brain");
+    for (const k of BTN_KEYS) press(k, SER.btn[k], SER.kind === "Arduino" ? "arduino" : "brain");
   }
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   for (const gp of pads) {
@@ -3521,6 +3521,61 @@ while True:
                                 controller.axisC.position(), controller.axisD.position(), buttons))
     wait(40, MSEC)
 `;
+const ARDUINO_USB = [0x2341, 0x2a03, 0x1a86, 0x0403, 0x10c4, 0x1b4f];   // Arduino, Arduino.org, CH340, FTDI, CP210x, SparkFun
+const ARDUINO_PROGRAM = `// Robot Field Sim controller for an Arduino Uno or Leonardo.
+// It sends 2 joysticks and 8 buttons to the sim over USB, like a VEX IQ controller.
+//
+// Left joystick:  VRx -> A0   VRy -> A1   +5V -> 5V   GND -> GND
+// Right joystick: VRx -> A2   VRy -> A3   +5V -> 5V   GND -> GND
+// Buttons: one leg to the pin below, the other leg to GND (no resistors needed).
+//   E up -> 2   E down -> 3   F up -> 4   F down -> 5
+//   L up -> 6   L down -> 7   R up -> 8   R down -> 9
+
+const int BUTTON_PINS[8] = {2, 3, 4, 5, 6, 7, 8, 9};  // E up, E down, F up, F down, L up, L down, R up, R down
+
+// If a stick moves the wrong way in the sim, change its false to true and upload again.
+const bool FLIP_A = false;  // left stick up and down
+const bool FLIP_B = false;  // left stick left and right
+const bool FLIP_C = false;  // right stick left and right
+const bool FLIP_D = false;  // right stick up and down
+
+const int STICK_PINS[4] = {A1, A0, A2, A3};  // axis A, B, C, D
+int center[4];
+
+void setup() {
+  Serial.begin(115200);
+  for (int i = 0; i < 8; i++) pinMode(BUTTON_PINS[i], INPUT_PULLUP);
+  delay(200);
+  // the sticks rest in the middle when you plug it in: remember where that is
+  for (int i = 0; i < 4; i++) {
+    long sum = 0;
+    for (int n = 0; n < 16; n++) sum += analogRead(STICK_PINS[i]);
+    center[i] = sum / 16;
+  }
+}
+
+// -100 to 100, like the VEX IQ controller
+int axis(int i, bool flip) {
+  int v = analogRead(STICK_PINS[i]);
+  int pos;
+  if (v >= center[i]) pos = map(v, center[i], 1023, 0, 100);
+  else pos = map(v, 0, center[i], -100, 0);
+  pos = constrain(pos, -100, 100);
+  if (abs(pos) < 8) pos = 0;  // ignore tiny wiggles in the middle
+  return flip ? -pos : pos;
+}
+
+void loop() {
+  Serial.print("C,");
+  Serial.print(axis(0, FLIP_A)); Serial.print(",");
+  Serial.print(axis(1, FLIP_B)); Serial.print(",");
+  Serial.print(axis(2, FLIP_C)); Serial.print(",");
+  Serial.print(axis(3, FLIP_D)); Serial.print(",");
+  for (int i = 0; i < 8; i++) Serial.print(digitalRead(BUTTON_PINS[i]) == LOW ? "1" : "0");
+  Serial.println();
+  delay(40);
+}
+`;
 const LINE_RE = /C,(-?\d+),(-?\d+),(-?\d+),(-?\d+),([01]{8})/;
 function parseBrainLine(line) {
   SER.lines++;
@@ -3538,7 +3593,8 @@ async function connectBrain() {
     return;
   }
   let port;
-  try { port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x2888 }] }); }
+  // the VEX Brain, or an Arduino running the Arduino program (Uno, Leonardo, and common clone USB chips)
+  try { port = await navigator.serial.requestPort({ filters: [0x2888, ...ARDUINO_USB].map(usbVendorId => ({ usbVendorId })) }); }
   catch (e) {
     if (e.name !== "NotFoundError") padNote = e.name === "SecurityError"
       ? "USB isn't allowed on this copy of the page. Open the simulator from the class website (stopper122.github.io/robotics) in Chrome or Edge."
@@ -3546,7 +3602,8 @@ async function connectBrain() {
     return;
   }
   try { await port.open({ baudRate: 115200 }); }
-  catch (e) { padNote = "Couldn't open that port. Close VEXcode (it may be using the Brain) and try again."; return; }
+  catch (e) { padNote = "Couldn't open that port. Close VEXcode or the Arduino program (it may be using it) and try again."; return; }
+  try { SER.kind = ARDUINO_USB.includes(port.getInfo().usbVendorId) ? "Arduino" : "Brain"; } catch (e) { SER.kind = "Brain"; }
   SER.ports.push(port); SER.opened = performance.now(); padNote = "";
   const dec = new TextDecoder();
   let buf = "";
@@ -3567,11 +3624,16 @@ async function connectBrain() {
   } catch (e) { /* unplugged */ }
   SER.ports = SER.ports.filter(p => p !== port);
   try { await port.close(); } catch (e) {}
-  padNote = "The Brain was disconnected.";
+  padNote = `The ${SER.kind} was disconnected.`;
 }
 function brainStatus() {
   const now = performance.now();
-  if (now - SER.t < 300) return ["ok", "Real controller connected through the Brain"];
+  if (now - SER.t < 300) return ["ok", SER.kind === "Arduino" ? "Arduino controller connected" : "Real controller connected through the Brain"];
+  if (SER.ports.length && SER.kind === "Arduino") {
+    if (now - SER.opened < 4000) return ["wait", "Arduino connected. Waiting for controller data..."];
+    if (SER.lines) return ["wait", "The Arduino is sending, but not controller data. Put the controller program on it (click Arduino)."];
+    return ["wait", "Arduino connected, but no data. Put the controller program on it (click Arduino)."];
+  }
   if (SER.ports.length) {
     if (now - SER.opened < 2500) return ["wait", "Brain connected. Waiting for controller data..."];
     if (SER.lines) return ["wait", "The Brain is sending, but not controller data. Run the Brain program (see How?)."];
@@ -3591,7 +3653,8 @@ function buildPad() {
   padBox.innerHTML = `
     <div class="padtop"><span class="dot" id="padDot"></span><span id="padStatus" class="padstatus"></span>
       <button class="btn" type="button" id="padConnect">Connect real controller</button>
-      <button class="btn" type="button" id="padHow">How?</button></div>
+      <button class="btn" type="button" id="padHow">How?</button>
+      <button class="btn" type="button" id="padArduino" title="Build your own controller with an Arduino">Arduino</button></div>
     <div class="padbody">
       <div class="pside">
         <div class="pbtns">${b("LUp", "L▲")}${b("LDown", "L▼")}</div>
@@ -3629,6 +3692,9 @@ function buildPad() {
   document.getElementById("padHow").onclick = () => textDialog("Use the real controller",
     "1) Copy this program into a new VEXcode IQ Python project and download it to the Brain. 2) Close VEXcode, keep the Brain plugged in with USB, and turn on the paired controller. 3) Run the program on the Brain. 4) Click \"Connect real controller\" and pick the VEX port. If nothing moves, click it again and pick the other VEX port. Works in Chrome or Edge from the class website.",
     BRAIN_PROGRAM, null);
+  document.getElementById("padArduino").onclick = () => textDialog("Arduino controller",
+    "1) Wire 2 joysticks and 8 buttons to an Arduino Uno or Leonardo (the pins are at the top of this program). 2) Copy this program into the Arduino app and upload it. 3) Plug the Arduino into this computer with USB. Don't touch the sticks for 2 seconds. 4) Click \"Connect real controller\" and pick the Arduino. 5) Push each stick and button. If a stick goes the wrong way, change its FLIP line to true and upload again. Works in Chrome or Edge from the class website.",
+    ARDUINO_PROGRAM, null);
   if (!padRaf) padRaf = requestAnimationFrame(padLoop);
 }
 function padLoop() {
