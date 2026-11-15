@@ -3652,6 +3652,7 @@ async function connectBrain() {
    data[0..3] = right X, right Y, left X, left Y (0..254, middle 127, up = big); data[8] = buttons. */
 const IQ2_CTRL_PID = 0x0210;
 const IQ2_ASK = new Uint8Array([0xC9, 0x36, 0xB8, 0x47, 0x58, 0x60, 0x00, 0x10, 0x53]);
+const IQ2_HELLO = [[0xC9, 0x36, 0xB8, 0x47, 0x21], [0xC9, 0x36, 0xB8, 0x47, 0xA4], [0xC9, 0x36, 0xB8, 0x47, 0x58, 0x67, 0x00, 0x89, 0xC4]].map(a => new Uint8Array(a));
 const IQ2_BITS = { EUp: 0x08, EDown: 0x02, FUp: 0x04, FDown: 0x01, LUp: 0x20, LDown: 0x10, RUp: 0x80, RDown: 0x40 };
 function iqStick(v) { const x = Math.round((v - 127) / 127 * 100); return Math.abs(x) < 6 ? 0 : Math.max(-100, Math.min(100, x)); }
 function parseIqState(d) {
@@ -3662,7 +3663,18 @@ function parseIqState(d) {
 async function readIqController(port) {
   let writer = null, alive = true;
   try { writer = port.writable.getWriter(); } catch (e) {}
-  (async () => { while (alive && writer) { try { await writer.write(IQ2_ASK); } catch (e) { break; } await new Promise(r => setTimeout(r, 30)); } })();
+  // ask, wait for the answer (or 150 ms), then ask again, like the test page did
+  let answered = null;
+  SER.iqBytes = 0;
+  (async () => {
+    // say hello first, the same way the controller test page did (query, version, controller versions)
+    for (const m of IQ2_HELLO) { try { await writer.write(m); } catch (e) {} await new Promise(r => setTimeout(r, 150)); }
+    while (alive && writer) {
+      const got = new Promise(r => { answered = r; setTimeout(r, 150); });
+      try { await writer.write(IQ2_ASK); } catch (e) { break; }
+      await got; await new Promise(r => setTimeout(r, 15));
+    }
+  })();
   let buf = [];
   try {
     while (port.readable) {
@@ -3672,6 +3684,7 @@ async function readIqController(port) {
           const { value, done } = await reader.read();
           if (done) break;
           for (const b of value) buf.push(b);
+          if (value.length) { SER.iqBytes += value.length; SER.iqLast = performance.now(); }
           for (;;) {
             let i = 0; while (i + 1 < buf.length && !(buf[i] === 0xAA && buf[i + 1] === 0x55)) i++;
             if (i) buf.splice(0, i);
@@ -3680,7 +3693,7 @@ async function readIqController(port) {
             if (len & 0x80) { if (buf.length < 5) break; len = ((len & 0x7f) << 8) | buf[4]; hdr = 5; }
             if (buf.length < hdr + len) break;
             const pkt = buf.splice(0, hdr + len);
-            if (pkt[2] === 0x58 && pkt[hdr] === 0x60 && len >= 10) parseIqState(pkt.slice(hdr + 1));
+            if (pkt[2] === 0x58 && pkt[hdr] === 0x60 && len >= 10) { parseIqState(pkt.slice(hdr + 1)); if (answered) answered(); }
           }
           if (buf.length > 2048) buf = [];
         }
@@ -3697,7 +3710,8 @@ function brainStatus() {
   const now = performance.now();
   if (now - SER.t < 300) return ["ok", SER.kind === "Arduino" ? "Arduino controller connected" : SER.kind === "IQ controller" ? "IQ controller connected" : "Real controller connected through the Brain"];
   if (SER.ports.length && SER.kind === "IQ controller") {
-    if (now - SER.opened < 2000) return ["wait", "IQ controller connected. Waiting for it to answer..."];
+    if (now - SER.opened < 2500) return ["wait", "IQ controller connected. Waiting for it to answer..."];
+    if (SER.iqBytes && now - SER.iqLast < 1000) return ["wait", `The IQ controller is answering, but the sim can't read it yet (${SER.iqBytes} bytes). Tell your teacher.`];
     return ["wait", "The IQ controller isn't answering. Make sure it is turned on. If it still doesn't work, click Connect again and pick the other VEX port."];
   }
   if (SER.ports.length && SER.kind === "Arduino") {
