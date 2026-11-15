@@ -3441,8 +3441,8 @@ function readCtrl() {
   for (const k of BTN_KEYS) press(k, SCREEN.btn[k], "screen");
   for (const c of KEYS) { if (KEYMAP[c]) take(KEYMAP[c][0], KEYMAP[c][1], "keys"); if (KEYBTN[c]) press(KEYBTN[c], true, "keys"); }
   if (performance.now() - SER.t < 300) {
-    for (const a in SER.axes) take(a, SER.axes[a], SER.kind === "Arduino" ? "arduino" : "brain");
-    for (const k of BTN_KEYS) press(k, SER.btn[k], SER.kind === "Arduino" ? "arduino" : "brain");
+    for (const a in SER.axes) take(a, SER.axes[a], SER.kind === "Arduino" ? "arduino" : SER.kind === "IQ controller" ? "iq controller" : "brain");
+    for (const k of BTN_KEYS) press(k, SER.btn[k], SER.kind === "Arduino" ? "arduino" : SER.kind === "IQ controller" ? "iq controller" : "brain");
   }
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   for (const gp of pads) {
@@ -3618,8 +3618,12 @@ async function connectBrain() {
   }
   try { await port.open({ baudRate: 115200 }); }
   catch (e) { padNote = "Couldn't open that port. Close VEXcode or the Arduino program (it may be using it) and try again."; return; }
-  try { SER.kind = ARDUINO_USB.includes(port.getInfo().usbVendorId) ? "Arduino" : "Brain"; } catch (e) { SER.kind = "Brain"; }
+  try {
+    const info = port.getInfo();
+    SER.kind = ARDUINO_USB.includes(info.usbVendorId) ? "Arduino" : info.usbVendorId === 0x2888 && info.usbProductId === IQ2_CTRL_PID ? "IQ controller" : "Brain";
+  } catch (e) { SER.kind = "Brain"; }
   SER.ports.push(port); SER.opened = performance.now(); padNote = "";
+  if (SER.kind === "IQ controller") return readIqController(port);
   const dec = new TextDecoder();
   let buf = "";
   try {
@@ -3641,9 +3645,59 @@ async function connectBrain() {
   try { await port.close(); } catch (e) {}
   padNote = `The ${SER.kind} was disconnected.`;
 }
+/* IQ (2nd gen) controller plugged straight into the PC. It answers when asked:
+   send C9 36 B8 47 58 60 00 <crc>, reply AA 55 58 <len> 60 <data>.
+   data[0..3] = right X, right Y, left X, left Y (0..254, middle 127, up = big); data[8] = buttons. */
+const IQ2_CTRL_PID = 0x0210;
+const IQ2_ASK = new Uint8Array([0xC9, 0x36, 0xB8, 0x47, 0x58, 0x60, 0x00, 0x10, 0x53]);
+const IQ2_BITS = { EUp: 0x08, EDown: 0x02, FUp: 0x04, FDown: 0x01, LUp: 0x20, LDown: 0x10, RUp: 0x80, RDown: 0x40 };
+function iqStick(v) { const x = Math.round((v - 127) / 127 * 100); return Math.abs(x) < 6 ? 0 : Math.max(-100, Math.min(100, x)); }
+function parseIqState(d) {
+  SER.axes = { A: iqStick(d[3]), B: iqStick(d[2]), C: iqStick(d[0]), D: iqStick(d[1]) };
+  const btn = {}; for (const k of BTN_KEYS) btn[k] = !!(d[8] & IQ2_BITS[k]);
+  SER.btn = btn; SER.t = performance.now(); SER.lines++;
+}
+async function readIqController(port) {
+  let writer = null, alive = true;
+  try { writer = port.writable.getWriter(); } catch (e) {}
+  (async () => { while (alive && writer) { try { await writer.write(IQ2_ASK); } catch (e) { break; } await new Promise(r => setTimeout(r, 30)); } })();
+  let buf = [];
+  try {
+    while (port.readable) {
+      const reader = port.readable.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          for (const b of value) buf.push(b);
+          for (;;) {
+            let i = 0; while (i + 1 < buf.length && !(buf[i] === 0xAA && buf[i + 1] === 0x55)) i++;
+            if (i) buf.splice(0, i);
+            if (buf.length < 4) break;
+            let len = buf[3], hdr = 4;
+            if (len & 0x80) { if (buf.length < 5) break; len = ((len & 0x7f) << 8) | buf[4]; hdr = 5; }
+            if (buf.length < hdr + len) break;
+            const pkt = buf.splice(0, hdr + len);
+            if (pkt[2] === 0x58 && pkt[hdr] === 0x60 && len >= 10) parseIqState(pkt.slice(hdr + 1));
+          }
+          if (buf.length > 2048) buf = [];
+        }
+      } finally { reader.releaseLock(); }
+    }
+  } catch (e) { /* unplugged */ }
+  alive = false;
+  try { writer && writer.releaseLock(); } catch (e) {}
+  SER.ports = SER.ports.filter(p => p !== port);
+  try { await port.close(); } catch (e) {}
+  padNote = "The IQ controller was disconnected.";
+}
 function brainStatus() {
   const now = performance.now();
-  if (now - SER.t < 300) return ["ok", SER.kind === "Arduino" ? "Arduino controller connected" : "Real controller connected through the Brain"];
+  if (now - SER.t < 300) return ["ok", SER.kind === "Arduino" ? "Arduino controller connected" : SER.kind === "IQ controller" ? "IQ controller connected" : "Real controller connected through the Brain"];
+  if (SER.ports.length && SER.kind === "IQ controller") {
+    if (now - SER.opened < 2000) return ["wait", "IQ controller connected. Waiting for it to answer..."];
+    return ["wait", "The IQ controller isn't answering. Make sure it is turned on. If it still doesn't work, click Connect again and pick the other VEX port."];
+  }
   if (SER.ports.length && SER.kind === "Arduino") {
     if (now - SER.opened < 4000) return ["wait", "Arduino connected. Waiting for controller data..."];
     if (SER.lines) return ["wait", "The Arduino is sending, but not controller data. Put the controller program on it (click Arduino)."];
@@ -3685,7 +3739,7 @@ function buildPad() {
         <div class="pbtns">${b("FUp", "F▲")}${b("FDown", "F▼")}</div>
       </div>
     </div>
-    <p class="hint">Drag the sticks or use the keyboard: W A S D = left stick, arrow keys = right stick, 1 to 8 = E▲ E▼ F▲ F▼ L▲ L▼ R▲ R▼. A VEX V5 controller works too: turn it off, plug it in with USB, and press a button. On a V5, E▲ = left arrow, E▼ = down arrow, F▲ = A, F▼ = B, L = L1 and L2, R = R1 and R2. An Xbox-style USB controller also works.</p>`;
+    <p class="hint">Drag the sticks or use the keyboard: W A S D = left stick, arrow keys = right stick, 1 to 8 = E▲ E▼ F▲ F▼ L▲ L▼ R▲ R▼. An IQ (2nd gen) controller works too: turn it on, plug it in with USB, and click Connect real controller. A VEX V5 controller also works: turn it off, plug it in with USB, and press a button. On a V5, E▲ = left arrow, E▼ = down arrow, F▲ = A, F▼ = B, L = L1 and L2, R = R1 and R2. An Xbox-style USB controller also works.</p>`;
   padBox.querySelectorAll("[data-btn]").forEach(el => {
     const set = on => { SCREEN.btn[el.dataset.btn] = on; };
     el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); set(true); });
@@ -3707,7 +3761,7 @@ function buildPad() {
   });
   document.getElementById("padConnect").onclick = () => { connectBrain(); };
   document.getElementById("padHow").onclick = () => textDialog("Use the real controller",
-    "1) Copy this program into a new VEXcode IQ Python project and download it to the Brain. 2) Close VEXcode, keep the Brain plugged in with USB, and turn on the paired controller. 3) Run the program on the Brain. 4) Click \"Connect real controller\" and pick the VEX port. If nothing moves, click it again and pick the other VEX port. Works in Chrome or Edge from the class website.",
+    "IQ (2nd gen) controller: turn it on, plug it into this computer with USB, click \"Connect real controller\" and pick the VEX port. You don't need a Brain or a program. If nothing moves, click it again and pick the other VEX port. IQ (1st gen) controller: it can't plug into a computer, so it goes through the Brain. 1) Copy this program into a new VEXcode IQ Python project and download it to the Brain. 2) Close VEXcode, keep the Brain plugged in with USB, and turn on the paired controller. 3) Run the program on the Brain. 4) Click \"Connect real controller\" and pick the VEX port. If nothing moves, click it again and pick the other VEX port. Works in Chrome or Edge from the class website.",
     BRAIN_PROGRAM, null);
   document.getElementById("padArduino").onclick = () => textDialog("Arduino controller",
     "1) Wire 2 joysticks and 8 buttons to an Arduino Uno or Leonardo (the pins are at the top of this program). 2) Copy this program into the Arduino app and upload it. 3) Plug the Arduino into this computer with USB. Don't touch the sticks for 2 seconds. 4) Click \"Connect real controller\" and pick the Arduino. 5) Push each stick and button. If a stick goes the wrong way, change its FLIP line to true and upload again. Works in Chrome or Edge from the class website.",
