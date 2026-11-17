@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controller Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Lexend:wght@400;500;700&display=swap">
+<style>
+/* Student help page: how to program the controller in the Robot Field Simulator.
+   One column, short numbered steps, block pictures in VEXcode colors, Read to me on every part. */
+:root{
+  --bg:#f5f7fb; --surface:#ffffff; --ink:#15192a; --muted:#545c74; --line:#d9deea; --stage:#eef1f7;
+  --accent:#2457d6; --accent-soft:#e3eafc; --good:#1a8a4a; --good-soft:#dff3e7; --warn:#8a5a00; --warn-soft:#fff4cc; --warn-line:#f2b705;
+  --pad:#2b2f3a; --pad-edge:#11131a; --stick:#4a5060; --knob:#1b1d24; --btn:#e6e9ef; --btn-ink:#15192a; --hot:#f2b705;
+  --blk-event:#FFBF00; --blk-drive:#4C97FF; --blk-ctrl:#FFAB19; --blk-sense:#5CB1D6; --blk-ink-dark:#15192a; --blk-ink-light:#ffffff;
+  --display:"Bricolage Grotesque", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --body:"Lexend", "Verdana", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#10131d; --surface:#181c2a; --ink:#eef1f8; --muted:#a6aec4; --line:#2d3346; --stage:#151a27;
+  --accent:#7ea2ff; --accent-soft:#1f2a4a; --good:#5ad28d; --good-soft:#163323; --warn:#ffe08a; --warn-soft:#3a3010; --warn-line:#f2c230;
+  --pad:#3a404f; --pad-edge:#c3c9d4; --stick:#6b7285; --knob:#0d0f14; --btn:#cfd4dd; --btn-ink:#15192a; --hot:#f2c230;
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#10131d; --surface:#181c2a; --ink:#eef1f8; --muted:#a6aec4; --line:#2d3346; --stage:#151a27;
+  --accent:#7ea2ff; --accent-soft:#1f2a4a; --good:#5ad28d; --good-soft:#163323; --warn:#ffe08a; --warn-soft:#3a3010; --warn-line:#f2c230;
+  --pad:#3a404f; --pad-edge:#c3c9d4; --stick:#6b7285; --knob:#0d0f14; --btn:#cfd4dd; --btn-ink:#15192a; --hot:#f2c230;
+  color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:1.0625rem;line-height:1.6;margin:0}
+.wrap{max-width:860px;margin:0 auto;padding-inline:16px;padding-block:28px 64px;display:grid;gap:28px}
+h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(2rem,6vw,3rem);font-weight:800;letter-spacing:-.01em}
+h2{font-size:clamp(1.4rem,4vw,1.85rem);font-weight:800}
+h3{font-size:1.2rem;font-weight:600}
+p{margin:0;max-width:65ch}
+a{color:var(--accent);font-weight:500}
+button{font:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+kbd{font-family:var(--body);font-weight:700;border:2px solid var(--line);border-bottom-width:4px;border-radius:8px;padding:0 8px;background:var(--surface);white-space:nowrap}
+
+header{display:grid;gap:12px}
+.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.lead{font-size:1.15rem}
+.toc{display:flex;flex-wrap:wrap;gap:8px}
+.toc a{text-decoration:none;font-weight:700;border:2px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 14px;color:var(--ink)}
+.toc a:hover{border-color:var(--accent)}
+.askbox{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;align-items:start;background:var(--accent-soft);border:3px solid var(--accent);border-radius:14px;padding:12px 14px}
+.askbox .q{width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--surface);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:1.5rem}
+
+section.part{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 20px;display:grid;gap:16px;scroll-margin-top:12px}
+.phead{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.phead h2{flex:1;min-width:200px}
+.tag{flex:none;padding:6px 12px;border-radius:10px;background:var(--accent);color:var(--surface);font-family:var(--display);font-weight:800;font-size:1.1rem}
+.speak{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--accent);background:var(--surface);color:var(--accent);padding:6px 14px;border-radius:999px;font-weight:700;cursor:pointer;min-height:40px;flex:none}
+.speak svg{width:20px;height:20px;flex:none}
+.speak.speaking{background:var(--accent);color:var(--surface)}
+ol.steps{margin:0;padding-left:1.4em;display:grid;gap:10px}
+ol.steps li::marker{font-weight:800;color:var(--accent)}
+ul.dots{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.note{border-radius:12px;padding:10px 14px;border:2px solid var(--warn-line);background:var(--warn-soft)}
+.note b{color:var(--warn)}
+.good{border-radius:12px;padding:10px 14px;border:2px solid var(--good);background:var(--good-soft)}
+.good b{color:var(--good)}
+.ui{font-weight:700;border:2px solid var(--line);border-radius:8px;padding:0 8px;background:var(--bg);white-space:nowrap}
+
+/* controller picture */
+.padstage{border-radius:14px;background:var(--stage);border:1px solid var(--line);padding:8px}
+.padstage svg{display:block;width:100%;height:auto}
+.pad-hint{font-size:.92rem;color:var(--muted)}
+.readout{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.readout div{border:2px solid var(--line);border-radius:12px;text-align:center;padding:6px 4px;background:var(--bg)}
+.readout span{display:block;font-weight:700;color:var(--muted);font-size:.85rem}
+.readout b{font-family:var(--display);font-size:1.6rem;font-variant-numeric:tabular-nums}
+table.nums{border-collapse:collapse;width:100%;max-width:520px}
+table.nums th,table.nums td{border:2px solid var(--line);padding:6px 10px;text-align:left}
+table.nums th{background:var(--bg)}
+table.nums td.n{font-family:var(--display);font-weight:800;font-variant-numeric:tabular-nums;text-align:center;width:90px}
+
+/* blocks */
+.prog{display:grid;gap:4px;font-weight:500;font-size:.98rem;overflow-x:auto;padding:12px;border-radius:14px;background:var(--stage);border:1px solid var(--line)}
+.blk{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;width:max-content;max-width:100%}
+.blk .slot{background:rgba(255,255,255,.92);color:#15192a;border-radius:999px;padding:0 10px;font-weight:700}
+.blk.ev{background:var(--blk-event);color:var(--blk-ink-dark);border-radius:16px 16px 8px 8px}
+.blk.dr{background:var(--blk-drive);color:var(--blk-ink-light)}
+.blk.ct{background:var(--blk-ctrl);color:var(--blk-ink-dark)}
+.blk.se{background:var(--blk-sense);color:var(--blk-ink-dark);border-radius:999px;padding:3px 10px}
+.blk.se.bool{border-radius:6px;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,8px 100%,0 50%)}
+.c-wrap{border-left:12px solid var(--blk-ctrl);padding-left:8px;margin-left:16px;display:grid;gap:4px}
+.gap{height:10px}
+.why{font-size:.95rem;color:var(--muted)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:680px){.two{grid-template-columns:minmax(0,1fr)}}
+.ways{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.way{border:2px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:4px;text-decoration:none;color:var(--ink)}
+.way:hover{border-color:var(--accent)}
+.way b{font-family:var(--display);font-size:1.1rem}
+.way span{color:var(--muted);font-size:.95rem}
+details.fix{border:2px solid var(--line);border-radius:14px;padding:10px 14px}
+details.fix summary{cursor:pointer;font-weight:700}
+details.fix[open] summary{margin-bottom:8px}
+footer{color:var(--muted);font-size:.92rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <span class="eyebrow">Robot Field Simulator</span>
+  <h1>Drive your robot with a controller</h1>
+  <p class="lead">This page shows you how to use the controller in the simulator. Go one part at a time. Press <b>Read to me</b> to hear any part out loud.</p>
+  <nav class="toc" aria-label="Parts of this page">
+    <a href="#know">1. The controller</a><a href="#add">2. Add it</a><a href="#nocode">3. No code</a><a href="#buttons">4. Buttons</a><a href="#ifthen">5. If then</a><a href="#sticks">6. Sticks</a><a href="#test">7. Test it</a><a href="#fix">8. Fix it</a>
+  </nav>
+  <div class="askbox"><span class="q" aria-hidden="true">?</span><div>
+    <p><b>Stuck? Ask Mr. Brown for help.</b> Tell him which part you are on and what is stuck. For example: "I'm on part 4. My robot doesn't stop when I let go of the button."</p>
+  </div></div>
+</header>
+
+<!-- 1 -->
+<section class="part" id="know">
+  <div class="phead"><span class="tag">1</span><h2>Know the controller</h2><button class="speak" type="button"></button></div>
+  <p>The controller has <b>2 sticks</b> and <b>8 buttons</b>. Each one has a name. Your program uses these names.</p>
+  <div class="padstage">
+    <svg id="padSvg" viewBox="0 0 640 330" role="img" aria-labelledby="padTitle">
+      <title id="padTitle">A VEX IQ controller. Left stick is axis A (up and down) and axis B (left and right). Right stick is axis D (up and down) and axis C (left and right). L Up and L Down are on the top left. R Up and R Down are on the top right. E Up and E Down are under the left stick. F Up and F Down are under the right stick.</title>
+    </svg>
+  </div>
+  <p class="pad-hint" id="padHint">Try it: press <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, the arrow keys, or <kbd>1</kbd> to <kbd>8</kbd>. The picture lights up the same way the simulator reads your keys.</p>
+  <div class="readout" aria-live="polite">
+    <div><span>Axis A</span><b id="rA">0</b></div><div><span>Axis B</span><b id="rB">0</b></div><div><span>Axis C</span><b id="rC">0</b></div><div><span>Axis D</span><b id="rD">0</b></div>
+  </div>
+  <h3>Stick numbers</h3>
+  <p>Each stick gives a number from <b>-100</b> to <b>100</b>.</p>
+  <table class="nums">
+    <thead><tr><th scope="col">Left stick (axis A)</th><th scope="col">Number</th></tr></thead>
+    <tbody>
+      <tr><td>Push it all the way up</td><td class="n">100</td></tr>
+      <tr><td>Let go (middle)</td><td class="n">0</td></tr>
+      <tr><td>Pull it all the way down</td><td class="n">-100</td></tr>
+    </tbody>
+  </table>
+  <p class="why">Axis B and axis C are left and right. Right is 100. Left is -100.</p>
+</section>
+
+<!-- 2 -->
+<section class="part" id="add">
+  <div class="phead"><span class="tag">2</span><h2>Add a Controller to your robot</h2><button class="speak" type="button"></button></div>
+  <p>You must do this first. Without it, the controller blocks do not show up.</p>
+  <ol class="steps">
+    <li>Open the simulator.</li>
+    <li>Click <span class="ui">Devices</span>.</li>
+    <li>Click <span class="ui">+ Add a device</span>.</li>
+    <li>Click <span class="ui">Controller</span>. If you see a <span class="ui">Done</span> button, click it.</li>
+    <li>A controller picture shows up next to the field. Now you can use it.</li>
+  </ol>
+  <p>Now pick one way to program it:</p>
+  <div class="ways">
+    <a class="way" href="#nocode"><b>3. No code</b><span>Fastest. Pick what the sticks and buttons do.</span></a>
+    <a class="way" href="#buttons"><b>4. Button blocks</b><span>Do something when you press a button.</span></a>
+    <a class="way" href="#ifthen"><b>5. If then</b><span>Check a button again and again.</span></a>
+    <a class="way" href="#sticks"><b>6. Stick blocks</b><span>Use the stick number as the speed.</span></a>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="part" id="nocode">
+  <div class="phead"><span class="tag">3</span><h2>No code (configured actions)</h2><button class="speak" type="button"></button></div>
+  <p>The simulator can drive the robot for you. You only pick the settings.</p>
+  <ol class="steps">
+    <li>In <span class="ui">Devices</span>, click your <span class="ui">Controller</span>.</li>
+    <li>Find <b>Drive with the sticks</b>. Pick <span class="ui">Tank drive (A and D)</span>.</li>
+    <li>Optional: find <b>Buttons L Up / L Down spin</b>. Pick a motor, like your arm motor.</li>
+    <li>Click <span class="ui">Done</span>.</li>
+    <li>Put a <span class="blk ev">when started</span> block in your program.</li>
+    <li>Click <span class="ui">Run</span>. Push the sticks.</li>
+  </ol>
+  <div class="good"><b>Tank drive:</b> the left stick drives the left wheels. The right stick drives the right wheels. Push both up to go forward. Push one up and one down to spin.</div>
+  <p class="why">Other choices: <b>Left arcade</b> uses only the left stick (up/down to drive, left/right to turn). <b>Split arcade</b> uses the left stick to drive and the right stick to turn.</p>
+</section>
+
+<!-- 4 -->
+<section class="part" id="buttons">
+  <div class="phead"><span class="tag">4</span><h2>Button blocks</h2><button class="speak" type="button"></button></div>
+  <p>A button block runs when you press a button. Use 2 blocks: one for <b>pressed</b> and one for <b>released</b>.</p>
+  <div class="two">
+    <div class="prog" aria-label="Program: when E Up pressed, drive forward. When E Up released, stop driving.">
+      <span class="blk ev">when Controller button <span class="slot">E Up</span> <span class="slot">pressed</span></span>
+      <span class="blk dr">drive <span class="slot">forward</span></span>
+      <div class="gap"></div>
+      <span class="blk ev">when Controller button <span class="slot">E Up</span> <span class="slot">released</span></span>
+      <span class="blk dr">stop driving</span>
+    </div>
+    <ol class="steps">
+      <li>Find the blocks in <b>Events</b>, under <b>Controller</b>.</li>
+      <li>Drag out <span class="blk ev">when Controller button E Up pressed</span>.</li>
+      <li>Snap <span class="blk dr">drive forward</span> under it.</li>
+      <li>Drag out a second button block. Change <b>pressed</b> to <b>released</b>.</li>
+      <li>Snap <span class="blk dr">stop driving</span> under it.</li>
+      <li>Click <span class="ui">Run</span>. Hold <b>E Up</b>. Let go.</li>
+    </ol>
+  </div>
+  <div class="note"><b>Why 2 blocks?</b> The first block starts the robot. Without the <b>released</b> block, the robot never stops.</div>
+  <p class="why">Make <b>E Down</b> drive <b>reverse</b> the same way.</p>
+</section>
+
+<!-- 5 -->
+<section class="part" id="ifthen">
+  <div class="phead"><span class="tag">5</span><h2>If then, in a forever loop</h2><button class="speak" type="button"></button></div>
+  <p>The <b>forever</b> loop asks again and again: "Is the button pressed?" If yes, the motor spins. If no, the motor stops.</p>
+  <div class="two">
+    <div class="prog" aria-label="Program: when started, forever, if Controller F Up pressed then spin Motor4 forward, else stop Motor4.">
+      <span class="blk ev">when started</span>
+      <span class="blk ct">forever</span>
+      <div class="c-wrap">
+        <span class="blk ct">if <span class="blk se bool">Controller <span class="slot">F Up</span> pressed?</span> then</span>
+        <div class="c-wrap"><span class="blk dr">spin <span class="slot">Motor4</span> <span class="slot">forward</span></span></div>
+        <span class="blk ct">else</span>
+        <div class="c-wrap"><span class="blk dr">stop <span class="slot">Motor4</span></span></div>
+      </div>
+    </div>
+    <ol class="steps">
+      <li>Start with <span class="blk ev">when started</span>.</li>
+      <li>Add <span class="blk ct">forever</span> from <b>Control</b>.</li>
+      <li>Put <span class="blk ct">if then else</span> inside forever.</li>
+      <li>From <b>Sensing</b>, drag <span class="blk se bool">Controller F Up pressed?</span> into the <b>if</b> space.</li>
+      <li>Put <span class="blk dr">spin Motor4 forward</span> under <b>then</b>.</li>
+      <li>Put <span class="blk dr">stop Motor4</span> under <b>else</b>.</li>
+    </ol>
+  </div>
+  <p class="why">Use your own motor name instead of Motor4. You can only pick a motor you added in Devices.</p>
+  <div class="note"><b>Two buttons?</b> Put a second <span class="blk ct">if then else</span> inside the first <b>else</b>. Check <b>F Down</b> there and spin the motor <b>reverse</b>. The last <b>else</b> stops the motor.</div>
+</section>
+
+<!-- 6 -->
+<section class="part" id="sticks">
+  <div class="phead"><span class="tag">6</span><h2>Stick blocks</h2><button class="speak" type="button"></button></div>
+  <p>The stick number can be the robot's speed. Push up a little to go slow. Push up all the way to go fast. Pull down to go backward.</p>
+  <div class="two">
+    <div class="prog" aria-label="Program: when started, forever, set drive velocity to Controller axis A position percent, drive forward.">
+      <span class="blk ev">when started</span>
+      <span class="blk ct">forever</span>
+      <div class="c-wrap">
+        <span class="blk dr">set drive velocity to <span class="blk se">Controller axis <span class="slot">A</span> position</span> %</span>
+        <span class="blk dr">drive <span class="slot">forward</span></span>
+      </div>
+    </div>
+    <ol class="steps">
+      <li>Start with <span class="blk ev">when started</span> and <span class="blk ct">forever</span>.</li>
+      <li>Put <span class="blk dr">set drive velocity to 50 %</span> inside forever.</li>
+      <li>From <b>Sensing</b>, drag <span class="blk se">Controller axis A position</span> on top of the <b>50</b>.</li>
+      <li>Put <span class="blk dr">drive forward</span> under it.</li>
+      <li>Click <span class="ui">Run</span>. Push the left stick up and down.</li>
+    </ol>
+  </div>
+  <div class="note"><b>Important:</b> In Devices, set <b>Drive with the sticks</b> to <span class="ui">None (I'll program it)</span>. If you don't, the settings and your blocks both try to drive the robot.</div>
+  <p class="why">This drives forward and backward only. To turn too, use <b>Tank drive</b> in part 3.</p>
+</section>
+
+<!-- 7 -->
+<section class="part" id="test">
+  <div class="phead"><span class="tag">7</span><h2>Test your program</h2><button class="speak" type="button"></button></div>
+  <p>You can test with any of these. Pick the one you have.</p>
+  <h3>On the screen</h3>
+  <ul class="dots">
+    <li>Drag the sticks on the controller picture. Click the buttons.</li>
+  </ul>
+  <h3>With the keyboard</h3>
+  <ul class="dots">
+    <li><kbd>W</kbd> and <kbd>S</kbd> = left stick up and down (axis A).</li>
+    <li><kbd>A</kbd> and <kbd>D</kbd> = left stick left and right (axis B).</li>
+    <li><kbd>↑</kbd> and <kbd>↓</kbd> = right stick up and down (axis D).</li>
+    <li><kbd>←</kbd> and <kbd>→</kbd> = right stick left and right (axis C).</li>
+    <li><kbd>1</kbd> E Up, <kbd>2</kbd> E Down, <kbd>3</kbd> F Up, <kbd>4</kbd> F Down, <kbd>5</kbd> L Up, <kbd>6</kbd> L Down, <kbd>7</kbd> R Up, <kbd>8</kbd> R Down.</li>
+  </ul>
+  <p class="why">Click on the field first, so the keys go to the simulator.</p>
+  <h3>With a real controller</h3>
+  <ul class="dots">
+    <li><b>VEX IQ (2nd gen) controller:</b> turn it on. Plug it into the computer with USB. Click <span class="ui">Connect real controller</span>. Pick the VEX port.</li>
+    <li><b>VEX V5 controller:</b> leave it turned off. Plug it in with USB. Press any button.</li>
+    <li><b>Other controllers:</b> ask Mr. Brown.</li>
+  </ul>
+  <div class="good"><b>It worked if</b> the light next to the controller picture is green.</div>
+</section>
+
+<!-- 8 -->
+<section class="part" id="fix">
+  <div class="phead"><span class="tag">8</span><h2>Fix it</h2><button class="speak" type="button"></button></div>
+  <p>Click a problem to see what to try.</p>
+  <details class="fix"><summary>I can't find the controller blocks.</summary>
+    <p>Add a Controller in Devices first (part 2). The blocks show up after that.</p></details>
+  <details class="fix"><summary>Nothing happens when I press a button.</summary>
+    <ul class="dots"><li>Did you click <span class="ui">Run</span>? The program must be running.</li><li>Check the button name in your block. Is it the same button you are pressing?</li><li>Using the keyboard? Click on the field first.</li></ul></details>
+  <details class="fix"><summary>The robot never stops.</summary>
+    <p>Add a <b>released</b> block with <span class="blk dr">stop driving</span> (part 4). Or use <b>if then else</b> with a stop under <b>else</b> (part 5).</p></details>
+  <details class="fix"><summary>The robot does strange things.</summary>
+    <p>You may have the settings and blocks both driving. In Devices, set <b>Drive with the sticks</b> to <span class="ui">None (I'll program it)</span>. Set the buttons to <span class="ui">nothing</span>.</p></details>
+  <details class="fix"><summary>The motor I want is not in the list.</summary>
+    <p>Add the motor in Devices first. Then pick it in your block.</p></details>
+  <details class="fix"><summary>The real controller light stays yellow.</summary>
+    <p>Read the words next to the light. Do what they say. If it still doesn't work, ask Mr. Brown.</p></details>
+</section>
+
+<footer><a href="index.html">← Back to all guides</a> · <a href="robot-field-sim.html">Open the simulator</a></footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  /* ---------- Read to me ---------- */
+  const canSpeak = ("speechSynthesis" in window) && ("SpeechSynthesisUtterance" in window);
+  const icon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  const label = (b, on) => { b.classList.toggle("speaking", on); b.querySelector("span").textContent = on ? "Stop" : "Read to me"; };
+  const stopAll = () => { if (!canSpeak) return; speechSynthesis.cancel(); document.querySelectorAll(".speak.speaking").forEach(b => label(b, false)); };
+  function sayText(sec) {
+    const c = sec.cloneNode(true);
+    c.querySelectorAll(".speak, svg, .readout, .pad-hint, details:not([open]) > :not(summary)").forEach(n => n.remove());
+    c.querySelectorAll("li, p, h2, h3, summary, tr, .blk, .note, .good, .way").forEach(n => n.append(". "));
+    return c.textContent.replace(/-100/g, " minus 100").replace(/↑/g, "up arrow").replace(/↓/g, "down arrow").replace(/←/g, "left arrow").replace(/→/g, "right arrow")
+      .replace(/(\.\s*){2,}/g, ". ").replace(/\s+/g, " ").trim();
+  }
+  document.querySelectorAll("section.part").forEach(sec => {
+    const b = sec.querySelector(".speak");
+    b.innerHTML = icon + "<span>Read to me</span>";
+    if (!canSpeak) { b.hidden = true; return; }
+    b.onclick = () => {
+      if (b.classList.contains("speaking")) { stopAll(); return; }
+      stopAll();
+      const u = new SpeechSynthesisUtterance(sayText(sec)); u.rate = 0.9; u.lang = "en-US";
+      u.onend = u.onerror = () => label(b, false);
+      label(b, true); speechSynthesis.speak(u);
+    };
+  });
+
+  /* ---------- controller picture (lights up with the same keys the simulator uses) ---------- */
+  const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("padSvg");
+  const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const txt = (x, y, s, attrs = {}) => { const t = el("text", Object.assign({ x, y, "text-anchor": "middle", "font-family": "Lexend, Verdana, sans-serif", "font-size": 15, "font-weight": 700, fill: "var(--ink)" }, attrs)); t.textContent = s; return t; };
+  // body
+  el("path", { d: "M150 60 H490 Q560 60 590 140 Q615 215 585 270 Q560 310 510 290 L455 245 H185 L130 290 Q80 310 55 270 Q25 215 50 140 Q80 60 150 60 Z", fill: "var(--pad)", stroke: "var(--pad-edge)", "stroke-width": 3 });
+  const BTN = {};
+  const button = (key, x, y, w, h, name) => {
+    const g = el("g", {});
+    BTN[key] = el("rect", { x, y, width: w, height: h, rx: 7, fill: "var(--btn)", stroke: "var(--pad-edge)", "stroke-width": 2 }, g);
+    const t = el("text", { x: x + w / 2, y: y + h / 2 + 5, "text-anchor": "middle", "font-family": "Lexend, Verdana, sans-serif", "font-size": 13, "font-weight": 700, fill: "var(--btn-ink)" }, g); t.textContent = name;
+  };
+  // shoulder buttons L and R (top)
+  button("LUp", 120, 30, 70, 26, "L Up"); button("LDown", 196, 30, 70, 26, "L Down");
+  button("RUp", 374, 30, 70, 26, "R Up"); button("RDown", 450, 30, 70, 26, "R Down");
+  // sticks
+  const KNOB = {};
+  const stick = (key, cx, cy) => { el("circle", { cx, cy, r: 46, fill: "var(--stick)", stroke: "var(--pad-edge)", "stroke-width": 2 }); KNOB[key] = el("circle", { cx, cy, r: 24, fill: "var(--knob)", stroke: "var(--btn)", "stroke-width": 2 }); };
+  stick("L", 165, 150); stick("R", 475, 150);
+  // E and F under the sticks
+  button("EUp", 132, 212, 66, 26, "E Up"); button("EDown", 132, 242, 66, 26, "E Down");
+  button("FUp", 442, 212, 66, 26, "F Up"); button("FDown", 442, 242, 66, 26, "F Down");
+  // axis labels with arrows
+  const lab = (x, y, s, a) => { el("rect", { x: x - 16, y: y - 16, width: 32, height: 24, rx: 6, fill: "var(--accent)" }); txt(x, y + 1, s, { fill: "var(--surface)", "font-size": 16 }); if (a) txt(x, y + 24, a, { "font-size": 12, fill: "var(--muted)", "font-weight": 500 }); };
+  lab(165, 88, "A", ""); lab(234, 156, "B", "");
+  lab(475, 88, "D", ""); lab(406, 156, "C", "");
+  txt(320, 206, "Left stick: A = up/down, B = left/right", { "font-size": 12, fill: "var(--btn)", "font-weight": 500 });
+  txt(320, 226, "Right stick: D = up/down, C = left/right", { "font-size": 12, fill: "var(--btn)", "font-weight": 500 });
+
+  const KEYMAP = { KeyW: ["A", 100], KeyS: ["A", -100], KeyA: ["B", -100], KeyD: ["B", 100], ArrowUp: ["D", 100], ArrowDown: ["D", -100], ArrowLeft: ["C", -100], ArrowRight: ["C", 100] };
+  const KEYBTN = { Digit1: "EUp", Digit2: "EDown", Digit3: "FUp", Digit4: "FDown", Digit5: "LUp", Digit6: "LDown", Digit7: "RUp", Digit8: "RDown" };
+  const down = new Set();
+  function paint() {
+    const ax = { A: 0, B: 0, C: 0, D: 0 };
+    for (const c of down) if (KEYMAP[c]) ax[KEYMAP[c][0]] = KEYMAP[c][1];
+    for (const k in BTN) BTN[k].setAttribute("fill", [...down].some(c => KEYBTN[c] === k) ? "var(--hot)" : "var(--btn)");
+    KNOB.L.setAttribute("transform", `translate(${ax.B * 0.22} ${-ax.A * 0.22})`);
+    KNOB.R.setAttribute("transform", `translate(${ax.C * 0.22} ${-ax.D * 0.22})`);
+    for (const a of "ABCD") document.getElementById("r" + a).textContent = ax[a];
+  }
+  const typing = e => /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || "");
+  addEventListener("keydown", e => { if (typing(e) || !(KEYMAP[e.code] || KEYBTN[e.code])) return; if (e.code.startsWith("Arrow")) e.preventDefault(); down.add(e.code); paint(); });
+  addEventListener("keyup", e => { down.delete(e.code); paint(); });
+  addEventListener("blur", () => { down.clear(); paint(); });
+  paint();
+})();
+</script>
+</body>
+</html>
