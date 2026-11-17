@@ -728,7 +728,7 @@ function buildToolbox() {
   cats.push({ kind: "category", name: "Control", colour: C.control, contents: [
     blk("pg_control_wait", { TIME: N(1) }), blk("pg_control_repeat", { TIMES: N(10) }), blk("pg_control_forever"),
     blk("pg_control_if"), blk("pg_control_ifelse"), blk("pg_control_wait_until")].concat(S.hideRepeatUntil ? [] : [blk("pg_control_repeat_until")]).concat([
-    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ]).concat(ctl ? [blk("iq_controller_actions")] : []) });
+    blk("pg_control_while"), blk("pg_control_break"), blk("pg_control_stop_project") ]) });
   const sensing = [];
   if (dt) sensing.push({ kind: "label", text: "Drivetrain" }, blk("pg_sensing_drivetrain_is_done"), blk("pg_sensing_drivetrain_is_moving"),
     blk("pg_sensing_drivetrain_heading"), blk("pg_sensing_drivetrain_rotation"), blk("pg_sensing_drivetrain_velocity"));
@@ -1000,7 +1000,7 @@ const LEVELS = [
   { id: "driving", name: "Driving practice (controller)", start: [0, -800, 0],
     walls: [{ x1: 0, y1: -100, x2: 0, y2: 450 }, { x1: -1000, y1: -250, x2: -650, y2: -250 }, { x1: 650, y1: -250, x2: 1000, y2: -250 }],
     guides: DRIVE_GATES.map((g, i) => ({ pts: [[g[0], g[1]], [g[2], g[3]]], label: i === DRIVE_GATES.length - 1 ? "finish" : String(i + 1) })),
-    task: "Drive through the numbered gates in order and back through the finish as fast as you can. Each wall touch adds 2 seconds. Add a Controller in Devices and pick a drive mode (for example Split arcade), press Start, then drive with the on-screen sticks or a real controller through Sim Link. No program needed.", needs: "Drivetrain, Controller with a drive mode" },
+    task: "Drive through the numbered gates in order and back through the finish as fast as you can. Each wall touch adds 2 seconds. Add a Controller in Devices and write a program that drives with it (press Help on the controller for examples). Press Start, then drive with the on-screen sticks or a real controller.", needs: "Drivetrain or 2 Motors, Controller, a controller program" },
   { id: "lu_auto", name: "Level Up: autonomous skills", game: "levelup", ...LEVEL_UP },
   { id: "lu_drive", name: "Level Up: driving skills (controller)", game: "levelup", ...LEVEL_UP },
 ];
@@ -1110,8 +1110,8 @@ const TASK_STEPS = {
     tip: "The Clawbot is too tall to fit under the gray bars. Drive around the open side." },
   lu_drive: { goal: "Score as many points as you can in 60 seconds. You drive with the Controller.",
     steps: ["Press Start.", "Red bags go to red goals. Blue bags go to blue goals. Yellow bags go anywhere.", "Floor Goal = 1 point. L1 = 3. L2 = 6. L3 = 12.", "New bags come into the red Load Zone when it is empty."],
-    tip: "In Devices, set the Controller buttons: L Up / L Down spin ArmMotor, R Up / R Down spin ClawMotor." },
-  driving: { goal: "Drive through the gates in order, as fast as you can.", steps: ["Press Start.", "Drive through the gates in order, then the finish.", "Each wall touch adds 2 seconds."], tip: "No program needed. Use the sticks on screen or a real controller." },
+    tip: "First write a program: the sticks drive, L Up / L Down spin ArmMotor, R Up / R Down spin ClawMotor. Press Help on the controller for examples." },
+  driving: { goal: "Drive through the gates in order, as fast as you can.", steps: ["Write a program that drives the robot with the Controller.", "Press Start.", "Drive through the gates in order, then the finish.", "Each wall touch adds 2 seconds."], tip: "Press Help on the controller to see how to program it. Then drive with the sticks on screen or a real controller." },
 };
 const SCORE_WORDS = ["Not yet.", "Good start.", "Getting closer.", "Almost there!", "You did it!"];
 
@@ -1140,7 +1140,7 @@ const BUILD_WHY = {
   leds: ["2 Motors", "Each Touch LED shows what one motor is doing. So you need 2 Motors."],
   either: ["Drivetrain or 2 Motors", "Both work. 2 Motors can steer while driving, so they are faster on curves."],
   preset: ["Drivetrain", "Pick the robot build in Devices. It already has a Drivetrain."],
-  controller: ["Drivetrain", "The Controller drive modes need a Drivetrain."],
+  controller: ["2 Motors", "Each stick can drive one wheel motor. Then you can steer with the sticks."],
 };
 const LEVEL_BUILD = {
   square: "exact", hexagon: "exact", gyro: "exact", myblocks: "exact", garage: "exact", line: "exact", maze: "exact", maze2: "exact", maze3: "exact",
@@ -1175,8 +1175,8 @@ const LEVEL_SETUP = {
   smoothline: ["ML", "MR", "COLOR"],
   rc1: ["ML", "MR", "B1", "B2"], fixifs: ["ML", "MR", "B1", "B2"], rc2: ["ML", "MR", "B1", "B2", "B3"],
   crc1: ["ML", "MR", "B1", "B2", "LED1", "LED2"], crc2: ["ML", "MR", "B1", "B2", "B3", "LED1", "LED2"],
-  driving: ["DT", "CTRL"],
-  lu_drive: ["DT", "ARM", "CLAW", "CTRL"],
+  driving: ["DRIVE", "CTRL"],
+  lu_drive: ["DRIVE", "ARM", "CLAW", "CTRL"],
 };
 function setupItems(id) {
   const N = taskNames(), P = S.ports, items = [];
@@ -1184,9 +1184,12 @@ function setupItems(id) {
   for (const k of LEVEL_SETUP[id] || []) {
     const has = (t, n) => devOf(t).length >= n;
     if (k === "DT") items.push({ text: "a Drivetrain", ok: !!drivetrain() });
+    else if (k === "DRIVE") { const mr = devOf("motor").find(m => m.port === P.right);
+      items.push({ text: `a Drivetrain, or ${N.ML} and ${N.MR} (Motors on ports ${P.left} and ${P.right}${S.rightMirrored ? `, ${N.MR} with Reverse direction on` : ""})`,
+        ok: !!drivetrain() || (devOf("motor").some(m => m.port === P.left) && !!mr && (!S.rightMirrored || !!mr.reverse)) }); }
     else if (k === "ARM") items.push({ text: `ArmMotor (a Motor on port ${P.arm})`, ok: hasPart("arm") });
     else if (k === "CLAW") items.push({ text: `ClawMotor (a Motor on port ${P.claw})`, ok: hasPart("claw") });
-    else if (k === "CTRL") items.push({ text: "a Controller with a drive mode", ok: !!controllerDev() && (controllerDev().drive || "none") !== "none" });
+    else if (k === "CTRL") items.push({ text: "a Controller, and a program that drives with it", ok: !!controllerDev() });
     else if (/^B\d$/.test(k)) items.push({ text: `${N[k]} (a Bumper)`, ok: has("bumper", +k[1]) });
     else if (/^LED\d$/.test(k)) items.push({ text: `${N[k]} (a Touch LED)`, ok: has("touchled", +k[3]) });
     else if (k === "DIST") { const d = devOf("distance")[0]; items.push({ text: `${N.DIST} (a Distance sensor), Mounted on: Front`, ok: !!d && (d.mount || "front") === "front" }); }
@@ -1936,11 +1939,11 @@ function startProgram() {
   const hats = controllerDev() ? all.filter(b => b.type === "iq_controller_when_button" || b.type === "iq_controller_when_axis") : [];
   const timers = all.filter(b => b.type === "pg_events_when_timer").map(b => ({ block: b, secs: Math.max(0, +b.getFieldValue("TIME") || 0), armed: true }));
   const receivers = all.filter(b => b.type === "pg_events_when_i_receive");
-  const cd = controllerDev(), hasActions = !!cd && (cd.drive && cd.drive !== "none" && !!drivetrain() || Object.values(cd.buttons || {}).some(Boolean));
+  const hasActions = false;   // configured actions were removed: students program the controller with blocks
   if (!tops.length && !hats.length && !timers.length && !hasActions) { log('Add a "when started" block and attach blocks under it.', "warn"); draw(); return; }
   const loose = all.filter(b => !HAT_TYPES.includes(b.type) && !b.type.startsWith("procedures_def") && !b.isShadow());
   if (loose.length) log(`${loose.length} loose stack${loose.length > 1 ? "s are" : " is"} not attached to a "when" block and won't run.`, "warn");
-  if (all.some(b => b.type.startsWith("iq_controller_when")) && !cd) log("Controller event blocks need a Controller in Devices.", "warn");
+  if (all.some(b => b.type.startsWith("iq_controller_when")) && !controllerDev()) log("Controller event blocks need a Controller in Devices.", "warn");
   RUN = { vars: {}, current: new Set(), scripts: tops.map(t => runStack(t.getNextBlock())), last: 0, acc: 0,
     hats, hatRuns: new Map(), timers, receivers, actionsOn: true, persistent: hats.length > 0 || hasActions, prevCtrl: null };
   if (RUN.persistent) log("The program keeps running so the controller works. Press Stop when you're done.");
@@ -2347,7 +2350,7 @@ function renderDevices() {
   h += `<div class="devgrid">`;
   DEVICES.forEach((d, i) => {
     const where = ["distance", "color", "bumper"].includes(d.type) ? ` · ${(MOUNTS.find(m => m[0] === (d.mount || "front")) || MOUNTS[0])[1].toLowerCase()}${+d.offset ? ` ${d.offset > 0 ? "+" : ""}${d.offset} mm` : ""}` : "";
-    const info = d.type === "controller" ? (DRIVE_MODES.find(m => m[0] === (d.drive || "none")) || DRIVE_MODES[0])[1] :
+    const info = d.type === "controller" ? "Program it with Controller blocks" :
       d.type === "drivetrain" ? `Left ${d.left} · Right ${d.right}${d.gyro ? " · gyro" : ""}` : `Port ${d.port}${d.reverse ? " · reversed" : ""}${d.type === "color" ? (d.facing === "down" ? " · faces down" : "") : ""}${where}`;
     h += `<button class="dev" type="button" data-edit="${i}">${ICONS[d.type]}<span class="t">${esc(d.name)}</span><span class="s">${info}</span></button>`;
   });
@@ -2509,9 +2512,7 @@ function renderEditor() {
   let f = `<label>Name<input type="text" id="fName" value="${esc(d.name)}" ${d.type === "drivetrain" || d.type === "controller" ? "readonly" : ""}></label>`;
   if (d.type === "controller") {
     const motors = devOf("motor");
-    f += `<label>Drive with the sticks<select id="fDrive">${DRIVE_MODES.map(([v, n]) => `<option value="${v}" ${(d.drive || "none") === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
-    for (const k of ["L", "R", "E", "F"]) f += `<label>Buttons ${k} Up / ${k} Down spin<select id="fBtn${k}"><option value="">nothing</option>${motors.map(m => `<option value="${esc(m.name)}" ${(d.buttons || {})[k] === m.name ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></label>`;
-    f += `<p class="hint full">These are "configured actions", like in VEXcode IQ: they work whenever the program runs. Pick "None" and "nothing" if you want to program the controller yourself with Controller blocks. ${drivetrain() ? "" : "Add a Drivetrain to drive with the sticks. "}${motors.length ? "" : "Add a Motor to control it with buttons."}</p>`;
+    f += `<p class="hint full">Program the controller with the Controller blocks (in Events and Sensing). Press Help on the controller for examples.</p>`;
   } else if (d.type === "drivetrain") {
     const wopts = KIT.wheels.map(([n, v]) => `<option value="${v}" ${Math.abs(v - d.wheelTravel) < .01 ? "selected" : ""}>${n} (${v} mm travel)</option>`).join("");
     const gyros = devOf("gyro");
@@ -2552,8 +2553,7 @@ function renderEditor() {
     const g = id => document.getElementById(id);
     const nd = { ...d, name: g("fName").value.trim().replace(/[^A-Za-z0-9_]/g, "") || d.name };
     if (d.type === "controller") {
-      nd.drive = g("fDrive").value; nd.buttons = {};
-      for (const k of ["L", "R", "E", "F"]) nd.buttons[k] = g("fBtn" + k).value;
+      nd.drive = "none"; nd.buttons = {};
     } else if (d.type === "drivetrain") {
       Object.assign(nd, { left: +g("fLeft").value, right: +g("fRight").value, wheelTravel: +g("fWheel").value, gear: +g("fGear").value || 1,
         track: +g("fTrack").value || KIT.track, wheelbase: +g("fBase").value || 0, gyro: g("fGyro").value });
@@ -3477,7 +3477,7 @@ function controllerTick() {
     if (running && RUN.scripts.includes(running)) continue;   // still busy from last time
     const g = runStack(h.getNextBlock()); RUN.hatRuns.set(h.id, g); RUN.scripts.push(g);
   }
-  if (RUN.actionsOn) applyActions();
+
 }
 function applyActions() {
   const cd = controllerDev(), dt = drivetrain(), a = CTRL.axes;
