@@ -2702,6 +2702,8 @@ function applySettings(ns) {
 const IQ_NUMS = ["math_number", "math_whole_number", "math_positive_number", "math_number_string", "math_integer"];
 const ROT_IN = { deg: "degrees", rev: "turns" }, ROT_OUT = { degrees: "deg", turns: "rev" };
 const NODONTWAIT = { anddontwait_mutator: "false" }, PCT = { UNITS: "pct" };
+const IQ_AXES = { AxisA: "A", AxisB: "B", AxisC: "C", AxisD: "D" };
+const IQ_BTNS = Object.fromEntries(["EUp", "EDown", "FUp", "FDown", "LUp", "LDown", "RUp", "RDown"].map(k => ["Button" + k, k]));
 // [VEXcode IQ type, sim type, {IQ field/input name: sim name}, {add: fields only VEXcode has, sh: VEXcode shadow types, vals: field value maps}]
 const IQ_MAP = [
   ["iq_events_when_started", "pg_events_when_started"],
@@ -2758,6 +2760,9 @@ const IQ_MAP = [
   ["iq_variables_set_variable", "variables_set", { VARIABLE: "VAR" }, { sh: { VALUE: "math_number_string" } }],
   ["iq_variables_change_variable", "math_change", { VARIABLE: "VAR", VALUE: "DELTA" }],
   ["iq_variables_variable", "variables_get", { VARIABLE: "VAR" }],
+  // Controller (names checked against a real VEXcode IQ file: AXIS "AxisA", BUTTON "ButtonLUp", EVENTTYPE "pressed")
+  ["iq_sensing_position_of_controller", "iq_controller_axis", {}, { vals: { AXIS: IQ_AXES } }],
+  ["iq_events_when_controller_button", "iq_controller_when_button", { EVENTTYPE: "ACTION" }, { vals: { BUTTON: IQ_BTNS } }],
 ];
 const IQ_IN = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [a, { to: b, names: n, ...o }]));
 const IQ_OUT = Object.fromEntries(IQ_MAP.map(([a, b, n = {}, o = {}]) => [b, { to: a, names: Object.fromEntries(Object.entries(n).map(([k, v]) => [v, k])),
@@ -2995,6 +3000,7 @@ function iqDevicesIn(cfg) {
     else if (d.deviceType === "Bumper") out.push({ type: "bumper", ...base, port: p[0], mount: "front", offset: 0 });
     else if (d.deviceType === "TouchLED") out.push({ type: "touchled", ...base, port: p[0] });
     else if (d.deviceType === "Gyro") out.push({ type: "gyro", ...base, port: p[0] });
+    else if (d.deviceType === "Controller") out.push({ type: "controller", name: "Controller", drive: "none", buttons: {} });
   }
   return out;
 }
@@ -3008,12 +3014,14 @@ function iqDevicesOut() {
           gyroType: d.gyro === "brain" ? "integrated" : g ? "gyro" : "none", width: String(d.track), unit: "mm", wheelbase: String(d.wheelbase || KIT.wheelbase), wheelbaseUnit: "mm", xOffset: "0", yOffset: "0", thetaOffset: "0" } });
     } else if (d.type === "motor") out.push({ port: [d.port], name: d.name, customName: d.name !== "Motor" + d.port, deviceType: "Motor", deviceClass: "motor", setting: { reversed: String(!!d.reverse), fwd: "forward", rev: "reverse" } });
     else if (cls[d.type]) out.push({ port: [d.port], name: d.name, customName: d.name !== DEVICE_TYPES[d.type].base + d.port, deviceType: cls[d.type][0], deviceClass: cls[d.type][1], setting: {} });
+    else if (d.type === "controller") out.push({ port: [], name: "Controller", customName: false, deviceType: "Controller", deviceClass: "controller",
+      setting: { left: "", leftDir: "false", right: "", rightDir: "false", e: "", eDir: "false", f: "", fDir: "false", l3r3: "", l3r3Dir: "false", drive: "none" } });
   }
   return out;
 }
 const isIqFile = data => data && (data.platform === "IQ" || /"iq_events_when_started"|type="iq_events_/.test(data.workspace || ""));
 function openIqProject(data) {
-  const devs = iqDevicesIn(data.robotConfig);
+  const devs = iqDevicesIn(data.robotConfig || data.rconfig);
   const sim = data.robotFieldSim || {};
   DEVICES = Array.isArray(sim.robotConfig) && sim.robotConfig.length ? sim.robotConfig.filter(d => KNOWN_TYPES.includes(d.type)) : devs;
   devicesChanged();
